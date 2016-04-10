@@ -1,0 +1,82 @@
+v0.2:
+- shrunk drivecode size
+- serial transfer back at 74 cycles / byte
+- fixed sporadic data corruption while loading
+- to allow more variance in rotation speed of disc
+
+v0.3:
+- further shrunk drive- and resident code
+- added 40 track support
+- removed intermittent stepping for now as it caused some problems
+- NTSC support via config (no autodetect yet)
+- removed depack offset feature, too bloated
+
+v0.4:
+- waste more cycles when uploading code, here it's a good thing :-)
+- added load_next functionality
+- added all config params to config.inc, also addresses and so on
+- added signalling for first block to be transferred, so less painfull and
+smaller code
+- added ntsc autodetection and modify code in case
+- resident part is now copied by installer, no further manual copy action
+needed. Calling bitfire_install_ is now sufficient.
+- added a basic framework with load/load_next hooks that can be called safely
+without being overwritten, including macros for linking
+- initial detection code for sid/cia type with globally available flags
+- offloaded blockmap handling and barriers to diskdrive (saves a fair amount
+of space on the resident part!)
+- further drivecode cleanup and thus saving bytes
+- track now checked via header checksum, no explicit checks needed anymore
+- bitnax allows now to reference preceeding data that is split/cut off with
+--cut-load-addr. This makes files smaller, but preceeding data must be loaded
+and depacked beforehand. --full-dict is introduced as switch for that.
+
+v0.5:
+- overlap is calculated on a new basis and thus lower
+- depack can be done completely in place with zero overlap. This is the new
+default. Switch back to old behaviour, but tighter margins with --overlap when using bitnax
+- d64write spits out blocks free
+- fix assert bug (bailed out with false alarm) on files with huge literals
+- fix compilation error with resident.asm when NMI_GAPS are used without
+framework
+- clean up errors and added warnings on lz.c, and added possibility to exit on
+warnings (good if build output is too messy to spot the warnings)
+- more documentation
+
+v0.6:
+- fix broken NTSC ;_; the indexed opcodes changed from ,x to ,y and an extra nop cured
+many things
+- shrink resident code size, after we have bloated it with in place depacking
+- standalone loader size now $7b bytes \o/
+- faster init
+- get rid of inversion during sending of data (filename/init)
+- allow for an even wider rpm variance when reading a sector/header
+- fixed packer. With a given --load-addr and zero overlap option, the last
+literal was not copied. It is now included into the stream in that case, and
+it is taken care that the file ends with a 257 byte match to signal EOF. Also
+needed a fix in the depacker that slows it down :-(
+- motor spin up time: relying on checksums is not enough there, in very rare
+cases we happen to load junk despite all the checksumming. What a bother! Now
+loading arbitrary blocks on spin up until there's success.
+- shrink drivecode size after those additions
+- testsuite now included
+- fixed code upload/reset_drive
+- even faster init
+- fixed decomp under IO issues and issues with loading of remaining literal
+blobs > 255 bytes
+- improved depacker speed a bit after other fixes slowed it down and bloat
+resident size again up to the max by that, dammit! :-D
+- fixed different $01 values depending on hw-detection
+- added resident_minimal_zp.asm a minimal version residing in zeropage. Could
+be squeezed down to $6a bytes. Useful?
+- added --relocate-to addr switch to pack files as if loaded with an
+alternative load-address (also helps with --binfile)
+- give notice if more then 1 drive is on bus to avoid injuries and pebcak
+- switch to 2MHz mode where possible on 1571 especially during transfer to
+be on the safe side
+
+v0.7
+- add also sln and vcproj files for bitnax
+- possibility to choose between NMI and raster IRQ for baseirq
+- add possibility for buslock to allow arbitrary $dd00 writes when loader is
+idle, and add macros for that (bus_lock, bus_unlock $bank)

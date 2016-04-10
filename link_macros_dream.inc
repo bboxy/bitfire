@@ -1,0 +1,99 @@
+#ifndef link_dream_inc
+		link_dream_inc = 1
+
+		#macro link_load_next_raw_jmp(addr)
+		{
+			lda #>({addr}-1)
+			pha
+			lda #<({addr}-1)
+			pha
+			jmp link_load_next_raw
+		}
+
+		#macro link_load_next_comp_jmp(addr)
+		{
+			lda #>({addr}-1)
+			pha
+			lda #<({addr}-1)
+			pha
+			jmp link_load_next_comp
+		}
+
+		#macro link_decomp_jmp(addr)
+		{
+			lda #>({addr}-1)
+			pha
+			lda #<({addr}-1)
+			pha
+			jmp link_decomp
+		}
+
+		#macro link_load_next_double_jmp(addr)
+		{
+			lda #>({addr}-1)
+			pha
+			lda #<({addr}-1)
+			pha
+			jmp link_load_next_double
+		}
+
+		#macro link_load_next_raw_decomp_jmp(addr) {
+			lda #>({addr}-1)
+			pha
+			lda #<({addr}-1)
+			pha
+			jmp link_load_next_raw_decomp
+                }
+
+		#macro link_player_irq
+		{
+			sei
+			lda #<link_player
+			sta $fffe
+			lda #>link_player
+			sta $ffff
+			lda #$ff
+			sta $d012
+			cli
+		}
+
+		#macro request_disk(num) {
+			lda #{num} + $f0
+			jsr bitfire_send_byte_
+			lda #$3f
+			sta $dd02
+		}
+
+		#macro wait_syncpoint(part)
+		{
+.sau:
+			lda link_syncpoint
+			cmp #part
+			bcc .sau
+		}
+
+		#macro wait_frame_count(cnt)
+		{
+.sau:
+			lda link_frame_count+0
+			cmp #<{cnt}
+			lda link_frame_count+1
+			sbc #>{cnt}
+			bcc .sau
+		}
+
+		#macro bus_lock
+		{
+			lda #$03
+			sta $dd02
+		}
+
+		#macro bus_unlock(bank)
+		{
+			lda #({bank} & 3)
+			sta $dd00
+			lda #$3f
+			sta $dd02
+		}
+
+#endif

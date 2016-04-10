@@ -1,0 +1,116 @@
+SHELL = /bin/bash
+BITNAX = ./framework/bitfire/bitnax
+D64WRITE = ./framework/bitfire/d64write
+X64 = x64
+MAKE_FLAGS = RELEASE=1
+BITNAX_OPTS = --bitfire --exit-on-warn
+
+.PHONY: all vice vice
+
+#Build all
+all: bitfire image1.d64 image2.d64
+
+#Build bitfire and tools
+bitfire: force_look
+	$(MAKE) -C ./bitfire
+
+#Build all and launch side 1
+vice: all
+	$(X64) -pal -autostart "image1.d64:*" -truedrive -model c64c
+
+#Build and launch side 1 only
+vice1: bitfire image1.d64
+	$(X64) -pal -autostart "image1.d64:*" -truedrive -model c64c
+
+#Build and launch side 2 only
+vice2: bitfire image2.d64
+	$(X64) -pal -autostart "image2.d64:*" -truedrive -model c64c
+
+image1.d64: mydemo bootstrap1.prg music1.prg scroller.prg vector.prg note.prg
+	$(D64WRITE) -c $@ -h oxyron -i rules --side 1 \
+				--boot mydemo \
+				-b bootstrap1.prg \
+				-b music1.prg \
+				-b scroller.prg \
+				-b vector1.prg \
+				-b vector2.prg \
+				-s note.prg
+
+image2.d64: mydemo bootstrap2.prg
+	$(D64WRITE) -c $@ -h oxyron -i rules --side 2 \
+				--boot mydemo \
+				-b bootstrap2.prg
+
+##################### BOOTLOADER - GENERIC STUFF ##############
+
+#The bootloader with installer
+./framework/installer/installer: force_look
+	$(MAKE) -C $(dir $@) $(MAKE_FLAGS)
+mydemo: ./framework/installer/installer
+	$(BITNAX) --sfx 0x0900 -o $@ $<
+
+#A note file written as standard file
+./parts/note/note: force_look
+	$(MAKE) -C $(dir $@) $(MAKE_FLAGS)
+note.prg: ./parts/note/note
+	$(BITNAX) --sfx 0x4000 -o $@ $<
+
+##################### SIDE 1 ##################################
+
+#The bootstrap for each side, see the SIDE param
+./framework/bootstrap/bootstrap1: force_look
+	$(MAKE) -C $(dir $@) $(MAKE_FLAGS) $(notdir $@) link_exit=8192 SIDE=1
+bootstrap1.prg: ./framework/bootstrap/bootstrap1
+	$(BITNAX) $(BITNAX_OPTS) -o $@ $<
+
+#Music to be loaded. Just packing is sufficient here
+music1.prg: ./music/funkyshit.prg
+	$(BITNAX) $(BITNAX_OPTS) -o $@ $<
+
+#Build first part
+./parts/scroller/scroller: force_look
+	#build part in its own dir with an own Makefile
+	$(MAKE) -C $(dir $@) $(MAKE_FLAGS) link_exit=8192
+#And pack it. This is separated from building to only pack again if the part really changed
+scroller.prg: ./parts/scroller/scroller
+	#part in a single file, as it can be laoded in one go
+	$(BITNAX) $(BITNAX_OPTS) -o $@ $<
+
+#A second part that we split upon packing.
+./parts/vector/vector: force_look
+	#build part in its own dir with an own Makefile
+	imake -C ($dir $@) $(MAKE_FLAGS) link_exit=8192
+#Generates two files, as it is splitted to be loaded under IO, but also if mem is still occupied and things need to be loaded bit by bit
+vector.prg: ./parts/vector/vector
+	$(BITNAX) $(BITNAX_OPTS) -o $(basename $@)1.prg --cut-input-addr 0x2000 0xcff0 $<
+	$(BITNAX) $(BITNAX_OPTS) -o $(basename $@)2.prg --full-dict --cut-input-addr 0xcff0 0xfff8 $<
+
+##################### SIDE 2 ##################################
+
+#iThe bootstrap for each side, see the SIDE param
+./bootstrap/bootstrap2: force_look
+	$(MAKE) -C $(dir $@) $(MAKE_FLAGS) $(notdir $@) link_exit=8192 SIDE=1
+bootstrap2.prg: ./bootstrap/bootstrap2
+	$(BITNAX) $(BITNAX_OPTS) -o $@ $<
+
+##################### CLEANUP #################################
+
+clean_framework:
+	$(MAKE) -C ./framework/bitfire clean
+	$(MAKE) -C ./framework/installer clean
+	$(MAKE) -C ./framework/bootstrap clean
+
+#Do a proper clean up
+clean: clean_framework
+	-rm *.prg *.d64
+	-rm mydemo
+
+	#side1
+	$(MAKE) -C ./parts/scroller clean
+	$(MAKE) -C ./parts/vector clean
+
+###############################################################
+
+#Always returns true so that Make always has a peek into each subdir to take notice of changes so tha twe recompile parts in case
+force_look:
+	@true
