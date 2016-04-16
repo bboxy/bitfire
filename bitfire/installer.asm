@@ -56,7 +56,7 @@
 		jsr .install_bootstrap
 		sei
 
-		lda #$03
+		lda #$c3
 		;and $dd00
 		sta $dd00
 		lda #$3f
