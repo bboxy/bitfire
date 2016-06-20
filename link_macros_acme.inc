@@ -88,7 +88,7 @@
 		}
 
 		!macro bus_unlock .bank {
-			lda #(.bank & 3)
+			lda #(.bank & 3) | $c0
 			sta $dd00
 			lda #$3f
 			sta $dd02
