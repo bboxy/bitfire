@@ -80,3 +80,15 @@ wait:
 	sbc #>cnt
 	bcc wait
 }
+
+//set start address of the packed file in memory. A=LSB, X=MSB
+.macro set_depack_pointers (addr) {
+	lda #<addr
+	sta bitfire_lz_sector_ptr1
+	sta bitfire_lz_sector_ptr2
+	sta bitfire_lz_sector_ptr3
+	ldx #>addr
+	stx bitfire_lz_sector_ptr1 + 1
+	stx bitfire_lz_sector_ptr2 + 1
+	stx bitfire_lz_sector_ptr3 + 1
+}
