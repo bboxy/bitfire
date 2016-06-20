@@ -25,7 +25,7 @@
 			jmp link_decomp
 		}
 
-		;load next file  and decompress on teh fly, then load next file raw, disable IO and decompress it, then enable IO again -> a full file that was split into two parts is loaded, with a portion going under IO
+		;load next file  and decompress on the fly, then load next file raw, disable IO and decompress it, then enable IO again -> a full file that was split into two parts is loaded, with a portion going under IO
 		!macro link_load_next_double_jmp .addr {
 			lda #>(.addr-1)
 			pha
@@ -92,4 +92,13 @@
 			sta $dd00
 			lda #$3f
 			sta $dd02
+		}
+
+		!macro set_depack_pointers {
+			sta bitfire_lz_sector_ptr1
+			sta bitfire_lz_sector_ptr2
+			sta bitfire_lz_sector_ptr3
+			stx bitfire_lz_sector_ptr1 + 1
+			stx bitfire_lz_sector_ptr2 + 1
+			stx bitfire_lz_sector_ptr3 + 1
 		}

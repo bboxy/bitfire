@@ -109,9 +109,9 @@ bitfire_send_byte_
 
 !if BITFIRE_DECOMP = 1 {
 .bitfire_set_ptrs
-		sta .bitfire_lz_sector_ptr1 - $3f,x
-		sta .bitfire_lz_sector_ptr2 - $3f,x
-		sta .bitfire_lz_sector_ptr3 - $3f,x
+		sta bitfire_lz_sector_ptr1 - $3f,x
+		sta bitfire_lz_sector_ptr2 - $3f,x
+		sta bitfire_lz_sector_ptr3 - $3f,x
 		rts
 }
 
@@ -219,7 +219,7 @@ bitfire_load_addr_lo = * + 1
 ;---------------------------------------------------------------------------------
 
 .lz_refill_bits
-.bitfire_lz_sector_ptr1	= * + 1
+bitfire_lz_sector_ptr1	= * + 1
 bitfire_load_addr_hi = * + 2
 		ldy $beef,x
 		sty .lz_bits
@@ -228,9 +228,9 @@ bitfire_load_addr_hi = * + 2
 		bne .lz_same_page
 
 .lz_next_page					;/!\ ATTENTION things entered here as well during depacking
-		inc .bitfire_lz_sector_ptr1 + 1	;use inc to keep A untouched!
-		inc .bitfire_lz_sector_ptr2 + 1
-		inc .bitfire_lz_sector_ptr3 + 1
+		inc bitfire_lz_sector_ptr1 + 1	;use inc to keep A untouched!
+		inc bitfire_lz_sector_ptr2 + 1
+		inc bitfire_lz_sector_ptr3 + 1
 .lz_next_page_
 .lz_skip_fetch
 		php				;turned into a rts in case of standalone decomp
@@ -239,7 +239,7 @@ bitfire_load_addr_hi = * + 2
 .lz_fetch_sector				;entry of loop
 		jsr .pollblock			;fetch another block, returns with x = 0
 		bcs .lz_fetch_eof		;eof? yes, finish
-		lda .bitfire_lz_sector_ptr1 + 1	;get current depack position
+		lda bitfire_lz_sector_ptr1 + 1	;get current depack position
 		cmp .barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call, no matter what .bitfire_lz_sector_ptr has as value \o/
 						;on first successful .pollblock they will be set with valid values and things will checked against correct barrier
 		bcs .lz_fetch_sector		;already reached, loop
@@ -335,7 +335,7 @@ bitfire_decomp_
 		sta .lz_lcopy_len		;Store LSB of run-length
 		ldy #$00
 .lz_lcopy
-.bitfire_lz_sector_ptr2	= * + 1			;Copy the literal data, forward or overlap is getting a pain in the ass.
+bitfire_lz_sector_ptr2	= * + 1			;Copy the literal data, forward or overlap is getting a pain in the ass.
 		lda $beef,x
 		sta (.lz_dst),y
 		inx
@@ -409,7 +409,7 @@ bitfire_decomp_
 		eor #$ff			;5 of 13, 2 of 10, 0 of 8 bits fetched as highbyte, lowbyte still to be fetched
 		tay
 
-.bitfire_lz_sector_ptr3	= * + 1
+bitfire_lz_sector_ptr3	= * + 1
 		lda $beef,x			;For large offsets we can load the
 		inx				;low-byte straight from the stream
 		bne .lz_join			;without going throught the shift
