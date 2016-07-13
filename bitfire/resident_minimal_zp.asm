@@ -79,6 +79,7 @@ bitfire_ntsc_fix3
 bitfire_ntsc_fix4
 		and $dd00
 		stx $dd02
+.filenum = * + 1
 .nibble		ora #$00			;also adc could be used, or sbc -nibble?
 .blockpos	ldx #$00
 .bitfire_block_addr_hi = * + 2
