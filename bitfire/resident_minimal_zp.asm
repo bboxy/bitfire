@@ -9,9 +9,9 @@
 bitfire_install_ = BITFIRE_INSTALLER_ADDR
 
 		* = BITFIRE_RESIDENT_ADDR
-.filenum
-bitfire_load_addr_hi
-		!byte $00
+;XXX TODO set filenum in .nibble -> will be overwritten anyway
+;bitfire_load_addr_hi
+;		!byte $00
 bitfire_loadraw_
 		ldx #$08			;do 9 turns, as the last turn sets $dd02 at least back to $1f, enough to get the idle signal on first pollblock, but not EOF yet (but we load one block minimum, right? So things are healed after the first get_byte call.)
 		sta .filenum			;save value

@@ -103,7 +103,7 @@ bitfire_send_byte_
 		and #$20			;clear bit 4 and waste some cycles here
 		dex
 		bpl .bit_loop			;last bit?
-						;this all could be done shorter (save on teh eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
+						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
 						;also 6 cycles are wasted after last $dd02 write, just enough for standalone, full config and ntsc \o/
 		rts
 
