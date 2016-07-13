@@ -1042,6 +1042,52 @@ IDLE		= $00
 		bcs -
 .start
 		jmp (.dst)
+
+;.blink
+;		sec
+;		rol
+;		sta .temp
+;
+;--
+;		lda $1c00
+;		ora #.VIA2_LED_ON
+;		sta $1c00
+;
+;		ldx #$01
+;		ldy #$08
+;		bcc .short
+;		ldx #$08
+;		ldy #$01
+;.short
+;-
+;		lda #$ff
+;		sta $1c05
+;		lda $1c05
+;		bne *-3
+;
+;		dex
+;		bne -
+;
+;		lda $1c00
+;		and #.VIA2_LED_OFF
+;		sta $1c00
+;
+;-
+;		lda #$ff
+;		sta $1c05
+;		lda $1c05
+;		bne *-3
+;
+;		dey
+;		bne -
+;
+;		clc
+;		rol .temp
+;		bne --
+;		beq *
+;
+;		rts
+
 end
 		;register $1800 is not $00 or at least $08 here, this sucks, on second turn it is then $00
 
