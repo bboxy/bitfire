@@ -25,7 +25,7 @@
 			jmp link_decomp
 		}
 
-		;load next file  and decompress on teh fly, then load next file raw, disable IO and decompress it, then enable IO again -> a full file that was split into two parts is loaded, with a portion going under IO
+		;load next file and decompress on the fly, then load next file raw, disable IO and decompress it, then enable IO again -> a full file that was split into two parts is loaded, with a portion going under IO
 		!macro link_load_next_double_jmp .addr {
 			lda #>(.addr-1)
 			pha
@@ -90,6 +90,7 @@
 		!macro bus_unlock .bank {
 			lda #(.bank & 3) | $c0
 			sta $dd00
+			;keep ATN high so values on floppy side stay invalid until first bit of filename is sent
 			lda #$37
 			sta $dd02
 		}
@@ -104,4 +105,3 @@
 			sta bitfire_lz_sector_ptr2 + 1
 			sta bitfire_lz_sector_ptr3 + 1
 		}
-
