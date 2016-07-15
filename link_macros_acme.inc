@@ -94,11 +94,14 @@
 			sta $dd02
 		}
 
-		!macro set_depack_pointers {
+		!macro set_depack_pointers .addr {
+			lda #<.addr
 			sta bitfire_lz_sector_ptr1
 			sta bitfire_lz_sector_ptr2
 			sta bitfire_lz_sector_ptr3
-			stx bitfire_lz_sector_ptr1 + 1
-			stx bitfire_lz_sector_ptr2 + 1
-			stx bitfire_lz_sector_ptr3 + 1
+			lda #>.addr
+			sta bitfire_lz_sector_ptr1 + 1
+			sta bitfire_lz_sector_ptr2 + 1
+			sta bitfire_lz_sector_ptr3 + 1
 		}
+
