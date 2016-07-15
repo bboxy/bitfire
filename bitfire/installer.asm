@@ -101,19 +101,6 @@
 		lda #$3f		;all lines low again
 		sta $dd02
 
-		;wait for drive to initialize XXX TODO maybe wait for special signal on $dd00?
-		sei
-;		ldx #$40
-;wait
-;-
-;		bit $d011
-;		bpl *-3
-;		bit $d011
-;		bmi *-3
-;		dex
-;		bpl -
-;		clc
-
 !if (BITFIRE_RESIDENT_AUTOINST != 0) {
 !if (bitfire_resident_size) < 256 {
 		;better force to 8 bit, label might be defined as 16 bit
@@ -172,6 +159,18 @@
 		!src "detect.asm"
 }
 		;wait until floppy is ready
+		;wait for drive to initialize XXX TODO maybe wait for special signal on $dd00?
+		sei
+		ldx #$10
+wait
+-
+		bit $d011
+		bpl *-3
+		bit $d011
+		bmi *-3
+		dex
+		bpl -
+
 -
 		lda $dd00
 		bpl -

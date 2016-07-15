@@ -187,10 +187,9 @@ IDLE		= $00
 		bpl *-3
 
 		sty $1800		;clear all lines and set bit 7 as bit counter, to allow data in and clk in to be set/cleared by host
-
+		ldx $1800
 .get_block
 		lda #$80
-		ldx $1800
 -
 		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
 		beq -
@@ -208,12 +207,14 @@ IDLE		= $00
 		dec .blks
 		bne .get_block
 
-		;wait for c64 to set $dd02 to $3f
-		lda $1800
-		bne *-3
-
 		lda #BUSY
 		sta $1800
+
+		;wait for c64 to set $dd02 to $3f
+-
+		cmp $1800
+		beq -
+
 		jmp .drivecode_launch
 .blks		!byte (>.drivecode_size)+1
 }
@@ -997,8 +998,9 @@ IDLE		= $00
 
 		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
 
-		ldx #$00		;IDLE
-		stx $1800		;free all lines
+		lda #$00		;IDLE
+		sta $1800		;free all lines
+		ldx $1800
 --
 		lda #$80
 -
