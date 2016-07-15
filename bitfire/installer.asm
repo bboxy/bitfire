@@ -86,8 +86,8 @@
                 ora #$0f
 
                 sta $dd02
-		nop				;make NTSC machines happy
-		nop
+		pha				;make NTSC machines happy
+		pla
                 lsr .dc_src
                 bne .s_loop
 

@@ -73,3 +73,15 @@ l
 			sbc #>cnt
 			bcc l
 		.endmacro
+
+		.macro bus_lock
+			lda #$03
+			sta $dd02
+		.endmacro
+
+		.macro bus_unlock bank
+			lda #(bank & 3) | $c0
+			sta $dd00
+			lda #$37
+			sta $dd02
+		.endmacro

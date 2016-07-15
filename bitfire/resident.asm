@@ -101,6 +101,8 @@ bitfire_send_byte_
 		eor #$30			;flip bit 4 and 5
 		sta $dd02			;only write out lower 6 bits
 		and #$20			;clear bit 4 and waste some cycles here
+		pha
+		pla
 		dex
 		bpl .bit_loop			;last bit?
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.

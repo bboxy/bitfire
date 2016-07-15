@@ -79,6 +79,6 @@ bus_lock	.macro
 bus_unlock	.bus_unlock
 		lda #(\1 & 3) | $c0
 		sta $dd00
-		lda #$3f
+		lda #$37
 		sta $dd02
 		.endm

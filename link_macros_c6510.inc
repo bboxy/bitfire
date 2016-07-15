@@ -88,4 +88,16 @@
 			bcc .w
 		}
 
+		macro bus_lock {
+			lda #$03
+			sta $dd02
+		}
+
+		macro bus_unlock bank:8 {
+			lda #(bank & 3) | $c0
+			sta $dd00
+			lda #$37
+			sta $dd02
+		}
+
 ;endif

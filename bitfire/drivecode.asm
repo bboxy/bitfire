@@ -185,13 +185,15 @@ IDLE		= $00
 		;wait for atn coming high
 		bit $1800
 		bpl *-3
+
+		sty $1800		;clear all lines and set bit 7 as bit counter, to allow data in and clk in to be set/cleared by host
+
 .get_block
-		lda #$80		;clear all lines and set bit 7 as bit counter, to allow data in and clk in to be set/cleared by host
-		sta $1800
+		lda #$80
 		ldx $1800
 -
 		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
-		beq *-3
+		beq -
 		ldx $1800		;load register
 		cpx #$04		;push bit into carry
 		ror			;shift in
@@ -964,50 +966,53 @@ IDLE		= $00
 }
 
 .get_byte
-		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
-		lda #$80		;IDLE
-		sta $1800		;free all lines
-
-		;fast enough to keep track with send_byte, also does bus lock check for free
-.gloop
--
-		ldx $1800		;fetch bits from bus
-		cpx #$05		;allow 00000101 or 00000001 only as valid values, esle bus lock might be active or protocoll violated otherwise
-		beq +
-		dex
-		bne -
-		clc
-+
-		ror			;shift in value of bit 2
--
-		clc
-		ldx $1800		;fetch bits from bus
-		beq +			;allow 00000000 or 00000100 only
-		cpx #$04
-		bne -
-+
-		ror
-		bcc .gloop		;still bits to fetch?
-
-		sty $1800
-		rts
-
 ;		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
-;--
-;		lda #$80
-;		ldx #$00		;IDLE
-;		stx $1800		;free all lines
+;
+;.res
+;		lda #$80		;IDLE
+;		sta $1800		;free all lines
+;
+;		;fast enough to keep track with send_byte, also does bus lock check for free
+;.gloop
+;		ldx $1800		;fetch bits from bus
+;		cpx #$05		;allow 00000101 or 00000001 only as valid values, else bus lock might be active or protocol violated otherwise
+;		beq +
+;		dex			;check if x is 1 by preserving carry in case
+;		bne .gloop
+;		;clc			;is cleared already, if x was 1 the cpx #$05 will clear carry
+;+
+;		ror			;shift in value of bit 2
 ;-
-;		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
-;		beq *-3
-;		ldx $1800		;load register
-;		bmi --			;check if bus is available (atn must be low) or if bus lock is active for free $dd00 fiddling
-;		cpx #$04		;push bit into carry
-;		ror			;shift in
-;		bcc -			;do until our counter bit ends up in carry
-;		sty $1800		;go busy asap
-;		;eor #$ff		;invert, as bits arrive inverted
+;		clc
+;		ldx $1800		;fetch bits from bus
+;		beq +			;allow 00000000 or 00000100 only
+;		cpx #$04
+;		bne -
+;+
+;		ror
+;		bcc .gloop		;still bits to fetch?
+;
+;		sty $1800
 ;		rts
+
+		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
+
+		ldx #$00		;IDLE
+		stx $1800		;free all lines
+--
+		lda #$80
+-
+		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
+		beq *-3
+		ldx $1800		;load register
+		bmi --			;check if bus is available (atn must be low) or if bus lock is active for free $dd00 fiddling
+		cpx #$04		;push bit into carry
+		ror			;shift in
+		bcc -			;do until our counter bit ends up in carry
+
+		sty $1800		;go busy asap
+		;eor #$ff		;invert, as bits arrive inverted
+		rts
 
 		;receive end_address of code being uploaded
 		;maximum is $0110 - $04ae, buffers at $0500,$0600,$0700 can be used
