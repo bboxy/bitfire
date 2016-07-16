@@ -13,6 +13,7 @@ cnt		= $16
 dst		= $18
 
 !src "../loader_acme.inc"
+!src "../../link_macros_acme.inc"
 
 		* = $1000
 !bin "../installer",,2
@@ -146,17 +147,38 @@ next
 		bne -
 }
 numb		lda #$00		;file number
-		tax
+		lax numb+1
 		pha
 		lda #$01
 		sta $d800,x
+
+		lda #$03
+		sta $dd02
+
+		ldy #$00
+-
+		inc $dd00
+		dey
+		bne -
+
+		lda #$c3
+		sta $dd00
+
+		lda #$27
+		sta $dd02
+
 		pla
 !ifdef RAW {
 		jsr bitfire_loadraw_
 } else {
-		;jsr bitfire_loadraw_
-		;jsr bitfire_decomp_
 		jsr bitfire_loadcomp_
+		;jsr bitfire_decomp_
+;		bne +
+;		jsr bitfire_loadcomp_
+;		jmp ++
+;+
+;		jsr link_load_next_comp
+++
 }
 !ifdef CHECKSUM {
 		jsr checksum
