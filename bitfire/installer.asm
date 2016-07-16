@@ -71,10 +71,9 @@
 		lda #$37
 		sta $dd02
 
-		ldy #$00
 -
 .dc_data = * + 1
-		lda .drivecode_start,y
+		lda .drivecode_start
                 sec
                 ror
 		sta .dc_src
@@ -91,14 +90,18 @@
                 lsr .dc_src
                 bne .s_loop
 
-		iny
-		bne -
-
+		inc .dc_data
+		bne +
 		inc .dc_data+1
-		dec .cnt
++
+		lda .dc_data
+		cmp #<.drivecode_end
+		bne -
+		lda .dc_data+1
+		cmp #>.drivecode_end
 		bne -
 
-		lda #$3f		;all lines low again
+		lda #$27			;raise atn to signal end of transfer
 		sta $dd02
 
 !if (BITFIRE_RESIDENT_AUTOINST != 0) {
@@ -160,20 +163,20 @@
 }
 		;wait until floppy is ready
 		;wait for drive to initialize XXX TODO maybe wait for special signal on $dd00?
-		sei
-		ldx #$10
-wait
--
-		bit $d011
-		bpl *-3
-		bit $d011
-		bmi *-3
-		dex
-		bpl -
 
--
-		lda $dd00
-		bpl -
+		sei
+;		ldx #$10
+;wait
+;-
+;		bit $d011
+;		bpl *-3
+;		bit $d011
+;		bmi *-3
+;		dex
+;		bpl -
+;-
+;		lda $dd00
+;		bpl -
 		rts
 
 .open_w_15

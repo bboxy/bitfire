@@ -175,7 +175,7 @@ IDLE		= $00
 		sta $180d		;clear all IRQ flags to ack possibly pending IRQs
 		sta $1c0d
 
-		cli			;now it is save to allow interrupts again, as they won't happen anymore
+		;cli			;now it is save to allow interrupts again, as they won't happen anymore
 
 		ldy #$00
 
@@ -194,6 +194,7 @@ IDLE		= $00
 		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
 		beq -
 		ldx $1800		;load register
+		bmi .done
 		cpx #$04		;push bit into carry
 		ror			;shift in
 		bcc -			;do until our counter bit ends up in carry
@@ -204,19 +205,17 @@ IDLE		= $00
 		bne .get_block
 
 		inc .block+1
-		dec .blks
 		bne .get_block
+.done
+;		lda #BUSY
+;		sta $1800
 
-		lda #BUSY
-		sta $1800
-
-		;wait for c64 to set $dd02 to $3f
--
-		cmp $1800
-		beq -
-
+;		;wait for c64 to set $dd02 to $3f
+;-
+;		cmp $1800
+;		beq -
+;
 		jmp .drivecode_launch
-.blks		!byte (>.drivecode_size)+1
 }
 .bootstrap_end
 .bootstrap_size = .bootstrap_end - .bootstrap_start
@@ -241,7 +240,7 @@ IDLE		= $00
 		!byte $0a, $0c, $c0, $ff, $00, $00, $00, $00
 		!byte $0b, $04, $40, $ff, $ff, $ff, $ff, $ff
 		!byte $03, $05, $50, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff, $00, $12, $ff, $ff, $ff	;$80
+		!byte $ff, $ff, $ff, $00, $12, $ff, .DIR_SECT, $ff	;$80
 		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
 		!byte $0d, $02, $20, $ff, $ff, $ff, $ff, $ff
 		!byte $05, $03, $30, $ff, $ff, $ff, $ff, $ff
@@ -721,6 +720,7 @@ IDLE		= $00
 }
 		sta $1c00
 		jsr .get_byte
+		;jsr .blink
 
 		;load file, file number is in A
 .load_file
@@ -741,7 +741,7 @@ IDLE		= $00
 		dex
 		sbc #42
 		bcs -
-+
+
 		sty .temp		;store previous value before underrun -> filenum % 42
 		cpx .dirsect		;dirsect changed?
 		beq +			;nope, advance
@@ -951,10 +951,9 @@ IDLE		= $00
 		rts
 
 .motor_on
-!if BITFIRE_CONFIG_MOTOR_ALWAYS_ON = 1 {
-		jmp $c11b
-} else {
-		jsr $c11b
+		ora $1c00
+		sta $1c00
+!if BITFIRE_CONFIG_MOTOR_ALWAYS_ON = 0 {
 		;seek so that .track is set in any case
 		jsr .seek
 		;disable wanted check, so any sector is okay
@@ -963,8 +962,8 @@ IDLE		= $00
 		jsr .read_sector
 		;reenable check
 		dec .skip_wcheck
-		rts
 }
+		rts
 
 .get_byte
 ;		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
@@ -1051,9 +1050,10 @@ IDLE		= $00
 		jmp (.dst)
 
 ;.blink
+;		pha
 ;		sec
 ;		rol
-;		sta .temp
+;		sta .dest
 ;
 ;--
 ;		lda $1c00
@@ -1089,9 +1089,9 @@ IDLE		= $00
 ;		bne -
 ;
 ;		clc
-;		rol .temp
+;		rol .dest
 ;		bne --
-;		beq *
+;		pla
 ;
 ;		rts
 
