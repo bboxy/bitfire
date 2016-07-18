@@ -16,7 +16,7 @@ bitfire_reset_drive_
                 jsr bitfire_send_byte_+2
 		;waste cycles to be sure drive keeps up
 		jsr .waste
-		nop
+		jsr .waste
 		dey
                 bpl -
 .waste
