@@ -143,9 +143,7 @@ IDLE		= $00
 		lda $02
 		bmi *-2
 
-;		lda $1c00
-;		and #(.VIA2_LED_OFF & .VIA2_MOTOR_OFF)
-;		sta $1c00
+		;motor and LED is on after that
 
 		sei
 
@@ -179,7 +177,7 @@ IDLE		= $00
 
 		ldy #$00
 
-		ldx #BUSY		;signal that no block is ready yet, asap
+		ldx #BUSY		;signal that we are ready for transfer
 		stx $1800
 
 		;wait for atn coming high
@@ -700,7 +698,6 @@ IDLE		= $00
 		top
 .idle
 		inc .filenum		;autoinc always, so thet load_next will also load next file after a load with filenum
-.idle_
 .drivecode_launch
 		;XXX TODO here it would be possible to preload next block
 		lda $1c00
@@ -711,7 +708,6 @@ IDLE		= $00
 }
 		sta $1c00
 		jsr .get_byte
-		;jsr .blink
 
 		;load file, file number is in A
 .load_file
@@ -732,7 +728,7 @@ IDLE		= $00
 		dex
 		sbc #42
 		bcs -
-
++
 		sty .temp		;store previous value before underrun -> filenum % 42
 		cpx .dirsect		;dirsect changed?
 		beq +			;nope, advance
@@ -912,9 +908,6 @@ IDLE		= $00
 		lda #.VIA2_MOTOR_ON
 		jsr .motor_on
 
-!if BITFIRE_CONFIG_MOTOR_ALWAYS_ON = 1 {
-		jsr .seek		;move your ass (this is done on motor on in case we turn motor off after load
-}
 		jsr .read_sector
 
 		ldy #$00
@@ -1046,11 +1039,10 @@ IDLE		= $00
 ;		rol .dest
 ;		bne --
 ;		pla
-;
-;		rts
+
+		rts
 
 end
-		;register $1800 is not $00 or at least $08 here, this sucks, on second turn it is then $00
 
 ;emit warnings only once
 !if * > $0500 { !serious "Upload code is ", * - $0500, " bytes too big!" }

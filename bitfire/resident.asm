@@ -91,6 +91,8 @@ link_load_next_raw_decomp
 }
 
 bitfire_send_byte_
+		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
+
 		ldx #$08			;do 9 turns, as the last turn sets $dd02 at least back to $1f, enough to get the idle signal on first pollblock, but not EOF yet (but we load one block minimum, right? So things are healed after the first get_byte call.)
 		sta .filenum			;save value
 		lda #$20			;start value
