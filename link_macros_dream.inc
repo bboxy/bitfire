@@ -92,8 +92,6 @@
 		{
 			lda #({bank} & 3) | $c0
 			sta $dd00
-			lda #$37
-			sta $dd02
 		}
 
 #endif

@@ -954,65 +954,28 @@ IDLE		= $00
 		ora $1c00
 		sta $1c00
 !if BITFIRE_CONFIG_MOTOR_ALWAYS_ON = 0 {
-		;seek so that .track is set in any case
-		jsr .seek
-		;disable wanted check, so any sector is okay
-		inc .skip_wcheck
+		inc .skip_wcheck	;disable wanted check, so any sector is okay
 		jsr .read_sector
 		jsr .read_sector
-		;reenable check
-		dec .skip_wcheck
+		jsr .read_sector
+		dec .skip_wcheck	;reenable check
 }
-		rts
+		jmp .seek		;seek so that .track is set in any case
 
 .get_byte
-;		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
-;
-;.res
-;		lda #$80		;IDLE
-;		sta $1800		;free all lines
-;
-;		;fast enough to keep track with send_byte, also does bus lock check for free
-;.gloop
-;		ldx $1800		;fetch bits from bus
-;		cpx #$05		;allow 00000101 or 00000001 only as valid values, else bus lock might be active or protocol violated otherwise
-;		beq +
-;		dex			;check if x is 1 by preserving carry in case
-;		bne .gloop
-;		;clc			;is cleared already, if x was 1 the cpx #$05 will clear carry
-;+
-;		ror			;shift in value of bit 2
-;-
-;		clc
-;		ldx $1800		;fetch bits from bus
-;		beq +			;allow 00000000 or 00000100 only
-;		cpx #$04
-;		bne -
-;+
-;		ror
-;		bcc .gloop		;still bits to fetch?
-;
-;		sty $1800
-;		rts
-
 		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
-
-		lda #$00		;IDLE
-		sta $1800		;free all lines
-		ldx $1800
---
 		lda #$80
+		ldx #$00		;IDLE
+		stx $1800		;free all lines
 -
 		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
 		beq *-3
 		ldx $1800		;load register
-		bmi --			;check if bus is available (atn must be low) or if bus lock is active for free $dd00 fiddling
+		bmi -
 		cpx #$04		;push bit into carry
 		ror			;shift in
 		bcc -			;do until our counter bit ends up in carry
-
 		sty $1800		;go busy asap
-		;eor #$ff		;invert, as bits arrive inverted
 		rts
 
 		;receive end_address of code being uploaded

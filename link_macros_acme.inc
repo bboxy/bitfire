@@ -90,9 +90,6 @@
 		!macro bus_unlock .bank {
 			lda #(.bank & 3) | $c0
 			sta $dd00
-			;keep ATN high so values on floppy side stay invalid until first bit of filename is sent
-			lda #$37
-			sta $dd02
 		}
 
 		!macro set_depack_pointers .addr {

@@ -164,9 +164,6 @@ numb		lda #$00		;file number
 		lda #$c3
 		sta $dd00
 
-		lda #$27
-		sta $dd02
-
 		pla
 !ifdef RAW {
 		jsr bitfire_loadraw_

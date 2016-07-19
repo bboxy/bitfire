@@ -81,6 +81,16 @@ wait:
 	bcc wait
 }
 
+#macro bus_lock {
+	lda #$03
+	sta $dd02
+}
+
+#macro bus_unlock (bank) {
+	lda #[bank & 3] | $c0
+	sta $dd00
+}
+
 //set start address of the packed file in memory. A=LSB, A=MSB
 .macro set_depack_pointers (addr) {
 	lda #<addr

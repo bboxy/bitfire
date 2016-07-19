@@ -82,6 +82,4 @@ l
 		.macro bus_unlock bank
 			lda #(bank & 3) | $c0
 			sta $dd00
-			lda #$37
-			sta $dd02
 		.endmacro
