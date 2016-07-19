@@ -59,6 +59,7 @@
 		lda #$c3
 		;and $dd00
 		sta $dd00
+
 		lda #$3f
 		sta $dd02
 
@@ -101,7 +102,7 @@
 		cmp #>.drivecode_end
 		bne -
 
-		lda #$27			;raise atn to signal end of transfer
+		lda #$37			;raise atn to signal end of transfer
 		sta $dd02
 
 !if (BITFIRE_RESIDENT_AUTOINST != 0) {
@@ -158,13 +159,16 @@
 		sta bitfire_ntsc_fix3 + 2
 		sta bitfire_ntsc_fix4 + 2
 .nontsc
+		lda #$3f			;drop atn to signal end of transfer
+		sta $dd02
+
 !if BITFIRE_AUTODETECT = 1 {
 		!src "detect.asm"
 }
 		;wait until floppy is ready
 		;wait for drive to initialize XXX TODO maybe wait for special signal on $dd00?
 
-		sei
+;		sei
 ;		ldx #$10
 ;wait
 ;-
@@ -174,9 +178,9 @@
 ;		bmi *-3
 ;		dex
 ;		bpl -
-;-
-;		lda $dd00
-;		bpl -
+-
+		lda $dd00
+		bpl -
 		rts
 
 .open_w_15

@@ -205,14 +205,17 @@ IDLE		= $00
 		inc .block+1
 		bne .get_block
 .done
-;		lda #BUSY
-;		sta $1800
+		ldx #BUSY
+		stx $1800
 
-;		;wait for c64 to set $dd02 to $3f
-;-
-;		cmp $1800
-;		beq -
-;
+		;wait for atn coming low
+		bit $1800
+		bmi *-3
+
+		lda #$12
+		sta .track
+		sta .to_track
+		jsr .seek
 		jmp .drivecode_launch
 }
 .bootstrap_end
