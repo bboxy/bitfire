@@ -20,27 +20,27 @@
 ;bs = blocksize, size of transferred block
 ;fn = filenumber
 
-;00: 0e 06 0c 04 0a 02 08 00 <-+
+;00: ff ff ff ff ff ff ff ff <-+
 ;08: ff 0e 0f 07 ff 0a 0b 03 <-+
 ;10: ff ff 0d 05 ff 00 09 01 <-| gcr2ser table with gaps being used by other variables
 ;18: ff 06 0c 04 ff 02 08 .. <-+ <- same as bin2ser lookup table
 ;20: .. ff ff xx xx xx xx xx <-+
 ;28: xx xx xx xx xx xx xx xx <-| list of wanted sectors	;XXX here still gaps can be zero
 ;30: xx xx xx xx xx xx xx xx <-+
-;38: .. ff ff pl pl pl pl pl
-;40: pl ff ff .. .. .. .. ..
+;38: fs ff ff pl pl pl pl pl
+;40: pl ff ff tm .. .. .. ..
 ;48: 0e 08 80 sh sh sh sh sh
 ;50: 0f 00 00 sh sh sh sh sh
 ;58: 07 01 10 fi fi fi fi fi
 ;60: fi ff ff .. .. .. .. ..		;filestruct
 ;68: 0a 0c c0 bs lb it ba fn
 ;70: 0b 04 40 .. .. .. .. ..
-;78: 03 05 50 ph ph ph ph ph
-;80: ph ff ff bl tr ms ds in
-;88: fs ff ff .. .. .. .. ..
+;78: 03 05 50 .. .. .. .. ..
+;80: 0f 07 0d 05 0b 03 09 01 <-+ bin2ser lookup table
+;88: 0e 06 0c 04 0a 02 08 00 <-+
 ;90: 0d 02 20 .. .. .. .. ..
-;98: 05 03 30 .. .. .. .. ..
-;a0: .. ff ff .. .. .. .. ..
+;98: 05 03 30 ph ph ph ph ph
+;a0: ph ff ff bl tr ms ds in
 ;a8: 00 0f f0 .. .. .. .. ..
 ;b0: 09 06 60 .. .. .. .. ..
 ;b8: 01 07 70 .. .. .. .. ..
@@ -51,7 +51,7 @@
 ;e0: .. ff ff .. .. .. .. ..
 ;e8: 02 0d d0 .. .. .. .. ..
 ;f0: 08 0e e0 .. .. .. .. ..
-;f8: 0f 07 0d 05 0b 03 09 01 <-+ bin2ser lookup table
+;f8: ff ff ff ff ff ff ff ff
 ;    ^  ^  ^
 ;    |  |  |
 ;    |  |  gcr dec_hi with index << 3
@@ -72,12 +72,12 @@
 .VIA2_MOTOR_OFF	= $fb
 .VIA2_MOTOR_ON	= $04
 
-.blocks_on_list = $83		;blocks tagged on wanted list
-.track		= $84		;current track
-.max_sectors	= $85		;maximum sectors on current track
-.dirsect	= $86
-.index		= $87		;current blockindex
-.blocks		= $88		;number of blocks the file occupies
+.blocks_on_list = $a3		;blocks tagged on wanted list
+.track		= $a4		;current track
+.max_sectors	= $a5		;maximum sectors on current track
+.dirsect	= $a6
+.index		= $a7		;current blockindex
+.blocks		= $38		;number of blocks the file occupies
 .blocksize	= $67
 
 .file_descriptor = $5b
@@ -86,13 +86,13 @@
 .ld_addr	= .file_descriptor + 2
 .file_size	= .file_descriptor + 4
 
-.temp		= .sector
+.temp		= $43
 .cmp1		= .sector
 .cmp2		= .index
 .dest		= $52		;-> 52 is always zero for free $53 will be set, sectorheader is unused during upload
 
 .preamble_lo	= $3b		;preamble data gcr coded lonibbles
-.preamble_hi	= $7b		;preamble data gcr coded hinibbles
+.preamble_hi	= $9b		;preamble data gcr coded hinibbles
 
 .dst		= .preamble_lo
 
@@ -107,7 +107,7 @@
 .filenum 	= $6f
 
 .gcr2ser	= $00		;gcr to serial-port lookuptablea -> from $08-$1f
-.bin2ser	= $f8		;binary to serial data
+.bin2ser	= $80		;binary to serial data
 
 .directory	= $0500		;directory
 .lonibbles	= $0600
@@ -222,47 +222,38 @@ IDLE		= $00
 
 .drivecode_start
 !pseudopc .drivecode {
-		!byte $0e, $06, $0c, $04, $0a, $02, $08, $00 ;<-+
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$00
 		!byte $ff, $0e, $0f, $07, $ff, $0a, $0b, $03 ;<-+
-		!byte $ff, $ff, $0d, $05, $ff, $00, $09, $01 ;<-| gcr2ser table with gaps being used by other variables
+		!byte $ff, $ff, $0d, $05, $ff, $00, $09, $01 ;<-|$10  gcr2ser table with gaps being used by other variables
 		!byte $ff, $06, $0c, $04, $ff, $02, $08, $ff ;<-+
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$20
 		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$30
 		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff
-
-		* = .preamble_lo + 6
-		!byte      $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$40
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$40
 		!byte $0e, $08, $80, $ff, $ff, $ff, $ff, $ff
-		!byte $0f, $00, $00, $ff, $ff, $ff, $ff, $ff
-		!byte $07, $01, $10, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		!byte $0a, $0c, $c0, $ff, $00, $00, $00, $00
-		!byte $0b, $04, $40, $ff, $ff, $ff, $ff, $ff
+		!byte $0f, $00, $00, $ff, $ff, $ff, $ff, $ff	;$50
+		!byte $07, $01, $10, $12, $ff, $ff, $ff, $ff
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$60
+		!byte $0a, $0c, $c0, $ff, $00, $00, $00, $00	;filenum
+		!byte $0b, $04, $40, $ff, $ff, $ff, $ff, $ff	;$70
 		!byte $03, $05, $50, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff, $00, $12, $ff, .DIR_SECT, $ff	;$80
-		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-		!byte $0d, $02, $20, $ff, $ff, $ff, $ff, $ff
+		!byte $0f, $07, $0d, $05, $0b, $03, $09, $01 ;<-+$80 bin2ser lookup table
+		!byte $0e, $06, $0c, $04, $0a, $02, $08, $00 ;<-+
+		!byte $0d, $02, $20, $ff, $ff, $ff, $ff, $ff	;$90
 		!byte $05, $03, $30, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+		!byte $ff, $ff, $ff, $00, $12, $ff, .DIR_SECT, $ff	;$a0
 		!byte $00, $0f, $f0, $ff, $ff, $ff, $ff, $ff
-		!byte $09, $06, $60, $ff, $ff, $ff, $ff, $ff
+		!byte $09, $06, $60, $ff, $ff, $ff, $ff, $ff	;$b0
 		!byte $01, $07, $70, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;c0
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$c0
 		!byte $06, $09, $90, $ff, $ff, $ff, $ff, $ff
-		!byte $0c, $0a, $a0, $ff, $ff, $ff, $ff, $ff
+		!byte $0c, $0a, $a0, $ff, $ff, $ff, $ff, $ff	;$d0
 		!byte $04, $0b, $b0, $ff, $ff, $ff, $ff, $ff
-		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff	;$e0
 		!byte $02, $0d, $d0, $ff, $ff, $ff, $ff, $ff
-		!byte $08, $0e, $e0, $ff, $ff, $ff, $ff, $ff
-		!byte $0f, $07, $0d, $05, $0b, $03, $09, $01 ;<-+ bin2ser lookup table
-
-;		* = .preamble_lo
-		;used only once at startup to be able to kill $0500-$0700 where our installer is lcoated
-;.drivecode_launch
-		;read dir without any disk side check
-		;jsr .read_dir
-		;jmp .idle_
+		!byte $08, $0e, $e0, $ff, $ff, $ff, $ff, $ff	;$f0
+		!byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
 
 		;leave 8 byte of stack, enough
 
