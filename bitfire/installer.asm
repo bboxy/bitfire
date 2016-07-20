@@ -57,7 +57,6 @@
 		sei
 
 		lda #$c3
-		;and $dd00
 		sta $dd00
 
 		lda #$3f
