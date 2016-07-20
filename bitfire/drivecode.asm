@@ -951,14 +951,16 @@ IDLE		= $00
 
 .get_byte
 		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
-		lda #$80
-		ldx #$00		;IDLE
+		ldx #$00
 		stx $1800		;free all lines
+.lock
+		lda #$80
 -
 		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
 		beq *-3
+					;bit change in reg, fetch bits and extract
 		ldx $1800		;load register
-		bmi -
+		bmi .lock		;bus lock became active
 		cpx #$04		;push bit into carry
 		ror			;shift in
 		bcc -			;do until our counter bit ends up in carry
