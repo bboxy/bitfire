@@ -93,22 +93,23 @@ link_load_next_raw_decomp
 bitfire_send_byte_
 		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 
-		ldx #$08			;do 9 turns, as the last turn sets $dd02 at least back to $1f, enough to get the idle signal on first pollblock, but not EOF yet (but we load one block minimum, right? So things are healed after the first get_byte call.)
+		ldx #$07			;do 8 turns, as the last turn sets $dd02 at least back to $1f or $3f this is enough to get the idle signal on first pollblock, but not EOF yet (but we load one block minimum, right? So things are healed after the first get_byte call that sets back $dd02 to $3f in any case.)
 		sta .filenum			;save value
-		lda #$20			;start value
+		lda #$1f			;start value
 .bit_loop
 		lsr .filenum			;fetch next bit from filenumber and waste cycles
-		adc #$0f			;bit 4 depending on carry -> adc #$00/01
-		ora #$0f			;fill up all lower bits, in case adc did add with carry set
+		bcc +
+		ora #$20
++
 		eor #$30			;flip bit 4 and 5
 		sta $dd02			;only write out lower 6 bits
-		and #$20			;clear bit 4 and waste some cycles here
-		pha
+		and #$1f			;clear bit 4 and waste some cycles here
+		pha				;slow down, or floppy might not keep up, most of all if NTSC
 		pla
 		dex
 		bpl .bit_loop			;last bit?
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
-						;also 6 cycles are wasted after last $dd02 write, just enough for standalone, full config and ntsc \o/
+						;also enough cycles are wasted after last $dd02 write, just enough for standalone, full config and ntsc \o/
 		rts
 
 !if BITFIRE_DECOMP = 1 {

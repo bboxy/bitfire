@@ -949,23 +949,37 @@ IDLE		= $00
 }
 		jmp .seek		;seek so that .track is set in any case
 
-.get_byte
-		ldy #BUSY		;signal that no block is ready yet and that we are loading, asap
-		ldx #$00
-		stx $1800		;free all lines
 .lock
-		lda #$80
 -
-		cpx $1800		;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
-		beq *-3
-					;bit change in reg, fetch bits and extract
-		ldx $1800		;load register
-		bmi .lock		;bus lock became active
-		cpx #$04		;push bit into carry
-		ror			;shift in
-		bcc -			;do until our counter bit ends up in carry
-		sty $1800		;go busy asap
+		cpx $1800		;still locked?
+		beq -
+.get_byte
+		ldy #BUSY
+.get_byte_
+		lda #$80
+		sta $1800
+
+		ldx #$00
+.gloop
+-
+		cpx $1800
+		beq -
+		ldx $1800
+		bmi .lock		;is the bus locked via ATN? if so, wait
+		cpx #$05
+		ror
+-
+		cpx $1800
+		beq -
+		ldx $1800
+		bmi .lock		;XXX TODO can be omitted?
+		cpx #$01
+		ror
+
+		bcc .gloop
+		sty $1800
 		rts
+
 
 		;receive end_address of code being uploaded
 		;maximum is $0110 - $04ae, buffers at $0500,$0600,$0700 can be used

@@ -12,8 +12,8 @@ bitfire_reset_drive_
                 ;wait for data ready
                 lda .upload_start,y
 		;only send 8 bits, no $dd02 sanitize
-		ldx #$07
-                jsr bitfire_send_byte_+2
+		;ldx #$07
+                jsr bitfire_send_byte_
 		;waste cycles to be sure drive keeps up
 		jsr .waste
 		jsr .waste
