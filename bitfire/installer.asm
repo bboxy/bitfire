@@ -164,6 +164,10 @@
 !if BITFIRE_AUTODETECT = 1 {
 		!src "detect.asm"
 }
+		lda #$7f
+		sta $dd0d
+		lda $dd0d
+
 		;wait until floppy is ready
 		;wait for drive to initialize XXX TODO maybe wait for special signal on $dd00?
 
