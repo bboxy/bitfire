@@ -3,11 +3,11 @@
 }
 bitfire_request_disc_
 		;send $fx as command
-		ldx #$07
+		;ldx #$07
 		jsr bitfire_send_byte_
 
-		bit $dd00
-		bmi *-3
+		;bit $dd00
+		;bmi *-3
 
 		;give floppy time to enter busy mode, and set lines to input
 		lda #$3f

@@ -83,13 +83,15 @@
 		}
 
 		!macro bus_lock {
-			lda #$03
+			lda #$c7
 			sta $dd02
 		}
 
 		!macro bus_unlock .bank {
 			lda #(.bank & 3) | $c0
 			sta $dd00
+			lda #$3f
+			sta $dd02
 		}
 
 		!macro set_depack_pointers .addr {

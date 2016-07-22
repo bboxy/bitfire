@@ -84,7 +84,7 @@
 
 		#macro bus_lock
 		{
-			lda #$03
+			lda #$c7
 			sta $dd02
 		}
 
@@ -92,6 +92,8 @@
 		{
 			lda #({bank} & 3) | $c0
 			sta $dd00
+			lda #$3f
+			sta $dd02
 		}
 
 #endif
