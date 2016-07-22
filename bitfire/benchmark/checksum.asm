@@ -1,7 +1,7 @@
 !convtab scr
 !cpu 6510
 
-;RAW = 1
+RAW = 1
 ;CHECKSUM = 1
 
 num_files	= $12
@@ -152,28 +152,30 @@ numb		lda #$00		;file number
 		lda #$01
 		sta $d800,x
 
-		lda #$03
+		lda #$c7		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
 		sta $dd02
+
+		nop
+		nop
 
 		ldy #$00
 -
-		inc $dd00
+		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
 		dey
 		bne -
 
 		lda #$c3
-		sta $dd00
+		sta $dd00		;set bits
+
+		lda #$3f		;unlock bus
+		sta $dd02
 
 		pla
 !ifdef RAW {
 		jsr bitfire_loadraw_
 } else {
+;		jsr bitfire_send_byte_
 		jsr bitfire_loadcomp_
-		;jsr bitfire_decomp_
-;		bne +
-;		jsr bitfire_loadcomp_
-;		jmp ++
-;+
 ;		jsr link_load_next_comp
 ++
 }
@@ -190,22 +192,10 @@ numb		lda #$00		;file number
 		jsr hex_runs
 		jsr reset
 
-		;lda #$f1
-		;jsr req_disc
-		;jmp *
-		;jmp reset_drv
+.side		lda #$f0
+		jsr req_disc
 		jmp next
 
-;		lda #$f1
-;		jsr bitfire_send_byte_
-;		nop
-;		lda $dd00
-;		sta $0400
-;		bit $dd00
-;		bpl *-3
-;		inc $d020
-;		jsr reset
-;		jmp *
 irq
 		pha
 		dec $d020
@@ -408,6 +398,7 @@ hex_runs
 		tay
 		lda hex,y
 		sta $04f9
+.barerts
 		rts
 
 hex
