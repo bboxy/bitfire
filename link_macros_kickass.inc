@@ -81,7 +81,7 @@ wait:
 	bcc wait
 }
 
-.macro bus_lock {
+.macro bus_lock () {
 	lda #$c7
 	sta $dd02
 }
