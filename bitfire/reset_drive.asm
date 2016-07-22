@@ -14,8 +14,9 @@ bitfire_reset_drive_
 		;only send 8 bits, no $dd02 sanitize
 		;ldx #$07
                 jsr bitfire_send_byte_
+		lda #$3f
+		sta $dd02
 		;waste cycles to be sure drive keeps up
-		jsr .waste
 		jsr .waste
 		dey
                 bpl -
