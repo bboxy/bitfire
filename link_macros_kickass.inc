@@ -81,12 +81,12 @@ wait:
 	bcc wait
 }
 
-#macro bus_lock {
+.macro bus_lock {
 	lda #$c7
 	sta $dd02
 }
 
-#macro bus_unlock (bank) {
+.macro bus_unlock (bank) {
 	lda #[bank & 3] | $c0
 	sta $dd00
 	lda #$3f
