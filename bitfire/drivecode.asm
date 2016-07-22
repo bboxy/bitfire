@@ -264,8 +264,8 @@ IDLE		= $00
 		;-------------------------------------------------------------------------------------------------------------------------------------------------------------
 .drivecode_
 .read_sector	;need to read sector header beforehand to compare with our wanted list, if we would seek a certain sector, the kernal routines would do
-		lda #$00
-		sta $1801
+;		lda #$00
+;		sta $1801
 .read_sector_
 		jsr .wait_sync_mark
 		bvc *
@@ -457,8 +457,8 @@ IDLE		= $00
 		eor .gcr_dec_lo_shf,x
 		tay			;checksum
 
-		lda #$20
-		sta $1801
+;		lda #$20
+;		sta $1801
 
 		ldx #$fc
 
@@ -831,8 +831,8 @@ IDLE		= $00
 		bne .load_track		;BRA
 
 .seek
-		lda #$00		;switch to two Mhz on 1571
-		sta $1801
+;		lda #$00		;switch to two Mhz on 1571
+;		sta $1801
 .set_bitrate				;sets bitrate for desired track and also sets value for max. sectors on track
 		ldy .to_track
 
