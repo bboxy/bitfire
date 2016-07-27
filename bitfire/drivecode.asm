@@ -823,6 +823,16 @@ IDLE		= $00
 		bne --			;on zero, all done, else next round
 		;XXX TODO here still blocks need to be loaded
 +
+		;tay
+		;bne +
+		;inc .track
+		;ldx #$00
+		;+
+		;stx .sector	-> track/sector to preload
+		;other method: blocks ++ on beginning -> read_sector, wehn doing wanted check, only allow sector with #filesize+1 to load if blocks = 1 -> loaded as last sector but not transferred. And then return with eof. on filestart either fire up motor or send first block before rereads of arbitrary sectors
+		;but seen from next round, one must still load filesize + 1 sectors, as our first sector is already loaded but we need to preload one of next file?
+		;then easier and preload via direntry?
+		;x = last sector, track = track, x = x & 3, if x == 0-> track++ -> position of next file
 		;XXX TODO if we branch to the + label, it is a good point to remember the next block here, as it will be the first block of the next file, and we could then preload it easily before going idle again
 
 .load_wanted_blocks			;read and transfer all blocks on wishlist
