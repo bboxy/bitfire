@@ -161,9 +161,10 @@ IDLE		= $00
 		lda #%01111010		;DDR set bits for drivenumber to 0, ATN out, CLK out and DATA out are outputs
 		sta $1802
 
-		lda #%11101110		;CB2 manual output high, CB1 low, CA2 manual output high, CA1 low (NC)
+		lda #%11101110		;CB2 manual output high (read), CB1 low, CA2 manual output high (byte ready), CA1 low (NC)
 		sta $1c0c
-		lda #%01000001		;PB disable latching, PA enable latching
+
+		lda #%00000001		;PB disable latching, PA enable latching (content for $1c01 is then latched)
 		sta $1c0b
 
 		lda #$7f		;disable all interrupts
@@ -845,15 +846,15 @@ IDLE		= $00
 		lda $1c00
 		and #$9f
 		cpy #31
-		bcs ++
+		bcs ++			;-> bitrate = $00
 		inx
 		cpy #25
-		bcs +
+		bcs +			;-> bitrate = $20
 		inx
 		ora #$40
 		cpy #18
-		bcs ++
-		inx
+		bcs ++			;-> bitrate = $40
+		inx			;-> bitrate = $60
 		inx
 +
 		ora #$20
@@ -952,36 +953,36 @@ IDLE		= $00
 		jsr .read_sector
 		dec .skip_wcheck	;reenable check
 }
-		jmp .seek		;seek so that .track is set in any case
+		rts
 
 .lock
 -
 		cpx $1800		;still locked?
 		beq -
 .get_byte
-		ldy #BUSY
+		ldy #BUSY		;enough time for signal to settle
 .get_byte_
-		lda #$80
+		lda #$80		;execpt a whole new byte
 		sta $1800
 
-		ldx #$00
+		ldx #$00		;start with a free bus
 .gloop
 -
-		cpx $1800
+		cpx $1800		;wait for transition
 		beq -
-		ldx $1800
+		ldx $1800		;reread register
 		bmi .lock		;is the bus locked via ATN? if so, wait
-		cpx #$05
-		ror
+		cpx #$05		;nope, interpret bit
+		ror			;and shift in
 -
-		cpx $1800
+		cpx $1800		;wait for next transition
 		beq -
-		ldx $1800
-		bmi .lock		;XXX TODO can be omitted?
-		cpx #$01
-		ror
+		ldx $1800		;reread register
+		bmi .lock		;is the bus locked? XXX TODO can be omitted?
+		cpx #$01		;nope, interpret bit
+		ror			;and shift in
 
-		bcc .gloop
+		bcc .gloop		;more bits to fetch?
 		sty $1800
 		rts
 
