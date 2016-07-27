@@ -778,6 +778,10 @@ IDLE		= $00
 		ldy #$00
 		lda #$ff
 		jsr .preamble_add_byte	;status/ack byte
+!if BITFIRE_DEBUG = 1 {
+		lda .filenum
+		jsr .preamble_add_byte
+}
 		lda .ld_addr
 		jsr .preamble_add_byte
 		lda .ld_addr+1

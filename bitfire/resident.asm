@@ -13,6 +13,10 @@
 .lz_dst		= BITFIRE_ZP_ADDR + 2
 .lz_match	= BITFIRE_ZP_ADDR + 4
 
+!if BITFIRE_DEBUG = 1 {
+bitfire_debug_filenum	= BITFIRE_ZP_ADDR + 6
+}
+
 ;define that label here, as we only aggregate labels from this file into loader_*.inc
 bitfire_install_ = BITFIRE_INSTALLER_ADDR
 
@@ -27,7 +31,7 @@ link_frame_count
 		!word 0
 }
 
-!if BITFIRE_NMI_GAPS = 1 {
+!if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
 !align 255,2
 		nop
 		nop
@@ -144,6 +148,11 @@ bitfire_loadraw_
 		jsr .bitfire_ack_		;signal that we accept data and communication direction, by basically sending 2 atn strobes by fetching a bogus byte (6 bits are used for barrier delta, first two bist are cleared/unusable. Also sets an rts in receive loop
 
 		bpl .skip_load_addr		;#$fc -> first block, all positive numbers = delta for barrier << 2
+
+!if BITFIRE_DEBUG = 1 {
+		jsr .get_one_byte		;fetch filenum
+		sta bitfire_debug_filenum
+}
 
 		jsr .get_one_byte		;fetch load/blockaddr lo
 !if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
@@ -268,7 +277,7 @@ bitfire_loadcomp_
 		;ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
 		bne .loadcompd_entry		;load + decomp file
 
-!if BITFIRE_NMI_GAPS = 1 {
+!if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
 .lz_gap2
 						;jmp will be placed here
 !align 255,5
