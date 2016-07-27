@@ -697,11 +697,14 @@ IDLE		= $00
 !if >*-1 != >.wait_sync_mark { !error "wait_sync_mark not in one page: ", .wait_sync_mark, " - ", * }
 
 .turn_disc
+		lda #.VIA2_MOTOR_ON
+		jsr .motor_on
+.turn_disc_
 		jsr .read_dir_sect0	;fetch first dir sector
 		lda .filenum
 		sec
 		sbc .directory + $ff	;compare side info
-		bne .turn_disc		;nope, not the requested side
+		bne .turn_disc_		;nope, not the requested side
 		sta .filenum		;reset filenum
 		top
 .idle
@@ -727,6 +730,10 @@ IDLE		= $00
 		sta .filenum		;set new filenum
 		bcs .turn_disc
 .load_next
+		;XXX TODO send out preloaded sector here if filenum = expected filenum
+		lda #.VIA2_LED_ON | .VIA2_MOTOR_ON
+		jsr .motor_on		;turn on led and motor, if not on already
+
 		lda .filenum		;get current or autoinced filenum
 		ldx #.DIR_SECT+1
 		sec
@@ -775,9 +782,6 @@ IDLE		= $00
 		jsr .preamble_add_byte
 		lda .ld_addr+1
 		jsr .preamble_add_byte
-
-		lda #.VIA2_LED_ON | .VIA2_MOTOR_ON
-		jsr .motor_on		;turn on led and motor, if not on already
 .load_track
 		lda .blocks
 		;preload 1. block of next file here?
@@ -911,9 +915,7 @@ IDLE		= $00
 		sta .to_track
 		;sta .file_size + 1	;write any number > 0 to file_size + 1 to trigger a sector_length of 256 bytes
 
-		lda #.VIA2_MOTOR_ON
-		jsr .motor_on
-
+		jsr .seek
 		jsr .read_sector
 
 		ldy #$00
