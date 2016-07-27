@@ -160,9 +160,15 @@ numb		lda #$00		;file number
 
 		ldy #$00
 -
+		nop
+		nop
+		nop
 		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
 		dey
 		bne -
+
+		nop
+		nop
 
 		lda #$c3
 		sta $dd00		;set bits
