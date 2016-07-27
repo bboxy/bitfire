@@ -78,7 +78,7 @@
 .dirsect	= $a6
 .index		= $a7		;current blockindex
 .blocks		= $38		;number of blocks the file occupies
-.blocksize	= $67
+;.blocksize	= $67
 
 .file_descriptor = $5b
 .to_track	= .file_descriptor + 0
@@ -508,6 +508,8 @@ IDLE		= $00
 		ldy .file_size		;block size of last sector (lowbyte filesize)
 +
 		sty .blocksize		;remember for later use
+		ldx .lonibbles,y
+		stx .firstnib
 		rts			;done
 ++
 		jmp .read_sector
@@ -556,8 +558,11 @@ IDLE		= $00
 	!error "preloop not in one page! Overlapping bytes: ", * & 255
 }
 
-		ldy .blocksize
-		ldx .lonibbles,y
+		;let this happen VERY fast
+.blocksize = * + 1
+		ldy #$00
+.firstnib = * + 1
+		ldx #$00
 .sendloop				;send the data block
 					;this loop is much tighter then the preamble, no cycles to be wasted
 		lda .gcr2ser,x
