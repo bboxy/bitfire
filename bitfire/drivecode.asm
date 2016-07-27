@@ -520,21 +520,20 @@ IDLE		= $00
 		ldy #$00		;start with 0, we will send 2 or 4 bytes of blockinfo as preamble
 		ldx .preamble_lo,y
 		lda .bin2ser,x
-		asl
-		ora #$10
-		ldx #BLOCK_READY | BUSY
-		stx $1800		;signal block ready + busy
-		bne +			;will send 6 valid bits
+		;and #$05
+		ora #BLOCK_READY | BUSY
+		bne +			;will send 6 valid bits and signal block ready
 
 		;on atn going low we have alraedy first data on bus with the upcoming code
 .preloop
 		lda .bin2ser,x
 		bit $1800
 		bmi *-3
++
 		sta $1800		;send first bits on end of atn strobe -> 4th sta on c64 side
 		asl
 		ora #$10
-+
+
 		ldx .preamble_hi,y	;hinibbles are already shifted into right position
 		bit $1800
 		bpl *-3
@@ -729,16 +728,14 @@ IDLE		= $00
 		bcs .turn_disc
 .load_next
 		lda .filenum		;get current or autoinced filenum
-.load
 		ldx #.DIR_SECT+1
 		sec
 -
-		tay			;remmeber previous A
+		sta .temp		;remmeber previous A
 		dex
 		sbc #42
 		bcs -
 +
-		sty .temp		;store previous value before underrun -> filenum % 42
 		cpx .dirsect		;dirsect changed?
 		beq +			;nope, advance
 
