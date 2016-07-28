@@ -188,7 +188,7 @@ bitfire_loadraw_
 		ldy #$37
 .get_one_byte
 bitfire_ntsc_fix1				;ntsc fix will be done on those labels by installer (opcode $xxxx-$37,y)
-		lda $dd00
+		lda $dd00-$37,y
 		sty $dd02
 		lsr
 		lsr
@@ -196,14 +196,14 @@ bitfire_ntsc_fix1				;ntsc fix will be done on those labels by installer (opcode
 		ldx #$3f
 
 bitfire_ntsc_fix2
-		ora $dd00
+		ora $dd00-$37,y
 		stx $dd02
 		lsr
 		lsr
 		dec .blockpos+1			;waste 6 cycles and decrement
 
 bitfire_ntsc_fix3
-		ora $dd00			;now ATN is 0 and ora can happen without killing bit 3
+		ora $dd00-$37,y			;now ATN is 0 and ora can happen without killing bit 3
 		sty $dd02
 		lsr
 		asr #$7e			;clear carry for free
@@ -211,9 +211,8 @@ bitfire_ntsc_fix3
 		lda #$c0
 
 bitfire_ntsc_fix4
-		and $dd00
+		and $dd00-$37,y
 		stx $dd02
-		nop
 .nibble		ora #$00			;also adc could be used, or sbc -nibble?
 .blockpos	ldx #$00
 .bitfire_block_addr_hi = * + 2
