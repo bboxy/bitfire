@@ -66,14 +66,13 @@ link_player
 }
 
 link_music_play
-link_music_addr = * + 1
-		jsr link_music_play_side1
 !if BITFIRE_FRAMEWORK_FRAMECOUNTER = 1 {
 		inc link_frame_count + 0
 		bne +
 		inc link_frame_count + 1
 +
-		rts
+link_music_addr = * + 1
+		jmp link_music_play_side1
 }
 		;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 		;and advances the frame counter if needed
@@ -86,6 +85,7 @@ link_load_next_double
 		jsr link_load_next_comp
 link_load_next_raw_decomp
 		jsr link_load_next_raw
+link_decomp_under_io
 		dec $01				;bank out IO
 		jsr link_decomp			;depack
 		inc $01				;bank in again
@@ -196,7 +196,7 @@ bitfire_ntsc_fix1				;ntsc fix will be done on those labels by installer (opcode
 		ldx #$3f
 
 bitfire_ntsc_fix2
-		ora $dd00-$37,y
+		ora $dd00-$37,y			;can be omitted? 3 cycles overhead
 		stx $dd02
 		lsr
 		lsr
@@ -211,7 +211,7 @@ bitfire_ntsc_fix3
 		lda #$c0
 
 bitfire_ntsc_fix4
-		and $dd00-$37,y
+		and $dd00-$37,y			;can be omitted? 2 cycles overhead
 		stx $dd02
 .nibble		ora #$00			;also adc could be used, or sbc -nibble?
 .blockpos	ldx #$00
