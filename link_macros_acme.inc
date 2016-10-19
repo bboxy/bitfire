@@ -43,6 +43,14 @@
 			jmp link_load_next_raw_decomp
 		}
 
+		!macro link_decomp_under_io_jmp .addr {
+			lda #>(.addr-1)
+			pha
+			lda #<(.addr-1)
+			pha
+			jmp link_decomp_under_io
+		}
+
 		;link irq hook back to base irq
 		!macro link_player_irq {
 			sei
@@ -71,6 +79,12 @@
 			lda link_syncpoint
 			cmp #.part
 			bcc -
+		}
+
+		!macro clear_frame_count {
+			lda #$00
+			sta link_frame_count + 0
+			sta link_frame_count + 1
 		}
 
 		!macro wait_frame_count .cnt {
@@ -103,4 +117,28 @@
 			sta bitfire_lz_sector_ptr1 + 1
 			sta bitfire_lz_sector_ptr2 + 1
 			sta bitfire_lz_sector_ptr3 + 1
+		}
+
+		!macro start_music_nmi {
+			ldx #<link_player
+			lda #>link_player
+
+			stx $fffa
+			sta $fffb
+			lda #$00
+			sta $dd0e
+			lda $dd0d
+			lda #$c7
+			sta $dd04
+			lda #$4c
+			sta $dd05
+			lda #$81
+			sta $dd0d
+
+			lda #$ff
+			cmp $d012
+			bne *-3
+
+			lda #$11
+			sta $dd0e
 		}
