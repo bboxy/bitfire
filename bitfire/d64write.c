@@ -470,7 +470,7 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
                 dir[dir_pos * 6 + 4] = (length - 1) & 0xff;
                 dir[dir_pos * 6 + 5] = ((length - 1) >> 8) & 0xff;
                 d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
-                printf("$%04x  $%04x  @%d/%d checksum: $%02x\n", loadaddr, length, track, sector, d64->checksum);
+                printf("bitfire file: load: $%04x-$%04x %d block(s) starting @%d/%d checksum: $%02x\n", loadaddr, loadaddr+length, (length / 256) + 1, track, sector, d64->checksum);
                 return 0;
             }
             dir_pos++;
