@@ -78,7 +78,7 @@
 .dirsect	= $a6
 .index		= $a7		;current blockindex
 .blocks		= $38		;number of blocks the file occupies
-;.blocksize	= $67
+.blocksize	= $67
 
 .file_descriptor = $5b
 .to_track	= .file_descriptor + 0
@@ -371,11 +371,11 @@ IDLE		= $00
 		bne .read_sector_	;urgh, bad checksum, find another sector
 
 		;will be transformed into a lda .wanted,x
-.skip_wcheck	ldy .wanted,x		;sector on list?
+		ldy .wanted,x		;sector on list?
 		iny			;$ff + 1 = 0?
 		;yes, read, we should still have ~20 cycles overhead here until next sync arrives
 		bne *+5
-		jmp .read_sector_
+.skip_wcheck	jmp .read_sector_
 
 .wait_sector_data
 ;!if BITFIRE_CONFIG_IN_ORDER = 1 {	;no barriers needed with standalone loadraw
@@ -509,8 +509,6 @@ IDLE		= $00
 		ldy .file_size		;block size of last sector (lowbyte filesize)
 +
 		sty .blocksize		;remember for later use
-		ldx .lonibbles,y
-		stx .firstnib
 		rts			;done
 ++
 		jmp .read_sector
@@ -533,21 +531,22 @@ IDLE		= $00
 		sta $1800		;send first bits on end of atn strobe -> 4th sta on c64 side
 		asl
 		ora #$10
-
 		ldx .preamble_hi,y	;hinibbles are already shifted into right position
+
 		bit $1800
 		bpl *-3
 		sta $1800		;second -> first sta $dd02 on c64 side
-
 		lda .bin2ser,x
 		iny
+		;nop
+
 		bit $1800
 		bmi *-3
 		sta $1800		;third -> second sta $dd02 on c64 side
-
 		asl
 		ora #$10
 		ldx .preamble_lo,y
+
 		bit $1800
 		bpl *-3
 		sta $1800		;last -> third sta $dd02 on c64 side
@@ -558,35 +557,34 @@ IDLE		= $00
 	!error "preloop not in one page! Overlapping bytes: ", * & 255
 }
 
-		;let this happen VERY fast
-.blocksize = * + 1
-		ldy #$00
-.firstnib = * + 1
-		ldx #$00
+		ldy .blocksize
+		ldx .lonibbles,y
+		nop
 .sendloop				;send the data block
-					;this loop is much tighter then the preamble, no cycles to be wasted
 		lda .gcr2ser,x
-		bit $1800
+
+		bit $1800		;18 + 7
 		bmi *-3
 		sta $1800		;read by first lda $dd00 on c64 side
-
 		asl
 		ora #$10
 		ldx .hinibbles,y
-		bit $1800
+
+		bit $1800		;18 + 7
 		bpl *-3
 		sta $1800		;read by second lda $dd00 on c64 side
-
 		lda .gcr2ser,x
 		dey
-		bit $1800
+		;nop			;keep flow even? we can allow for one branch to hit in per round?
+
+		bit $1800		;18 + 7
 		bmi *-3
 		sta $1800		;read by third lda $dd00 on c64 side
-
 		asl
 		ora #$10
 		ldx .lonibbles,y
-		bit $1800
+
+		bit $1800		;19 + 7
 		bpl *-3
 		sta $1800		;read by fourth lda $dd00 on c64 side
 		cpy #$ff
@@ -960,7 +958,7 @@ IDLE		= $00
 		ora $1c00
 		sta $1c00
 !if BITFIRE_CONFIG_MOTOR_ALWAYS_ON = 0 {
-		inc .skip_wcheck	;disable wanted check, so any sector is okay
+		inc .skip_wcheck	;disable wanted check ($4c of jmp is transformed into $4d = eor $xxxx), so any sector is okay
 		jsr .read_sector
 		jsr .read_sector
 		jsr .read_sector
@@ -970,8 +968,8 @@ IDLE		= $00
 
 .lock
 -
-		cpx $1800		;still locked?
-		beq -
+		ldx $1800		;still locked?
+		bmi -
 .get_byte
 		ldy #BUSY		;enough time for signal to settle
 .get_byte_
