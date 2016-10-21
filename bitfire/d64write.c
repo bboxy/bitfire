@@ -470,7 +470,6 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
                 dir[dir_pos * 6 + 4] = (length - 1) & 0xff;
                 dir[dir_pos * 6 + 5] = ((length - 1) >> 8) & 0xff;
                 d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
-                printf("bitfire file: load: $%04x-$%04x %d block(s) starting @%d/%d checksum: $%02x\n", loadaddr, loadaddr+length, (length / 256) + 1, track, sector, d64->checksum);
                 return 0;
             }
             dir_pos++;
@@ -585,29 +584,29 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
 	if (add_dir) {
 
 #ifdef _MSC_VER
-		char drive[_MAX_DRIVE];
-		char directory[_MAX_DIR];
-		char filename[_MAX_FNAME];
-		char extension[_MAX_EXT];
-		char pnamebuf[_MAX_PATH];
+            char drive[_MAX_DRIVE];
+            char directory[_MAX_DIR];
+            char filename[_MAX_FNAME];
+            char extension[_MAX_EXT];
+            char pnamebuf[_MAX_PATH];
 
-		_splitpath(path, drive, directory, filename, extension);
-		_makepath(pnamebuf, NULL, NULL, filename, extension);
-		pname=pnamebuf;
+            _splitpath(path, drive, directory, filename, extension);
+            _makepath(pnamebuf, NULL, NULL, filename, extension);
+            pname=pnamebuf;
 #else
             pname = basename(path);
 #endif
 
             ascii2petscii(pname);
-            return d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size);
+            if(d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size)) return 1;
         }
-        return 0;
     } else {
         if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, side) != 0) {
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
-        return 0;
     }
+    printf("type: %s  mem: $%04x-$%04x  size: % 3d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", type ? "bitfire ":"standard", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+    return 0;
 }
 
 static unsigned char s2p[] = {
