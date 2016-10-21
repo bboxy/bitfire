@@ -27,7 +27,7 @@ BITFIRE_CONFIG_MOTOR_ALWAYS_ON	= 0		;If you want to be annoying, let the motor s
 BITFIRE_CONFIG_INTERLEAVE	= 4		;Turned out to be the best choice, if you really think you know it better, change it and get slowed down :-)
 
 ;add extra debug functionality, not intended for demos
-BITFIRE_DEBUG			= 1
+BITFIRE_DEBUG			= 0
 
 ;constants, better don't touch
 BITFIRE_UPLOAD			= $80
