@@ -80,3 +80,5 @@ v0.7
 - possibility to choose between NMI and raster IRQ for baseirq
 - add possibility for buslock to allow arbitrary $dd00 writes when loader is
 idle, and add macros for that (bus_lock, bus_unlock $bank)
+- fix spin up handling of read dummy sectors (might have been skipped under
+some circumstances)
