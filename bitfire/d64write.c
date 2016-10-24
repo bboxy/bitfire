@@ -510,14 +510,17 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     start_sector = d64->sector_link;
 
     memset(d64->sectbuf, 0, 256);
+
+    //fetch load address
+    loadaddr = fgetc(file);
+    loadaddr += fgetc(file) << 8;
+
     /* init buffer positions */
     if (type == FILETYPE_BITFIRE) {
         d64->sectpos  = 0;
-	//fetch load address
-        loadaddr = fgetc(file);
-        loadaddr += fgetc(file) << 8;
     } else {
         d64->sectpos  = 2;
+        rewind(file);
     }
     d64->sectsize = SECTOR_SIZE;
     /* set startposition */
@@ -605,7 +608,17 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
     }
-    printf("type: %s  mem: $%04x-$%04x  size: % 3d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", type ? "bitfire ":"standard", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+    switch (type) {
+        case FILETYPE_BOOT:
+            printf("type: bootfile  mem: $%04x-$%04x  sizeource load: $2000-$2311% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+        break;
+        case FILETYPE_STANDARD:
+            printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+        break;
+        case FILETYPE_BITFIRE:
+            printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+        break;
+    }
     return 0;
 }
 
@@ -806,7 +819,6 @@ int main(int argc, char *argv[]) {
     if(dir_art) {
         boot_sector = d64.sector_link;
         boot_track = d64.track_link;
-        printf("bootfile @ %d/%d\n", boot_track, boot_sector);
 
         //XXX TODO move to a separate function
         if(file = fopen(art_path, "rb+"), !file) {
