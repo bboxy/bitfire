@@ -610,13 +610,13 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     }
     switch (type) {
         case FILETYPE_BOOT:
-            printf("type: bootfile  mem: $%04x-$%04x  sizeource load: $2000-$2311% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+            printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
         break;
         case FILETYPE_STANDARD:
             printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
         break;
         case FILETYPE_BITFIRE:
-            printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+            printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, length % 256, path);
         break;
     }
     return 0;
@@ -692,8 +692,8 @@ int main(int argc, char *argv[]) {
         printf("-s <file>               Writes a file in standard format\n");
         printf("--side <num>            Determines which side this disk image will be when it comes about turning the disc\n");
         printf("--boot <file>           Writes a standard file into the dirtrack. The dirart is linked to that file.\n");
-        printf("-a <num> <dirart.prg>   A dirart can be provided, it extracts the first 16 chars of <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given -h and -i will be ignored then.\n");
-        printf("--interleave <num>      Interleave with which files are written on disk (change that value also in drivecode.asm). Default: %d\n", interleave);
+        printf("-a <num> <dirart.prg>   A dirart can be provided, it extracts the first 16 chars of <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
+        printf("--interleave <num>      Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("--40                    Enable 40 track support\n");
         exit (0);
     }
@@ -703,19 +703,19 @@ int main(int argc, char *argv[]) {
         if(!strcmp(argv[c], "-h")) {
             if (argc -c > 1) d64_header = argv[++c];
             else {
-                fatal_message("misisng value for option '%s'\n", argv[c]);
+                fatal_message("missing value for option '%s'\n", argv[c]);
             }
         }
         else if(!strcmp(argv[c], "-i")) {
             if (argc - c > 1) d64_id = argv[++c];
             else {
-                fatal_message("misisng value for option '%s'\n", argv[c]);
+                fatal_message("missing value for option '%s'\n", argv[c]);
             }
         }
         else if(!strcmp(argv[c], "--interleave")) {
             if (argc - c > 1) interleave = strtoul(argv[++c], NULL, 10);
             else {
-                fatal_message("misisng value for option '%s'\n", argv[c]);
+                fatal_message("missing value for option '%s'\n", argv[c]);
             }
             if (interleave < 1 || interleave > 16) {
                 fatal_message("value for interleave must be in the range from 1 to 16\n");
@@ -724,7 +724,7 @@ int main(int argc, char *argv[]) {
         else if(!strcmp(argv[c], "--side")) {
             if (argc -c > 1) side = strtoul(argv[++c], NULL, 10);
             else {
-                fatal_message("misisng value for option '%s'\n", argv[c]);
+                fatal_message("missing value for option '%s'\n", argv[c]);
             }
             if (side < 1 || side > 16) {
                 fatal_message("value for side must be in the range from 1 to 16\n");
@@ -736,7 +736,7 @@ int main(int argc, char *argv[]) {
             }
             if (argc -c > 1) d64_path = argv[++c];
             else {
-                fatal_message("misisng path for option '%s'\n", argv[c]);
+                fatal_message("missing path for option '%s'\n", argv[c]);
             }
             format = 1;
         }
@@ -746,7 +746,7 @@ int main(int argc, char *argv[]) {
             }
             if (argc -c > 1) d64_path = argv[++c];
             else {
-                fatal_message("misisng path for option '%s'\n", argv[c]);
+                fatal_message("missing path for option '%s'\n", argv[c]);
             }
         }
         else if(!strcmp(argv[c], "-s")) {
@@ -758,7 +758,7 @@ int main(int argc, char *argv[]) {
         else if(!strcmp(argv[c], "--boot")) {
             if (argc -c > 1) boot_file = argv[++c];
             else {
-                fatal_message("misisng path for option '%s'\n", argv[c]);
+                fatal_message("missing path for option '%s'\n", argv[c]);
             }
         }
         else if(!strcmp(argv[c], "--40")) {
