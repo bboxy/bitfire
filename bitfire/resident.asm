@@ -11,10 +11,11 @@
 ;depacker zp-addresses
 .lz_bits	= BITFIRE_ZP_ADDR + 1
 .lz_dst		= BITFIRE_ZP_ADDR + 2
-.lz_match	= BITFIRE_ZP_ADDR + 4
+.lz_end		= BITFIRE_ZP_ADDR + 4
+.lz_tmp		= BITFIRE_ZP_ADDR + 6
 
 !if BITFIRE_DEBUG = 1 {
-bitfire_debug_filenum	= BITFIRE_ZP_ADDR + 6
+bitfire_debug_filenum	= BITFIRE_ZP_ADDR + 7
 }
 
 ;define that label here, as we only aggregate labels from this file into loader_*.inc
@@ -76,9 +77,8 @@ link_music_addr = * + 1
 }
 		;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 		;and advances the frame counter if needed
-link_decomp	= bitfire_decomp_
-
 !if BITFIRE_DECOMP = 1 {
+link_decomp	= bitfire_decomp_
 ;		;expect $01 to be $35
 link_load_next_double
 		;loads a splitted file, first part up to $d000 second part under IO
@@ -116,14 +116,6 @@ bitfire_send_byte_
 						;also enough cycles are wasted after last $dd02 write, just enough for standalone, full config and ntsc \o/
 		rts
 
-!if BITFIRE_DECOMP = 1 {
-.bitfire_set_ptrs
-		sta bitfire_lz_sector_ptr1 - $3f,x
-		sta bitfire_lz_sector_ptr2 - $3f,x
-		sta bitfire_lz_sector_ptr3 - $3f,x
-		rts
-}
-
 !if BITFIRE_FRAMEWORK = 1 {
 link_load_next_raw
 		lda #BITFIRE_LOAD_NEXT
@@ -138,6 +130,9 @@ bitfire_loadraw_
 		jsr .pollblock
 		bcc -
 ;		rts				;just run into pollblock code again that will then jump to .poll_end and rts
+} else {
+		pha				;we are too fast in standalone mode, need to waste a few cycles for letting teh drive settle
+		pla
 }
 .pollblock
 		lda $dd00			;bit 6 is always set if not ready or idle/EOF so no problem with just an ASL
@@ -156,16 +151,15 @@ bitfire_loadraw_
 
 		jsr .get_one_byte		;fetch load/blockaddr lo
 !if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
-		jsr .bitfire_set_ptrs		;set initial pointers
+		sta bitfire_lz_sector_ptr1
+		sta bitfire_lz_sector_ptr2
 }
 		sta bitfire_load_addr_lo	;destination lowbyte
 
 		jsr .get_one_byte		;fetch loadaddr hi, returns with a cleared carry
 !if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
-		inx
-		jsr .bitfire_set_ptrs		;set initial pointers highbyte
-		;sta bitfire_load_addr_hi	;same as .bitfire_lz_sector_ptr1 + 1
-		top				;skip 2 lsr, carry is clear and .barrier = 0, so it is basically sta .barrier
+		sta bitfire_lz_sector_ptr1 + 1
+		sta bitfire_lz_sector_ptr2 + 1
 .skip_load_addr
 		jsr .get_one_byte		;fetch barrier
 		sta .barrier
@@ -234,20 +228,22 @@ bitfire_load_addr_lo = * + 1
 bitfire_lz_sector_ptr1	= * + 1
 bitfire_load_addr_hi = * + 2
 		ldy $beef,x
+						;store bits? happens on all calls, except when a whole literal is fetched
+		bcc +				;only store lz_bits if carry is set (in all cases, except when literal is fetched for offset)
 		sty .lz_bits
 		rol .lz_bits
++
 		inx
 		bne .lz_same_page
 
 .lz_next_page					;/!\ ATTENTION things entered here as well during depacking
 		inc bitfire_lz_sector_ptr1 + 1	;use inc to keep A untouched!
 		inc bitfire_lz_sector_ptr2 + 1
-		inc bitfire_lz_sector_ptr3 + 1
 .lz_next_page_
 .lz_skip_fetch
 		php				;turned into a rts in case of standalone decomp
 		pha				;preserve Z, carry, A and Y, needed depending on call
-		sty .lz_match
+		sty .lz_tmp
 .lz_fetch_sector				;entry of loop
 		jsr .pollblock			;fetch another block, returns with x = 0
 		bcs .lz_fetch_eof		;eof? yes, finish
@@ -256,7 +252,7 @@ bitfire_load_addr_hi = * + 2
 						;on first successful .pollblock they will be set with valid values and things will checked against correct barrier
 		bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof					;not reached, go on depacking
-		ldy .lz_match			;restore regs + flags
+		ldy .lz_tmp			;restore regs + flags
 		pla
 		plp
 .lz_same_page
@@ -274,6 +270,19 @@ bitfire_loadcomp_
 		ldy #.lz_poll-.lz_skip_poll-2	;currently ldy #$0b
 		;ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
 		bne .loadcompd_entry		;load + decomp file
+
+.lz_lentab = * - 1
+		;short offset init values
+		;!byte %00000000			;2
+		!byte %11011111			;0
+		!byte %11111011			;1
+		!byte %10000000			;3
+
+		;long offset init values
+		!byte %11101111			;offset 0
+		!byte %11111101			;offset 1
+		!byte %10000000			;offset 2
+		!byte %11110000			;offset 3
 
 !if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
 .lz_gap2
@@ -299,23 +308,15 @@ bitfire_decomp_
 ;---------------------------------------------------------------------------------
 
 .lz_decrunch
-!if BITFIRE_DECOMP_ZERO_OVERLAP = 0 {
 -
 		jsr .lz_refill_bits		;fetch depack addr
 		sty .lz_dst-1,x			;x = 0, x = 1 and x = 2
+!if BITFIRE_DECOMP_ZERO_OVERLAP = 0 {
 		cpx #$02
-		bne -
 } else {
--
-		tya				;copy previous Y to A for later use
-		jsr .lz_refill_bits		;fetch depack addr and end addr, preserves A
-		sty .lz_dst-1,x			;x = 0 .. x = 4
-		cpx #$04			;fetch 2 more bytes
-		bne -
-		sta .lz_end_low+1		;a = previous fetched byte
-		sty .lz_end_hi+1		;y = last fetched byte
-						;voila, there's our end address \o/
+		cpx #$04
 }
+		bne -
 		;sec				;set for free by last compare
 .lz_type_refill
 		jsr .lz_refill_bits		;refill bit buffer .lz_bits
@@ -340,9 +341,6 @@ bitfire_decomp_
 		jsr .lz_refill_bits
 		bne -
 
--
-		jsr .lz_next_page
-		bne +
 .lz_lrun_gotten
 		sta .lz_lcopy_len		;Store LSB of run-length
 		ldy #$00
@@ -351,7 +349,8 @@ bitfire_lz_sector_ptr2	= * + 1			;Copy the literal data, forward or overlap is g
 		lda $beef,x
 		sta (.lz_dst),y
 		inx
-		beq -
+		bne +
+		jsr .lz_next_page
 +
 		iny
 .lz_lcopy_len = * + 1
@@ -395,41 +394,33 @@ bitfire_lz_sector_ptr2	= * + 1			;Copy the literal data, forward or overlap is g
 
 		lda #%11000000			;fetch 2 more prefix bits
 		rol				;previous bit is still in carry \o/
-
-		asl .lz_bits
-		bne *+5
-		jsr .lz_refill_bits
-		rol
-
-		asl .lz_bits
-		bne *+5
-		jsr .lz_refill_bits
-		rol
-
-		beq .lz_far			;0 + 8 bits to fetch, branch out before table lookup to save a few cycles and one byte in the table
-		tay
-		lda .lz_lentab,y
--						;same as above
+-
 		asl .lz_bits
 		bne *+5
 		jsr .lz_refill_bits
 		rol
 		bcs -
 
-		bmi .lz_short			;either 3,4,6 or 7 bits fetched -> highbyte will be $ff
-.lz_far
-		eor #$ff			;5 of 13, 2 of 10, 0 of 8 bits fetched as highbyte, lowbyte still to be fetched
+		beq .lz_8_and_more		;0 + 8 bits to fetch, branch out before table lookup to save a few cycles and one byte in the table, also save complexity on the bitfetcher
 		tay
+		lda .lz_lentab,y
+-						;same as above
+		asl .lz_bits			;XXX same code as above, so annoying :-(
+		bne *+5
+		jsr .lz_refill_bits
+		rol
+		bcs -
 
-bitfire_lz_sector_ptr3	= * + 1
-		lda $beef,x			;For large offsets we can load the
-		inx				;low-byte straight from the stream
-		bne .lz_join			;without going throught the shift
-		jsr .lz_next_page		;register
+		bmi .lz_less_than_8		;either 3,4,6 or 7 bits fetched -> highbyte will be $ff
+.lz_8_and_more
+		jsr .lz_refill_bits
+		eor #$ff			;5 of 13, 2 of 10, 0 of 8 bits fetched as highbyte, lowbyte still to be fetched
+		sta .lz_tmp			;XXX this is a pain in the arse that A and Y need to be swapped :-(
+		tya
+		ldy .lz_tmp
 		top
-.lz_short
+.lz_less_than_8
 		ldy #$ff			;XXX TODO silly, y is set twice in short case
-.lz_join
 		adc .lz_dst			;subtract offset from lz_dst
 		sta .lz_m+1
 		tya				;hibyte
@@ -452,49 +443,41 @@ bitfire_lz_sector_ptr3	= * + 1
 		sta .lz_dst
 
 !if BITFIRE_DECOMP_ZERO_OVERLAP = 0 {
-.lz_skip_poll	bcc .lz_poll
+.lz_skip_poll	bcc +
 .lz_maximum	inc .lz_dst+1			;this is also used by maximum length
 		bcs .lz_skip_end
++
 
 } else {
-		bcc .lz_end_low			;proceed to check
+		bcc +				;proceed to check
 .lz_maximum
 		inc .lz_dst+1			;advance hi byte
 ;		lda .lz_dst			;if entering via .lz_maximum, a = 0, so we would pass the following check only if the endadress is @ $xx00
-						;if so, the endaddress can't be $xx00 and the highbyte check will fail, as we just successfully wrote a literal with type bit, so the end address must be greater then the current lz_dst
-.lz_end_low	eor #$00			;check end address
++						;if so, the endaddress can't be $xx00 and the highbyte check will fail, as we just successfully wrote a literal with type bit, so the end address must be greater then the current lz_dst, as either another literal or match must follow. Can you still follow me?! :-D
+		eor .lz_end			;check end address
 .lz_skip_poll	bne .lz_poll			;all okay, poll for a new block
-		lda .lz_dst+1			;check highbyte
-.lz_end_hi	eor #$00
+
+		eor .lz_dst+1			;check highbyte
+		eor .lz_end+1
 		bne .lz_skip_end		;skip poll, so that only one branch needs to be manipulated
-		sta .barrier			;clear barrier and force to load until EOF
+		;sta .barrier			;clear barrier and force to load until EOF, XXX does not work, but will at least force one additional block before leaving as barrier will be set again upon next block being fetched. Will overlap be > than 2 blocks? most liekly not?
 		jmp .lz_next_page_		;load any remaining literal blob if there, or exit with rts in case of plain decomp (rts there instead of php). So we are forced until either the sector_ptr reaches $00xx or EOF happens, so nothing can go wrong
+						;XXX TODO could be beq .lz_next_page_ but we get into trouble with 2nd nmi gap then :-(
 }
 
 .lz_poll
+						;XXX TODO can be omitted as done in pollblock, but a tad faster this way
 		bit $dd00
 		bvs .lz_skip_end
 
-		stx .lz_match			;save x, lz_match is available at that moment
-		jsr .pollblock			;yes, fetch another block and mark block in bitmap
-		ldx .lz_match			;restore x
+		stx .lz_tmp			;save x, lz_tmp is available at that moment
+		jsr .poll_start			;yes, fetch another block
+		ldx .lz_tmp			;restore x
 .lz_skip_end
 						;literals needing an explicit type bit
 		asl .lz_bits			;fetch next type bit
 		jmp .lz_type_check
 						;XXX TODO refill_bits -> do no shifting yet, but do in code, so we could reuse the asl ?!
-.lz_lentab = * - 1
-		;short offset init values
-		;!byte %00000000			;2
-		!byte %11011111			;0
-		!byte %11111011			;1
-		!byte %10000000			;3
-
-		;long offset init values
-		!byte %11101111			;offset 0
-		!byte %11111101			;offset 1
-		!byte %10000000			;offset 2
-		!byte %11110000			;offset 3
 }	;endif DECOMP
 
 !if BITFIRE_AUTODETECT = 1 {
