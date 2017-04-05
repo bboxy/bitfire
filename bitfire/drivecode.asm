@@ -87,6 +87,7 @@
 .file_size	= .file_descriptor + 4
 
 .temp		= $43
+.firstblock	= $44
 .cmp1		= .sector
 .cmp2		= .index
 .dest		= $52		;-> 52 is always zero for free $53 will be set, sectorheader is unused during upload
@@ -101,7 +102,6 @@
 .head_lo	= $4b		;sector header gcr data lonibbles
 .head_hi	= $53		;sector header gcr data hinibbles
 
-.last_barr	= $6c
 .indexts	= $6d
 .barrier	= $6e
 .filenum 	= $6f
@@ -516,7 +516,7 @@ IDLE		= $00
 
 .send_block
 		ldy #$00		;start with 0, we will send 2 or 4 bytes of blockinfo as preamble
-		ldx .preamble_lo,y
+		ldx .preamble_lo
 		lda .bin2ser,x
 		;and #$05
 		ora #BLOCK_READY | BUSY
@@ -595,8 +595,7 @@ IDLE		= $00
 		bit $1800
 		bmi *-3
 		sta $1800
-
-		bpl .reset_pre_cmp 	;BRA reset size for preamble
+		rts
 
 !if >*-1 != >.sendloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
@@ -627,13 +626,24 @@ IDLE		= $00
 ;}
 
 .preamble
-		clc
-		adc .ld_addr+1		;add load_addr hibyte to index to make the index = absolute address on c64 side
-
-		ldy .pre_cmp		;first block being sent?
-		bne .first_block	;ack byte already in preamble for first block
-
 		pha			;block number is in A, save
+
+		ldy #$00
+
+		lda .firstblock
+		beq +
+		inc .firstblock
+		jsr .preamble_add_byte	;$ff as ack byte
+!if BITFIRE_DEBUG = 1 {
+		lda .filenum
+		jsr .preamble_add_byte
+}
+		lda .ld_addr
+		jsr .preamble_add_byte
+		lda .ld_addr+1
++
+		jsr .preamble_add_byte	;$00 as ack byte / ld_addr+1
+
 !if BITFIRE_DECOMP = 1 {		;no barriers needed with standalone loadraw
 		lda .index		;max index to match against
 		ldx #$14		;walk through list of sectors to be loaded
@@ -648,18 +658,13 @@ IDLE		= $00
 ;!if BITFIRE_CONFIG_IN_ORDER = 1 {
 ;		sta .barrier		;save new barrier
 ;}
-		tax			;load barrier
-		sec
-		sbc .last_barr		;subtract last position to build delta
-		stx .last_barr		;remember current barrier
-		asl			;shift, as lower 2 bits will be clobbered
-		asl			;a bit silly, as it is shifted >> 4 in .preamble_add_byte :-(
-} else {
-		tya
+		clc
+		adc .ld_addr+1
+		jsr .preamble_add_byte	;barrier, absolute
 }
-		jsr .preamble_add_byte	;ack byte/barrier delta
 		pla
-.first_block
+		clc
+		adc .ld_addr+1		;add load_addr hibyte to block number to make the block number an absolute address on c64 side
 		jsr .preamble_add_byte	;block_addr_hi
 
 		ldx .blocksize		;set up num of bytes to be transferred
@@ -674,9 +679,7 @@ IDLE		= $00
 		lsr
 		lsr
 		sta .preamble_hi,y	;upper 4 bits
-.reset_pre_cmp
 		iny
-		sty .pre_cmp
 		rts
 
 .wait_sync_mark
@@ -707,6 +710,7 @@ IDLE		= $00
 		top
 .idle
 		inc .filenum		;autoinc always, so thet load_next will also load next file after a load with filenum
+		dec .firstblock
 .drivecode_launch
 		;XXX TODO here it would be possible to preload next block
 		lda $1c00
@@ -756,12 +760,11 @@ IDLE		= $00
 
 		ldx #$00		;reset block index
 		stx .index
-!if BITFIRE_DECOMP = 1 {		;no barriers needed with standalone loadraw
+;!if BITFIRE_DECOMP = 1 {		;no barriers needed with standalone loadraw
 ;!if BITFIRE_CONFIG_IN_ORDER = 1 {
 ;		stx .barrier
 ;}
-		stx .last_barr
-}
+;}
 -					;copy over direntry to ZP
 		lda .directory,y
 		sta .file_descriptor,x
@@ -773,20 +776,9 @@ IDLE		= $00
 		adc #$00		;need to add one, as also the last partial block counts as a full block. File size is one too less, so exceptions like $xx00 in length are no problem
 		sta .blocks
 					;send load-address with first transferred block
-		ldy #$00
-		lda #$ff
-		jsr .preamble_add_byte	;status/ack byte
-!if BITFIRE_DEBUG = 1 {
-		lda .filenum
-		jsr .preamble_add_byte
-}
-		lda .ld_addr
-		jsr .preamble_add_byte
-		lda .ld_addr+1
-		jsr .preamble_add_byte
 .load_track
 		lda .blocks
-		;preload 1. block of next file here?
+					;XXX TODO preload 1. block of next file here?
 		beq .idle		;check if all blocks of file are loaded
 
 		jsr .seek		;sets max_sectors and bitrate depending on track
@@ -811,7 +803,7 @@ IDLE		= $00
 		inc .index		;advance index
 		inc .blocks_on_list	;count number of blocks in list (per track num of blocks)
 		dec .blocks		;all blocks loaded?
-		beq +			;yep, end
+		beq .load_wanted_blocks	;yep, end
 		txa			;go for next block
 		sbx #-BITFIRE_CONFIG_INTERLEAVE	;x += INTERLEAVE
 		cpx .max_sectors	;wrap around?
@@ -819,32 +811,21 @@ IDLE		= $00
 		lda #BITFIRE_CONFIG_INTERLEAVE	;handle next round by increasing offset stored in .sector
 		isc .sector		;inc sector offset and compare with INTERLEAVE
 		bne --			;on zero, all done, else next round
-		;XXX TODO here still blocks need to be loaded
-+
-		;tay
-		;bne +
-		;inc .track
-		;ldx #$00
-		;+
-		;stx .sector	-> track/sector to preload
-		;other method: blocks ++ on beginning -> read_sector, wehn doing wanted check, only allow sector with #filesize+1 to load if blocks = 1 -> loaded as last sector but not transferred. And then return with eof. on filestart either fire up motor or send first block before rereads of arbitrary sectors
-		;but seen from next round, one must still load filesize + 1 sectors, as our first sector is already loaded but we need to preload one of next file?
-		;then easier and preload via direntry?
-		;x = last sector, track = track, x = x & 3, if x == 0-> track++ -> position of next file
-		;XXX TODO if we branch to the + label, it is a good point to remember the next block here, as it will be the first block of the next file, and we could then preload it easily before going idle again
-
+					;XXX TODO here still blocks need to be loaded
 .load_wanted_blocks			;read and transfer all blocks on wishlist
 		jsr .read_sector	;returns with current blockindex in A
 		jsr .preamble		;add blockindex and size to preamble, and handle barrier stuff there
-		jsr .send_block		;exits with y = 0 and carry set
+		sty .pre_cmp		;set preamble size
+		jsr .send_block		;exits with y = $ff and carry set
 		dec .blocks_on_list	;last block on wishlist?
 		bne .load_wanted_blocks
 
 .track_finished
-		sty .sector		;set start pos for next track, y is always 0 after .send_block
+		iny
+		sty .sector		;set start pos for next track, y is always $ff after .send_block
 -					;now adjust to_track and take care of skipping track 18
 		lda #18
-		;sec			;set by send_loop and also set if beq
+		;sec			;set by send_block and also set if beq
 		isc .to_track
 		beq -			;skip dirtrack however
 		bne .load_track		;BRA
@@ -994,7 +975,7 @@ IDLE		= $00
 		ror			;and shift in
 
 		bcc .gloop		;more bits to fetch?
-		sty $1800
+		sty $1800		;set busy bit
 		rts
 
 
@@ -1076,7 +1057,7 @@ IDLE		= $00
 ;		bne --
 ;		pla
 
-		rts
+;		rts
 
 end
 

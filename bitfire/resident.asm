@@ -145,9 +145,9 @@ bitfire_loadraw_
 		bmi .poll_end			;block ready?
 .poll_start
 		lda #$60			;set rts
-		jsr .bitfire_ack_		;signal that we accept data and communication direction, by basically sending 2 atn strobes by fetching a bogus byte (6 bits are used for barrier delta, first two bist are cleared/unusable. Also sets an rts in receive loop
+		jsr .bitfire_ack_		;signal that we accept data and communication direction, by basically sending 2 atn strobes by fetching a bogus byte (6 bits of payload possible, first two bist are cleared/unusable. Also sets an rts in receive loop
 
-		bpl .skip_load_addr		;#$fc -> first block, all positive numbers = delta for barrier << 2
+		bpl .skip_load_addr		;#$fc -> first block
 
 !if BITFIRE_DEBUG = 1 {
 		jsr .get_one_byte		;fetch filenum
@@ -167,10 +167,8 @@ bitfire_loadraw_
 		;sta bitfire_load_addr_hi	;same as .bitfire_lz_sector_ptr1 + 1
 		top				;skip 2 lsr, carry is clear and .barrier = 0, so it is basically sta .barrier
 .skip_load_addr
-		lsr				;lower two bits always cleared, can ommit clc
-		lsr
-		adc .barrier
-		sta .barrier			;updated or initial barrier position = loadaddr_hi
+		jsr .get_one_byte		;fetch barrier
+		sta .barrier
 } else {
 		sta bitfire_load_addr_hi
 .skip_load_addr
