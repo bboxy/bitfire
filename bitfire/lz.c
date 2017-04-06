@@ -888,6 +888,8 @@ void render_output(lz_context *ctx) {
 
 	bool update = true;
 
+	bool sentinel_needed = false;
+
 	ctx->margin = 0;
 	ctx->end_pos = 0;
 
@@ -922,6 +924,7 @@ void render_output(lz_context *ctx) {
 		if(length > 0) {
 
 			unsigned offset = info[cursor].match_offset;
+			sentinel_needed = false;
 
 			if(!implicit_match) {
 				if(ctx->show_trace) printf ("type_bit ");
@@ -943,6 +946,7 @@ void render_output(lz_context *ctx) {
 			implicit_match = false;
 			last_match = cursor + length;
 		} else {
+			sentinel_needed = true;
 			length = -length;
 
 			if(ctx->show_trace) printf ("type_bit ");
@@ -1019,28 +1023,33 @@ void render_output(lz_context *ctx) {
 	// The sentinel is a maximum-length match
 	if(ctx->show_trace) printf("EOF\n");
 
-	// We encode the EOF whenever we do compress with overlap or to a alternative location where in place depacking can't happen
+	// We encode the EOF whenever we do compress with overlap or to an alternative location where in place depacking can't happen
 	if(ctx->overlap || ctx->load_addr >= 0 || ctx->depack_to >= 0) {
 		// In that case take end of data as end_pos to disable the end_pos check by letting it hit too late during decoding
+		// XXX TODO can still be omitted if last action was a match
 		ctx->end_pos = ctx->output_end;
-		if(!implicit_match) {
-			if(ctx->show_trace) printf ("type_bit ");
-			output_bit(ctx, 0);
-			if(ctx->show_trace) printf ("\n");
-		}
 
-//		printf("%d bits saved\n", saved);
-
-		if (ctx->output_type == OUTPUT_BITFIRE) {
-			length_bit = _log2(RUN_LIMIT);
-			output_bit(ctx, --length_bit >= 0);
-
-			while(length_bit >= 0) {
-				output_bit(ctx, RUN_LIMIT >> length_bit);
-				output_bit(ctx, --length_bit < 0);
+		// only add a sentinael if last action was a literal
+		if (sentinel_needed) {
+			if(!implicit_match) {
+				if(ctx->show_trace) printf ("type_bit ");
+				output_bit(ctx, 0);
+				if(ctx->show_trace) printf ("\n");
 			}
-		} else {
-			encode_match(ctx, 1, RUN_LIMIT+3);
+
+//			printf("%d bits saved\n", saved);
+
+			if (ctx->output_type == OUTPUT_BITFIRE) {
+				length_bit = _log2(RUN_LIMIT);
+				output_bit(ctx, --length_bit >= 0);
+
+				while(length_bit >= 0) {
+					output_bit(ctx, RUN_LIMIT >> length_bit);
+					output_bit(ctx, --length_bit < 0);
+				}
+			} else {
+				encode_match(ctx, 1, RUN_LIMIT+3);
+			}
 		}
 	}
 
