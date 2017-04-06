@@ -7,17 +7,11 @@ bitfire_reset_drive_
 		;check if drive is idle
                 bit $dd00
                 bpl *-3
-		;upload data
 -
-                ;wait for data ready
+		;upload data
                 lda .upload_start,y
-		;only send 8 bits, no $dd02 sanitize
-		;ldx #$07
                 jsr bitfire_send_byte_
-		lda #$3f
-		sta $dd02
 		;waste cycles to be sure drive keeps up
-		jsr .waste
 		dey
                 bpl -
 .waste

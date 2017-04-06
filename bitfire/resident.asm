@@ -97,21 +97,20 @@ link_decomp_under_io
 bitfire_send_byte_
 		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 
-		ldx #$07			;do 8 turns, as the last turn sets $dd02 at least back to $1f or $3f this is enough to get the idle signal on first pollblock, but not EOF yet (but we load one block minimum, right? So things are healed after the first get_byte call that sets back $dd02 to $3f in any case.)
+		ldx #$ff
 		sta .filenum			;save value
-		lda #$1f			;start value
+		lda #$ef			;start value XXX is there a way to start with $ff ?!
+		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
 .bit_loop
-		lsr .filenum			;fetch next bit from filenumber and waste cycles
 		bcc +
-		ora #$20
+		adc #$1f			;on all other rounds carry is cleared here
 +
 		eor #$30			;flip bit 4 and 5
 		sta $dd02			;only write out lower 6 bits
 		and #$1f			;clear bit 4 and waste some cycles here
-		pha				;slow down, or floppy might not keep up, most of all if NTSC
-		pla
-		dex
-		bpl .bit_loop			;last bit?
+		ror <(.filenum-$ff),x		;fetch next bit from filenumber and waste cycles
+		bne .bit_loop			;last bit?
+.end
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
 						;also enough cycles are wasted after last $dd02 write, just enough for standalone, full config and ntsc \o/
 		rts
@@ -157,15 +156,14 @@ bitfire_loadraw_
 		sta bitfire_load_addr_lo	;destination lowbyte
 
 		jsr .get_one_byte		;fetch loadaddr hi, returns with a cleared carry
+		sta bitfire_load_addr_hi
 !if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
-		sta bitfire_lz_sector_ptr1 + 1
 		sta bitfire_lz_sector_ptr2 + 1
+}
 .skip_load_addr
+!if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
 		jsr .get_one_byte		;fetch barrier
 		sta .barrier
-} else {
-		sta bitfire_load_addr_hi
-.skip_load_addr
 }
 
 .bitfire_load_block
@@ -210,6 +208,8 @@ bitfire_ntsc_fix4
 .bitfire_block_addr_hi = * + 2
 bitfire_load_addr_lo = * + 1
 		sta $b00b,x
+		;could also use sta ($xx),y and waste one cycle less on first lda $dd00 - $37,y
+		;y should be lowbyte? or work on iny/dey?
 		bne .get_one_byte		;74 cycles per loop
 
 !if >* != >.get_one_byte { !error "getloop code crosses page!" }
@@ -246,7 +246,7 @@ bitfire_load_addr_hi = * + 2
 		sty .lz_tmp
 .lz_fetch_sector				;entry of loop
 		jsr .pollblock			;fetch another block, returns with x = 0
-		bcs .lz_fetch_eof		;eof? yes, finish
+		bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 		lda bitfire_lz_sector_ptr1 + 1	;get current depack position
 		cmp .barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call, no matter what .bitfire_lz_sector_ptr has as value \o/
 						;on first successful .pollblock they will be set with valid values and things will checked against correct barrier
