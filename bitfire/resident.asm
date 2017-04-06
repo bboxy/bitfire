@@ -34,6 +34,7 @@ link_frame_count
 
 !if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
 !align 255,2
+.lz_gap1
 		nop
 		nop
 		nop
@@ -97,9 +98,9 @@ link_decomp_under_io
 bitfire_send_byte_
 		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 
-		ldx #$ff
 		sta .filenum			;save value
-		lda #$ef			;start value XXX is there a way to start with $ff ?!
+		ldx #$ff
+		lda #$ef
 		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
 .bit_loop
 		bcc +
@@ -130,7 +131,7 @@ bitfire_loadraw_
 		bcc -
 ;		rts				;just run into pollblock code again that will then jump to .poll_end and rts
 } else {
-		pha				;we are too fast in standalone mode, need to waste a few cycles for letting teh drive settle
+		pha				;we are too fast in standalone mode, need to waste a few cycles for letting the drive settle
 		pla
 }
 .pollblock
@@ -220,6 +221,24 @@ bitfire_load_addr_lo = * + 1
 		rts
 
 !if BITFIRE_DECOMP = 1 {
+
+;---------------------------------------------------------------------------------
+; REFILL ROUTINES
+;---------------------------------------------------------------------------------
+
+.lz_lentab = * - 1
+		;short offset init values
+		;!byte %00000000			;2
+		!byte %11011111			;0
+		!byte %11111011			;1
+		!byte %10000000			;3
+
+		;long offset init values
+		!byte %11101111			;offset 0
+		!byte %11111101			;offset 1
+		!byte %10000000			;offset 2
+		!byte %11110000			;offset 3
+
 ;---------------------------------------------------------------------------------
 ; REFILL ROUTINES
 ;---------------------------------------------------------------------------------
@@ -249,7 +268,7 @@ bitfire_load_addr_hi = * + 2
 		bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 		lda bitfire_lz_sector_ptr1 + 1	;get current depack position
 		cmp .barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call, no matter what .bitfire_lz_sector_ptr has as value \o/
-						;on first successful .pollblock they will be set with valid values and things will checked against correct barrier
+						;on first successful .pollblock they will be set with valid values and things will be checked against correct barrier
 		bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof					;not reached, go on depacking
 		ldy .lz_tmp			;restore regs + flags
@@ -271,26 +290,19 @@ bitfire_loadcomp_
 		;ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
 		bne .loadcompd_entry		;load + decomp file
 
-.lz_lentab = * - 1
-		;short offset init values
-		;!byte %00000000			;2
-		!byte %11011111			;0
-		!byte %11111011			;1
-		!byte %10000000			;3
-
-		;long offset init values
-		!byte %11101111			;offset 0
-		!byte %11111101			;offset 1
-		!byte %10000000			;offset 2
-		!byte %11110000			;offset 3
 
 !if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
+		;!ifdef .lz_gap2 {
+		;	!warn .lz_gap2 - *, " bytes left until gap2"
+		;}
+!align 255,2
 .lz_gap2
-						;jmp will be placed here
-!align 255,5
-!if * - .lz_gap2 < 3 {
-	!error "too few bytes left for second gap :-("
+!if .lz_gap2 - .lz_gap1 > $0100 {
+		!error "code on first page too big, second gap does not fit!"
 }
+		nop
+		nop
+		nop
 }
 
 bitfire_decomp_

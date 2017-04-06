@@ -82,3 +82,5 @@ v0.7
 idle, and add macros for that (bus_lock, bus_unlock $bank)
 - fix spin up handling of read dummy sectors (might have been skipped under
 some circumstances)
+- shrink size
+- save few bytes on some relocated packed files
