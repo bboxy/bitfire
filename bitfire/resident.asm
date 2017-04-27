@@ -468,7 +468,7 @@ bitfire_lz_sector_ptr2	= * + 1			;Copy the literal data, forward or overlap is g
 		eor .lz_dst+1			;check highbyte
 		eor .lz_end+1
 		bne .lz_skip_end		;skip poll, so that only one branch needs to be manipulated
-		;sta .barrier			;clear barrier and force to load until EOF, XXX does not work, but will at least force one additional block before leaving as barrier will be set again upon next block being fetched. Will overlap be > than 2 blocks? most liekly not?
+		sta .barrier			;clear barrier and force to load until EOF, XXX does not work, but will at least force one additional block before leaving as barrier will be set again upon next block being fetched. Will overlap be > than 2 blocks? most likely not? CRAP, tony taught me that there is /o\
 		jmp .lz_next_page_		;load any remaining literal blob if there, or exit with rts in case of plain decomp (rts there instead of php). So we are forced until either the sector_ptr reaches $00xx or EOF happens, so nothing can go wrong
 						;XXX TODO could be beq .lz_next_page_ but we get into trouble with 2nd nmi gap then :-(
 }
