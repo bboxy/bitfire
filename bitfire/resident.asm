@@ -178,7 +178,6 @@ bitfire_loadraw_
 		sta .blockpos
 		ldy #$37
 .get_one_byte
-bitfire_ntsc_fix1				;ntsc fix will be done on those labels by installer (opcode $xxxx-$37,y)
 		lda $dd00-$37,y
 		sty $dd02
 		lsr
@@ -186,14 +185,12 @@ bitfire_ntsc_fix1				;ntsc fix will be done on those labels by installer (opcode
 		stx .blockpos+1			;store initial x, and in further rounds do bogus writes with correct x value anyway, need to waste 4 cycles, so doesn't matter. Saves a byte (tax + stx .blockpos+1) compared to sta .blockpos+1 + nop + nop.
 		ldx #$3f
 
-bitfire_ntsc_fix2
 		ora $dd00-$37,y			;can be omitted? 3 cycles overhead
 		stx $dd02
 		lsr
 		lsr
 		dec .blockpos+1			;waste 6 cycles and decrement
 
-bitfire_ntsc_fix3
 		ora $dd00-$37,y			;now ATN is 0 and ora can happen without killing bit 3
 		sty $dd02
 		lsr
@@ -201,7 +198,6 @@ bitfire_ntsc_fix3
 		sta .nibble + 1
 		lda #$c0
 
-bitfire_ntsc_fix4
 		and $dd00-$37,y			;can be omitted? 2 cycles overhead
 		stx $dd02
 .nibble		ora #$00			;also adc could be used, or sbc -nibble?

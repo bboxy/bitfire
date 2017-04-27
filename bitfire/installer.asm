@@ -131,33 +131,33 @@
 }
 }
 
-.l1		lda $d012
-.l2		cmp $d012
-		beq .l2
-		bmi .l1
-		cmp #$20
-		bcs .nontsc
+;.l1		lda $d012
+;.l2		cmp $d012
+;		beq .l2
+;		bmi .l1
+;		cmp #$20
+;		bcs .nontsc
 
-		lda #$b9		;lda $xxxx,y
-		sta bitfire_ntsc_fix1
-		lda #$19		;ora $xxxx,y
-		sta bitfire_ntsc_fix2
-		sta bitfire_ntsc_fix3
-		lda #$39		;and $xxxx,y
-		sta bitfire_ntsc_fix4
-
-		lda #-$37
-		sta bitfire_ntsc_fix1 + 1
-		sta bitfire_ntsc_fix2 + 1
-		sta bitfire_ntsc_fix3 + 1
-		sta bitfire_ntsc_fix4 + 1
-
-		lda #$dc
-		sta bitfire_ntsc_fix1 + 2
-		sta bitfire_ntsc_fix2 + 2
-		sta bitfire_ntsc_fix3 + 2
-		sta bitfire_ntsc_fix4 + 2
-.nontsc
+;		lda #$b9		;lda $xxxx,y
+;		sta bitfire_ntsc_fix1
+;		lda #$19		;ora $xxxx,y
+;		sta bitfire_ntsc_fix2
+;		sta bitfire_ntsc_fix3
+;		lda #$39		;and $xxxx,y
+;		sta bitfire_ntsc_fix4
+;
+;		lda #-$37
+;		sta bitfire_ntsc_fix1 + 1
+;		sta bitfire_ntsc_fix2 + 1
+;		sta bitfire_ntsc_fix3 + 1
+;		sta bitfire_ntsc_fix4 + 1
+;
+;		lda #$dc
+;		sta bitfire_ntsc_fix1 + 2
+;		sta bitfire_ntsc_fix2 + 2
+;		sta bitfire_ntsc_fix3 + 2
+;		sta bitfire_ntsc_fix4 + 2
+;.nontsc
 		lda #$3f			;drop atn to signal end of transfer
 		sta $dd02
 
