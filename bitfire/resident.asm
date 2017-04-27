@@ -106,12 +106,11 @@ bitfire_send_byte_
 		bcc +
 		adc #$1f			;on all other rounds carry is cleared here
 +
-		eor #$30			;flip bit 4 and 5
-		sta $dd02			;only write out lower 6 bits
-		and #$1f			;clear bit 4 and waste some cycles here
+		eor #$30			;flip bit 5 and toggle bite 4
+		sta $dd02
+		and #$1f			;clear bit
 		ror <(.filenum-$ff),x		;fetch next bit from filenumber and waste cycles
 		bne .bit_loop			;last bit?
-.end
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
 						;also enough cycles are wasted after last $dd02 write, just enough for standalone, full config and ntsc \o/
 		rts
@@ -125,7 +124,6 @@ link_load_raw
 bitfire_loadraw_
 		jsr bitfire_send_byte_		;easy, open...
 !if BITFIRE_DECOMP = 1 {
-.lz_pollloop
 -
 		jsr .pollblock
 		bcc -
@@ -207,7 +205,9 @@ bitfire_load_addr_lo = * + 1
 		sta $b00b,x
 		;could also use sta ($xx),y and waste one cycle less on first lda $dd00 - $37,y
 		;y should be lowbyte? or work on iny/dey?
-		bne .get_one_byte		;74 cycles per loop
+		bne .get_one_byte		;78 cycles per loop
+
+		;XXX TODO to enable loading of partial start sectors: x can be set on prembale, as well as initial load_addr_lo and blocksize? but we would need to receive with incrementing x?
 
 !if >* != >.get_one_byte { !error "getloop code crosses page!" }
 .poll_end
