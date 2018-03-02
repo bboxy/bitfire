@@ -1020,8 +1020,6 @@ void render_output(lz_context *ctx) {
 		}
 	}
 
-	// The sentinel is a maximum-length match
-	if(ctx->show_trace) printf("EOF\n");
 
 	// We encode the EOF whenever we do compress with overlap or to an alternative location where in place depacking can't happen
 	if(ctx->overlap || ctx->load_addr >= 0 || ctx->depack_to >= 0) {
@@ -1030,7 +1028,9 @@ void render_output(lz_context *ctx) {
 		ctx->end_pos = ctx->output_end;
 
 		// only add a sentinael if last action was a literal
-		if (sentinel_needed) {
+		if (sentinel_needed || ctx->overlap || ctx->load_addr >= 0 || ctx->depack_to >= 0) {
+			// The sentinel is a maximum-length match
+			if(ctx->show_trace) printf("EOF\n");
 			if(!implicit_match) {
 				if(ctx->show_trace) printf ("type_bit ");
 				output_bit(ctx, 0);
