@@ -138,7 +138,7 @@ bitfire_loadraw_
 		bmi .poll_end			;block ready?
 .poll_start
 		lda #$60			;set rts
-		jsr .bitfire_ack_		;signal that we accept data and communication direction, by basically sending 2 atn strobes by fetching a bogus byte (6 bits of payload possible, first two bist are cleared/unusable. Also sets an rts in receive loop
+		jsr .bitfire_ack_		;signal that we accept data and communication direction, by basically sending 2 atn strobes by fetching a bogus byte (6 bits of payload possible, first two bits are cleared/unusable. Also sets an rts in receive loop
 
 		bpl .skip_load_addr		;#$fc -> first block
 
@@ -207,7 +207,7 @@ bitfire_load_addr_lo = * + 1
 		;y should be lowbyte? or work on iny/dey?
 		bne .get_one_byte		;78 cycles per loop
 
-		;XXX TODO to enable loading of partial start sectors: x can be set on prembale, as well as initial load_addr_lo and blocksize? but we would need to receive with incrementing x?
+		;XXX TODO to enable loading of partial start sectors: x can be set on preamble, as well as initial load_addr_lo and blocksize? but we would need to receive with incrementing x?
 
 !if >* != >.get_one_byte { !error "getloop code crosses page!" }
 .poll_end
@@ -219,7 +219,7 @@ bitfire_load_addr_lo = * + 1
 !if BITFIRE_DECOMP = 1 {
 
 ;---------------------------------------------------------------------------------
-; REFILL ROUTINES
+; OFFSET TABLES
 ;---------------------------------------------------------------------------------
 
 .lz_lentab = * - 1
@@ -253,7 +253,7 @@ bitfire_load_addr_hi = * + 2
 
 .lz_next_page					;/!\ ATTENTION things entered here as well during depacking
 		inc bitfire_lz_sector_ptr1 + 1	;use inc to keep A untouched!
-		inc bitfire_lz_sector_ptr2 + 1
+		inc bitfire_lz_sector_ptr2 + 1	;Z flag should never be set, except when this wraps around to $00, but then one would need to load until $ffff?
 .lz_next_page_
 .lz_skip_fetch
 		php				;turned into a rts in case of standalone decomp
@@ -328,6 +328,7 @@ bitfire_decomp_
 		;sec				;set for free by last compare
 .lz_type_refill
 		jsr .lz_refill_bits		;refill bit buffer .lz_bits
+						;called only once per depack with X = 2 or 4
 
 		;******** Start the next match/literal run ********
 .lz_type_check
