@@ -1560,6 +1560,11 @@ int crunch(lz_context* ctx) {
 
 	if(ctx->write_tables) write_offsets(ctx->dst_file);
 
+	// avoid to enable depack_to mechanisms when src-addr is already depack-destination
+	if(ctx->depack_to == ctx->src_begin) {
+		ctx->depack_to = -1;
+	}
+
 	// Do a dry run with rendering output to find out packed_filesize
 	ctx->output = false;
 	render_output(ctx);
