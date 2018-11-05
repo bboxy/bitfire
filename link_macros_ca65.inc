@@ -66,12 +66,15 @@ l
 
 		.macro wait_frame_count cnt
                 .local l
+		.local m
 l
 			lda link_frame_count+0
 			cmp #<cnt
-			lda link_frame_count+1
-			sbc #>cnt
 			bcc l
+m
+			lda link_frame_count+1
+			cmp #>cnt
+			bcc m
 		.endmacro
 
 		.macro bus_lock

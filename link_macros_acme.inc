@@ -71,9 +71,6 @@
 			sta $dd02
 		}
 
-		;XXX request disc
-
-		;wait for given frame counter value
 		!macro link_wait_syncpoint .part {
 -
 			lda link_syncpoint
@@ -89,10 +86,12 @@
 
 		!macro wait_frame_count .cnt {
 -
+			lda link_frame_count+1
+			cmp #>.cnt
+			bcc -
+-
 			lda link_frame_count+0
 			cmp #<.cnt
-			lda link_frame_count+1
-			sbc #>.cnt
 			bcc -
 		}
 
@@ -112,11 +111,9 @@
 			lda #<.addr
 			sta bitfire_lz_sector_ptr1
 			sta bitfire_lz_sector_ptr2
-			sta bitfire_lz_sector_ptr3
 			lda #>.addr
 			sta bitfire_lz_sector_ptr1 + 1
 			sta bitfire_lz_sector_ptr2 + 1
-			sta bitfire_lz_sector_ptr3 + 1
 		}
 
 		!macro start_music_nmi {
@@ -141,4 +138,16 @@
 
 			lda #$11
 			sta $dd0e
+		}
+
+		!macro stop_music_nmi {
+			lda #$7f
+			sta $dd0d
+			lda $dd0d
+		}
+
+		!macro restart_music_nmi {
+			lda $dd0d
+			lda #$81
+			sta $dd0d
 		}

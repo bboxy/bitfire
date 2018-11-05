@@ -75,7 +75,7 @@
 
 		#macro wait_syncpoint(part)
 		{
-.(  		
+.(
 sau:
 			lda link_syncpoint
 			cmp #part
@@ -93,12 +93,14 @@ sau:
 		#macro wait_frame_count(cnt)
 		{
 .(
-sau:
+sau1:
 			lda link_frame_count+0
 			cmp #<{cnt}
+			bcc sau1
+sau2:
 			lda link_frame_count+1
-			sbc #>{cnt}
-			bcc sau
+			cmp #>{cnt}
+			bcc sau2
 .)
 		}
 

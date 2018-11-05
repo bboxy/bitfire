@@ -110,9 +110,11 @@ wait:
 wait:
 	lda link_frame_count+0
 	cmp #<cnt
-	lda link_frame_count+1
-	sbc #>cnt
 	bcc wait
+wait2:
+	lda link_frame_count+1
+	cmp #>cnt
+	bcc wait2
 }
 
 .macro bus_lock () {
@@ -132,11 +134,9 @@ wait:
 	lda #<addr
 	sta bitfire_lz_sector_ptr1
 	sta bitfire_lz_sector_ptr2
-	sta bitfire_lz_sector_ptr3
 	lda #>addr
 	sta bitfire_lz_sector_ptr1 + 1
 	sta bitfire_lz_sector_ptr2 + 1
-	sta bitfire_lz_sector_ptr3 + 1
 }
 .macro start_music_nmi () {
 	ldx #<link_player

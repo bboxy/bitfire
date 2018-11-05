@@ -66,12 +66,13 @@
 		endm
 
 		mac wait_frame_count
-.sau
+.sau			lda link_frame_count+1
+			cmp #>{1}
+			bcc .sau
+.sau2
 			lda link_frame_count+0
 			cmp #<{1}
-			lda link_frame_count+1
-			sbc #>{1}
-			bcc .sau
+			bcc .sau2
 		endm
 
 		endif
@@ -86,4 +87,40 @@
 			sta $dd00
 			lda #$3f
 			sta $dd02
+		endm
+
+		mac start_music_nmi
+			ldx #<link_player
+			lda #>link_player
+
+			stx $fffa
+			sta $fffb
+			lda #$00
+			sta $dd0e
+			lda $dd0d
+			lda #$c7
+			sta $dd04
+			lda #$4c
+			sta $dd05
+			lda #$81
+			sta $dd0d
+
+			lda #$ff
+			cmp $d012
+			bne *-3
+
+			lda #$11
+			sta $dd0e
+		endm
+
+		mac stop_music_nmi
+			lda #$7f
+			sta $dd0d
+			lda $dd0d
+		endm
+
+		mac restart_music_nmi
+			lda $dd0d
+			lda #$81
+			sta $dd0d
 		endm

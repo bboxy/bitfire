@@ -83,9 +83,11 @@
 .w:
 			lda link_frame_count+0
 			cmp #(cnt & 255)
-			lda link_frame_count+1
-			sbc #(cnt >> 8)
 			bcc .w
+.v:
+			lda link_frame_count+1
+			cmp #(cnt >> 8)
+			bcc .v
 		}
 
 		macro bus_lock {
