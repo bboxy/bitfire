@@ -78,11 +78,11 @@ clear_frame_count .macro
 		.endm
 
 wait_frame_count .macro
-l1		lda link_frame_count+0
-		cmp #<(\1)
-		bcc l1
-l2		lda link_frame_count+1
+l1		lda link_frame_count + 1
 		cmp #>(\1)
+		bcc l1
+l2		lda link_frame_count + 0
+		cmp #<(\1)
 		bcc l2
 		.endm
 
@@ -91,7 +91,7 @@ bus_lock	.macro
 		sta $dd02
 		.endm
 
-bus_unlock	.bus_unlock
+bus_unlock	.macro
 		lda #(\1 & 3) | $c0
 		sta $dd00
 		lda #$3f
