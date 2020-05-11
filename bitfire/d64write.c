@@ -664,7 +664,7 @@ int main(int argc, char *argv[]) {
     d64 d64;
     int j;
     FILE* file;
-    unsigned side = 1;
+    int side = -1;
 
     char art[41] = { 0 };
 
@@ -813,7 +813,7 @@ int main(int argc, char *argv[]) {
     }
 
     d64_read_bam(&d64);
-    d64_bitfire_set_side(&d64, side);
+    if (side > 0) d64_bitfire_set_side(&d64, side);
 
     //parse out bitfire files and write them to d64
     c = 0;
