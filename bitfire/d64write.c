@@ -403,6 +403,20 @@ static void d64_set_header(d64* d64, char* header, char* id) {
     memset(&d64->bam[D64_BAM_ID + i], 0x20, 6 - i);
 }
 
+int d64_bitfire_set_side(d64* d64, int side) {
+    int dirsect = BITFIRE_DIRSECT;
+    unsigned char dir[256];
+    //first dirsect in use? then read in
+
+    d64_read_sector(d64, D64_DIR_TRACK, dirsect, dir);
+    memset(dir, 0, 256);
+    dir[0xff] = (side - 1) | 0xf0;
+    d64_set_bam_entry(d64, D64_DIR_TRACK, dirsect, BAM_USED);
+    d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
+
+    return 0;
+}
+
 int d64_format(d64* d64, char* header, char* id, int create) {
     int track, sector;
     int k;
@@ -443,8 +457,7 @@ int d64_format(d64* d64, char* header, char* id, int create) {
     return 1;
 }
 
-int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, int length, int side) {
-    //XXX TODO it is sufficient to place side information on first bitfire diresctor, as only that is read and checked on turn disc, so no need to hand over side argument to this depth, can be set by main as a final step
+int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, int length) {
     int dirsect = BITFIRE_DIRSECT;
     unsigned char dir[256];
     int dir_pos;
@@ -456,7 +469,6 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
         } else {
             //allocate next block
             memset(dir, 0, 256);
-            dir[0xff] = (side - 1) | 0xf0;
             d64_set_bam_entry(d64, D64_DIR_TRACK, dirsect, BAM_USED);
         }
         dir_pos = 0;
@@ -479,7 +491,7 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
     return 1;
 }
 
-int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int side) {
+int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) {
     FILE* file;
     int start_track;
     int start_sector;
@@ -604,7 +616,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             if(d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size)) return 1;
         }
     } else {
-        if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, side) != 0) {
+        if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length) != 0) {
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
     }
@@ -801,18 +813,19 @@ int main(int argc, char *argv[]) {
     }
 
     d64_read_bam(&d64);
+    d64_bitfire_set_side(&d64, side);
 
     //parse out bitfire files and write them to d64
     c = 0;
     while(++c < argc) {
         if(argc -c > 1 && !strcmp(argv[c], "-b")) {
-            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave, side);
+            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave);
         }
     }
 
     //write the boot file
     if(boot_file) {
-        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, side);
+        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE);
     }
 
     //and a dir art linked to that now as we have track/sector info for the bootfile
@@ -856,7 +869,7 @@ int main(int argc, char *argv[]) {
     c = 0;
     while(++c < argc) {
         if(argc -c > 1 && !strcmp(argv[c], "-s")) {
-            d64_write_file(&d64, argv[++c], FILETYPE_STANDARD, 1, interleave, side);
+            d64_write_file(&d64, argv[++c], FILETYPE_STANDARD, 1, interleave);
         }
     }
 
