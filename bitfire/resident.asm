@@ -4,19 +4,17 @@
 !convtab pet
 !cpu 6510
 
+!if BITFIRE_LOADER = 1 {
 ;loader zp-addresses
 .barrier	= BITFIRE_ZP_ADDR + 0
 .filenum	= .barrier
+}
 
 ;depacker zp-addresses
-.lz_bits	= BITFIRE_ZP_ADDR + 1
-.lz_dst		= BITFIRE_ZP_ADDR + 2
-.lz_end		= BITFIRE_ZP_ADDR + 4
-.lz_tmp		= BITFIRE_ZP_ADDR + 6
-
-!if BITFIRE_DEBUG = 1 {
-bitfire_debug_filenum	= BITFIRE_ZP_ADDR + 7
-}
+.lz_bits	= BITFIRE_ZP_ADDR + 0 + BITFIRE_LOADER
+.lz_dst		= BITFIRE_ZP_ADDR + 1 + BITFIRE_LOADER
+.lz_end		= BITFIRE_ZP_ADDR + 3 + BITFIRE_LOADER
+.lz_tmp		= BITFIRE_ZP_ADDR + 5 + BITFIRE_LOADER
 
 ;define that label here, as we only aggregate labels from this file into loader_*.inc
 bitfire_install_ = BITFIRE_INSTALLER_ADDR
@@ -32,7 +30,7 @@ link_frame_count
 		!word 0
 }
 
-!if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
+!if BITFIRE_NMI_GAPS = 1 {
 !align 255,2
 .lz_gap1
 		nop
@@ -81,11 +79,13 @@ link_music_addr = * + 1
 !if BITFIRE_DECOMP = 1 {
 link_decomp	= bitfire_decomp_
 ;		;expect $01 to be $35
+!if BITFIRE_LOADER = 1 {
 link_load_next_double
 		;loads a splitted file, first part up to $d000 second part under IO
 		jsr link_load_next_comp
 link_load_next_raw_decomp
 		jsr link_load_next_raw
+}
 link_decomp_under_io
 		dec $01				;bank out IO
 		jsr link_decomp			;depack
@@ -95,6 +95,7 @@ link_decomp_under_io
 
 }
 
+!if BITFIRE_LOADER = 1 {
 bitfire_send_byte_
 		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 
@@ -141,11 +142,6 @@ bitfire_loadraw_
 		jsr .bitfire_ack_		;signal that we accept data and communication direction, by basically sending 2 atn strobes by fetching a bogus byte (6 bits of payload possible, first two bits are cleared/unusable. Also sets an rts in receive loop
 
 		bpl .skip_load_addr		;#$fc -> first block
-
-!if BITFIRE_DEBUG = 1 {
-		jsr .get_one_byte		;fetch filenum
-		sta bitfire_debug_filenum
-}
 
 		jsr .get_one_byte		;fetch load/blockaddr lo
 !if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
@@ -215,7 +211,7 @@ bitfire_load_addr_lo = * + 1
 		bcc .pollblock
 }
 		rts
-
+}
 !if BITFIRE_DECOMP = 1 {
 
 ;---------------------------------------------------------------------------------
@@ -256,6 +252,7 @@ bitfire_load_addr_hi = * + 2
 		inc bitfire_lz_sector_ptr2 + 1	;Z flag should never be set, except when this wraps around to $00, but then one would need to load until $ffff?
 .lz_next_page_
 .lz_skip_fetch
+!if BITFIRE_LOADER = 1 {
 		php				;turned into a rts in case of standalone decomp
 		pha				;preserve Z, carry, A and Y, needed depending on call
 		sty .lz_tmp
@@ -270,14 +267,20 @@ bitfire_load_addr_hi = * + 2
 		ldy .lz_tmp			;restore regs + flags
 		pla
 		plp
+}
 .lz_same_page
+!if BITFIRE_LOADER = 0 {
+.lz_end_of_file					;point to rts, this is always reachable \o/
+}
 		rts
 
-!if BITFIRE_FRAMEWORK = 1 {
+!if BITFIRE_DECOMP = 1 {
+	!if BITFIRE_LOADER = 1 {
+		!if BITFIRE_FRAMEWORK = 1 {
 link_load_next_comp
 		lda #BITFIRE_LOAD_NEXT
 link_load_comp
-}
+		}
 
 bitfire_loadcomp_
 		jsr bitfire_send_byte_		;returns now with x = $ff
@@ -285,7 +288,8 @@ bitfire_loadcomp_
 		ldy #.lz_poll-.lz_skip_poll-2	;currently ldy #$0b
 		;ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
 		bne .loadcompd_entry		;load + decomp file
-
+	}
+}
 
 !if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
 		;!ifdef .lz_gap2 {
@@ -301,7 +305,9 @@ bitfire_loadcomp_
 		nop
 }
 
+!if BITFIRE_DECOMP = 1 {
 bitfire_decomp_
+	!if BITFIRE_LOADER = 1 {
 .lz_end_of_file	= * + 1				;point to rts, this is always reachable \o/
 		lda #$60			;disable calls
 		ldy #.lz_skip_end-.lz_skip_poll-2	;#$17
@@ -310,7 +316,8 @@ bitfire_decomp_
 		sta .lz_skip_fetch
 		sty .lz_skip_poll + 1
 		;address stuff is already set by loadraw_/pollblock
-
+	}
+}
 ;---------------------------------------------------------------------------------
 ; DECRUNCHER
 ;---------------------------------------------------------------------------------
@@ -477,6 +484,7 @@ bitfire_lz_sector_ptr2	= * + 1			;Copy the literal data, forward or overlap is g
 }
 
 .lz_poll
+!if BITFIRE_LOADER = 1 {
 						;XXX TODO can be omitted as done in pollblock, but a tad faster this way
 		bit $dd00
 		bvs .lz_skip_end
@@ -484,6 +492,7 @@ bitfire_lz_sector_ptr2	= * + 1			;Copy the literal data, forward or overlap is g
 		stx .lz_tmp			;save x, lz_tmp is available at that moment
 		jsr .poll_start			;yes, fetch another block
 		ldx .lz_tmp			;restore x
+}
 .lz_skip_end
 						;literals needing an explicit type bit
 		asl .lz_bits			;fetch next type bit

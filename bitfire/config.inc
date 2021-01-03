@@ -12,6 +12,9 @@ BITFIRE_FRAMEWORK_MUSIC_NMI	= 1		;should base irq run in NMI or raster IRQ?
 BITFIRE_DECOMP			= 1		;Include decompressor and on the fly decompression
 BITFIRE_DECOMP_ZERO_OVERLAP	= 1		;Packed files have no overlap and can be completely depacked in place. Bitnax by default creates files that meet that spec. If you wish the old behaviour, use --overlap
 
+;Include the loader
+BITFIRE_LOADER			= 1		;Include the loader or maybe decide for a standalone depacker + framework for onefilers
+
 BITFIRE_NMI_GAPS		= 0		;Leaves gaps @ $0200 and $0300 (if resident part is at default location) for NMI handlers, needed for stable NMIs with THCM's digistuff.
 
 BITFIRE_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resident part for later use, so upcoming parts do not need an own detection anymore but can read out that values again
