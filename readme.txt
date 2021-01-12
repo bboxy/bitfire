@@ -30,28 +30,26 @@ The packer supports output of both, sfx as well as levelpacked files suitable fo
 Disclayout
 ----------
 
-When d64write writes files in bitfire format the full 256 byte of each sector are used for data and for that no track/sector link is added. This can be done, as the sectorchain is calculated statically from the beginning track/sector on. The needed information for each file is stored in an own directory format. The directory lies on max. 3 blocks in track 18 (means 126 files max). It fills up sector 18 as well as 17 and 16 if needed. Each fileentry consists of 6 bytes:
-byte 0: track
-byte 1: sector
-byte 2: load-address lowbyte
-byte 3: load-address highbyte
-byte 4: (filelength-1) lowbyte
-byte 5: (filelength-1) highbyte
+When d64write writes files in bitfire format the full 256 byte of each sector are used for data and for that no track/sector link is added. This can be done, as the sectorchain is calculated statically from the beginning track/sector on. The needed information for each file is stored in an own directory format. The directory lies on max. 2 blocks in track 18 (means 126 files max). It fills up sector 18 as well as 17 if needed. Each fileentry consists of 4 bytes:
+byte 0: load-address lowbyte
+byte 1: load-address highbyte
+byte 2: (filelength-1) lowbyte
+byte 3: (filelength-1) highbyte
 
-Thus 42 files fit into one sector. This means, 42 files can be loaded sequentially without having any seeking action due to fetching new direntries. The last byte of the dir sectors represent the diskside the files are on. This value will be checked if another diskside is requested. The values range from $f0 to $ff, so demos with up to 16 different disksides can be created (hi Offence! :-P). Also this is less error prone than the usual checks on the disk id.
+Thus 63 files fit into one sector (the remeining bytes contain the diskside info). This means, 63 files can be loaded sequentially without having any seeking action due to fetching new direntries. The last byte of the dir sectors represent the diskside the files are on. This value will be checked if another diskside is requested. The values range from $f0 to $fe, so demos with up to 15 different disksides can be created (hi Offence! :-P). Also this is less error prone than the usual checks on the disk id.
 
 d64write
 --------
 
 d64write generates a suitable .d64 for you which can be read by bitfire and incorporates all the workflow for final image creation into a single tool. So it writes hidden files for you, while keeping maximum reading performance and providing a dirart linked to the bootloader.
 
-After the bitfire formatted files are written, standard files are added to the diskimage. So there's still the possibility to add files that can be loaded normally, mixing both types on a disk is no problem. So a bigger bootloader or adding a note is no problem. It is even possible to add further files to a disk with original gear, as the BAM is maintained and used blocks are thus protected from allocation/overwriting.
+After the bitfire formatted files are written, standard files are added to the diskimage. So there's still the possibility to add files that can be loaded normally, mixing both types on a disk is no problem. So a bigger bootloader or adding a note is no problem. It is even possible to add further files to a disk with original gear, as the BAM is maintained and used blocks are thus protected from allocation/overwriting. However bitfire-files must be written first, as it assumes starting at track 1, sector 0.
 
 Next up a small file, the bootloader, can be placed into the remaining sectors on track 18 to save blocks. It should be small enough to fit there, or an error occurs. Usually that program should not do more than install the loader and load/run the first file (bootstrap) on disk that then starts the demo(side).
 
 As a final step a dirart can be added to the dir, if there's still enough sectors free to accomodate it. An error will occur if not. d64write accepts a saved screen for that purpose, so it should be easy to create dirarts with e.g. a petscii editor (however take care that not all petscii symbols are accepted for dirart). From that screen every first 16 chars per row are taken for creating a dirart. The number of rows to be read in can be specified. The first row is used to specify header and id separated by an arbitrary char (see example dirart coming along with this release).
 
-If you want to place multiple files, no matter if in standard or bitfire format, you can add the -b or -s option multiple times to one commandline. There's no need to call d64write for each file to be added. Files in bitfire format are written sequentially so that no unecessary seektimes are created, that can be spoiled when standard files are placed in between. So this helps also to gain maximum performance. That said, it is wisely to place files on disk in the same order to be loaded, if being loaded once (random access is possible of course, but gives penalties due to excessive seeking).
+If you want to place multiple files, no matter if in standard or bitfire format, you can add the -b or -s option multiple times to one commandline. So the right order is kept on a single call. Files in bitfire format are written sequentially so that no unecessary seektimes are created, that can be broken when standard files are placed in between. That said, it is wisely to place files on disk in the same order to be loaded, if being loaded once (random access is possible of course, but gives penalties due to excessive seeking).
 
 You can choose to write with different interleaves, however 4 always has been the best choice in any tested scenario and thus is the default. If you change the interleave you also have to change it with the loader as it needs to calculate the sectors belonging to each file by this value. To do so simply change the value for BITFIRE_CONFIG_INTERLEAVE in config.inc.
 
@@ -61,7 +59,7 @@ d64write -c cooldemo.d64 -h oxyron -i rules --side 1 --boot cooldemo.lz -b boots
 other files
 -----------
 
-reset_drive.asm and request_disc.asm contain functions that can be linked in statically by including them when needed. All important labels are exported when creating the loader bianries via make. So no need to take care about them.
+request_disc.asm contains functions that can be linked in statically by including them when needed. All important labels are exported when creating the loader bianries via make. So no need to take care about them.
 
 Just add for e.g. a !src "request_disc.asm" to include the turn disc function to your code.
 
@@ -106,8 +104,7 @@ For a better understanding of the intended building process, an example Makefile
 
 NTSC
 ----
-
-The installer autodetects a NTSC machine and adopts the loader in case. This is not much tested however due to lack of a NTSC machine.
+NTSC support is broken at the moment
 
 Add/remove functionality
 ------------------------
@@ -182,18 +179,10 @@ Other depackers
 
 Feel free to add your own depacker. Just be sure to call pollblock in the yet manner when needing new data, just as done already. If you encounter problems, feel free to ask for my support.
 
-Upload arbitrary floppycode
----------------------------
+Reset drive
+-----------
 
-When sending $80 (bitfire_send_byte_), the loader goes into upload mode and accepts further bytes being sent via bitfire_send_byte_. First a destination address (low, hi) is sent, then the amount of bytes (low, hi) is sent, followed by the uploaded data byte by byte.
-One can upload to any address as long as the uploader is not destroyed. In the very case one can also copy an own uploader to another address and start bootstrapping with that code. Even resetting the floppy is easy now by simply calling the reset vector via uploaded code.
-The uploaded code is executed at its first address afterwards after all expected bytes are transferred.
-There's space from $0108 - $04b2 and the buffers $0600 and $0700 can be used. $0500 still holds the dir and zeropage the loader configuration. That way you can upload new code for e.g. supporting synchronous data-transfer.
-
-Speed
------
-
-No more penis comparision. Spindle is faster anyway, but compresses worse (yet) :-D
+When sending $ff (bitfire_send_byte_), the floppy resets itself, this is handy when the demo ends and we want to leave the hardware in a sane state.
 
 Depacker/Packer
 ---------------
@@ -268,3 +257,8 @@ Building
 --------
 
 The .asm files need ACME 0.94 or newer, i didn't focus much on that, as i always use the current version from SVN. At this time 0.95.5. So if anyone tries to compile this with the medieval version 0.93, it will fail, sorry :-)
+
+Zeropage-usage
+--------------
+
+When the loader and depacker is idle, you can use the whole zeropage and leaving any garbage there, also the addresses reserved for the loader. There's one exception, the loader uses $00 and places the value #$37 there, whenever you use $00, you need to restore this value, or things break.
