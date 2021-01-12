@@ -104,12 +104,6 @@
 		lda #$37			;raise atn to signal end of transfer
 		sta $dd02
 
-		;restore dc_data again for reinstall after floppy reset
-		lda #<.drivecode_start
-		sta .dc_data
-		lda #>.drivecode_start
-		sta .dc_data+1
-
 !if (BITFIRE_RESIDENT_AUTOINST != 0) {
 !if (bitfire_resident_size) < 256 {
 		;better force to 8 bit, label might be defined as 16 bit
@@ -187,6 +181,8 @@
 ;		bmi *-3
 ;		dex
 ;		bpl -
+		lda #$37
+		sta <BITFIRE_LAX_ADDR
 -
 		lda $dd00
 		bpl -
@@ -282,7 +278,6 @@
 
 .me_code
 !byte $4d,$2d,$45,<.bootstrap_run,>.bootstrap_run
-
 !src "drivecode.asm"
 
 !if (BITFIRE_RESIDENT_AUTOINST != 0) {

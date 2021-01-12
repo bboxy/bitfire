@@ -1176,7 +1176,7 @@ static void write_single_offset (FILE *file, const offset_length_t *class, unsig
 }
 
 void write_offsets(FILE* file) {
-	static const char const length_codes[] = {
+	static char const length_codes[] = {
 		0,
 		0xff,
 		0x7f,
@@ -1561,7 +1561,7 @@ int crunch(lz_context* ctx) {
 	if(ctx->write_tables) write_offsets(ctx->dst_file);
 
 	// avoid to enable depack_to mechanisms when src-addr is already depack-destination
-	if((ctx->depack_to == ctx->src_begin) && (ctx->load_addr < 0)) {
+	if(ctx->depack_to == ctx->src_begin) {
 		ctx->depack_to = -1;
 	}
 

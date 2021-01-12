@@ -6,15 +6,15 @@
 
 !if BITFIRE_LOADER = 1 {
 ;loader zp-addresses
-.barrier	= BITFIRE_ZP_ADDR + 0
-.filenum	= .barrier
+.filenum	= BITFIRE_ZP_ADDR + 0
+.barrier	= .filenum
 }
 
 ;depacker zp-addresses
-.lz_bits	= BITFIRE_ZP_ADDR + 0 + BITFIRE_LOADER
-.lz_dst		= BITFIRE_ZP_ADDR + 1 + BITFIRE_LOADER
-.lz_end		= BITFIRE_ZP_ADDR + 3 + BITFIRE_LOADER
-.lz_tmp		= BITFIRE_ZP_ADDR + 5 + BITFIRE_LOADER
+.lz_bits	= BITFIRE_ZP_ADDR + 0 + (BITFIRE_LOADER)
+.lz_dst		= BITFIRE_ZP_ADDR + 1 + (BITFIRE_LOADER)
+.lz_end		= BITFIRE_ZP_ADDR + 3 + (BITFIRE_LOADER)
+.lz_tmp		= BITFIRE_ZP_ADDR + 5 + (BITFIRE_LOADER)
 
 ;define that label here, as we only aggregate labels from this file into loader_*.inc
 bitfire_install_ = BITFIRE_INSTALLER_ADDR
@@ -96,9 +96,10 @@ link_decomp_under_io
 }
 
 !if BITFIRE_LOADER = 1 {
-bitfire_send_byte_
+		;XXX TODO filenum as Z addr could be saved for 1 byte extra code here
 		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 
+bitfire_send_byte_
 		sta .filenum			;save value
 		ldx #$ff
 		lda #$ef
@@ -113,7 +114,23 @@ bitfire_send_byte_
 		ror <(.filenum-$ff),x		;fetch next bit from filenumber and waste cycles
 		bne .bit_loop			;last bit?
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
-						;also enough cycles are wasted after last $dd02 write, just enough for standalone, full config and ntsc \o/
+;-
+;		lda $dd02
+;		and #$1f
+;		bcc +
+;		adc #$1f
+;+
+;		eor #$30
+;		sta $dd02
+;		txa
+;		dop
+;bitfire_send_byte_
+;		sec
+;		ror
+;		tax
+;		bne -
+
+.poll_end
 		rts
 
 !if BITFIRE_FRAMEWORK = 1 {
@@ -124,15 +141,10 @@ link_load_raw
 
 bitfire_loadraw_
 		jsr bitfire_send_byte_		;easy, open...
-!if BITFIRE_DECOMP = 1 {
 -
 		jsr .pollblock
 		bcc -
-;		rts				;just run into pollblock code again that will then jump to .poll_end and rts
-} else {
-		pha				;we are too fast in standalone mode, need to waste a few cycles for letting the drive settle
-		pla
-}
+						;just run into pollblock code again that will then jump to .poll_end and rts
 .pollblock
 		lda $dd00			;bit 6 is always set if not ready or idle/EOF so no problem with just an ASL
 		asl				;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
@@ -162,55 +174,60 @@ bitfire_loadraw_
 }
 
 .bitfire_load_block
+						;XXX TODO also fetch block_addr_lo in future so each block can be placed individually with given size (first block < $100 bytes)
 		jsr .get_one_byte		;fetch blockaddr hi
 		sta .bitfire_block_addr_hi	;where to place the block?
 
 		jsr .get_one_byte		;fetch blocklen
-		tax
-		lda #$a2			;ldx #imm
+		tay
+		lda #$99			;sta $xxxx,y
 .bitfire_ack_
-		sta .blockpos
-		ldy #$37
+		sta .store
 .get_one_byte
-		lda $dd00-$37,y
-		sty $dd02
-		lsr
-		lsr
-		stx .blockpos+1			;store initial x, and in further rounds do bogus writes with correct x value anyway, need to waste 4 cycles, so doesn't matter. Saves a byte (tax + stx .blockpos+1) compared to sta .blockpos+1 + nop + nop.
+		ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
+		top
+.get_en_exit
+		ldx #$60
+		stx .finish
+		bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
+		bmi .get_entry
+.get_loop
 		ldx #$3f
-
-		ora $dd00-$37,y			;can be omitted? 3 cycles overhead
+		ora $dd00 - $3f,x
 		stx $dd02
 		lsr
 		lsr
-		dec .blockpos+1			;waste 6 cycles and decrement
-
-		ora $dd00-$37,y			;now ATN is 0 and ora can happen without killing bit 3
-		sty $dd02
-		lsr
-		asr #$7e			;clear carry for free
-		sta .nibble + 1
-		lda #$c0
-
-		and $dd00-$37,y			;can be omitted? 2 cycles overhead
+		dey
+		beq .get_en_exit
++
+		ldx #$37
+		ora $dd00
 		stx $dd02
-.nibble		ora #$00			;also adc could be used, or sbc -nibble?
-.blockpos	ldx #$00
+		ror				;c = 1
+		ror				;c = 1 a = $cx
+		ldx #$3f
+		sax .nibble + 1
+		and $dd00
+		stx $dd02
+.nibble		ora #$00
 .bitfire_block_addr_hi = * + 2
 bitfire_load_addr_lo = * + 1
-		sta $b00b,x
-		;could also use sta ($xx),y and waste one cycle less on first lda $dd00 - $37,y
-		;y should be lowbyte? or work on iny/dey?
-		bne .get_one_byte		;78 cycles per loop
+.store		sta $b00b,y
+		;XXX TODO first bits: asl rol rol -> nibble rest can be lsr'ed, then ora #$03 or and #$fc and ora/and?
 
-		;XXX TODO to enable loading of partial start sectors: x can be set on preamble, as well as initial load_addr_lo and blocksize? but we would need to receive with incrementing x?
+.get_entry
+		lax <BITFIRE_LAX_ADDR
+		adc $dd00			;a is anything between 38 and 3b after add, so bit 4 is always set, bits 6 and 7 are given by floppy
+.finish		stx $dd02			;carry is cleared now, we can exit here and do our rts
+		lsr
+		lsr
+		bne .get_loop			;BRA, a is anything between 0e and 3e
 
-!if >* != >.get_one_byte { !error "getloop code crosses page!" }
-.poll_end
-!if BITFIRE_DECOMP = 0 {
-		bcc .pollblock
-}
-		rts
+!if >* != >.get_loop { !error "getloop code crosses page!" }
+;XXX TODO in fact the branch can also take 4 cycles if needed, ora $dd00 - $3f,x wastes one cycle anyway
+
+;XXX TODO load_comp: load until barrier okay -> enter depacker mit Weiche -> init? -> continue? On block end: check barrier, if still okay, continue? -> several entry points im depacker, einer wäre besser
+
 }
 !if BITFIRE_DECOMP = 1 {
 
@@ -257,13 +274,14 @@ bitfire_load_addr_hi = * + 2
 		pha				;preserve Z, carry, A and Y, needed depending on call
 		sty .lz_tmp
 .lz_fetch_sector				;entry of loop
-		jsr .pollblock			;fetch another block, returns with x = 0
+		jsr .pollblock			;fetch another block, returns with x = 0 XXX TODO it's a lie, not anymore due to new xfer method
 		bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 		lda bitfire_lz_sector_ptr1 + 1	;get current depack position
 		cmp .barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call, no matter what .bitfire_lz_sector_ptr has as value \o/
 						;on first successful .pollblock they will be set with valid values and things will be checked against correct barrier
 		bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof					;not reached, go on depacking
+		ldx #$00
 		ldy .lz_tmp			;restore regs + flags
 		pla
 		plp
@@ -273,6 +291,22 @@ bitfire_load_addr_hi = * + 2
 .lz_end_of_file					;point to rts, this is always reachable \o/
 }
 		rts
+
+
+
+!if BITFIRE_NMI_GAPS = 1 {
+		;!ifdef .lz_gap2 {
+		;	!warn .lz_gap2 - *, " bytes left until gap2"
+		;}
+!align 255,2
+.lz_gap2
+!if .lz_gap2 - .lz_gap1 > $0100 {
+		!error "code on first page too big, second gap does not fit! "
+}
+		nop
+		nop
+		nop
+}
 
 !if BITFIRE_DECOMP = 1 {
 	!if BITFIRE_LOADER = 1 {
@@ -289,23 +323,6 @@ bitfire_loadcomp_
 		;ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
 		bne .loadcompd_entry		;load + decomp file
 	}
-}
-
-!if BITFIRE_NMI_GAPS = 1 & BITFIRE_DEBUG = 0 {
-		;!ifdef .lz_gap2 {
-		;	!warn .lz_gap2 - *, " bytes left until gap2"
-		;}
-!align 255,2
-.lz_gap2
-!if .lz_gap2 - .lz_gap1 > $0100 {
-		!error "code on first page too big, second gap does not fit!"
-}
-		nop
-		nop
-		nop
-}
-
-!if BITFIRE_DECOMP = 1 {
 bitfire_decomp_
 	!if BITFIRE_LOADER = 1 {
 .lz_end_of_file	= * + 1				;point to rts, this is always reachable \o/

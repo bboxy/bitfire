@@ -463,7 +463,7 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
     int dir_pos;
     //first dirsect in use? then read in
 
-    while (dirsect > BITFIRE_DIRSECT - 3) {
+    while (dirsect > BITFIRE_DIRSECT - 2) {
         if (d64_get_bam_entry(d64, D64_DIR_TRACK, dirsect) == BAM_USED) {
             d64_read_sector(d64, D64_DIR_TRACK, dirsect, dir);
         } else {
@@ -472,23 +472,38 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
             d64_set_bam_entry(d64, D64_DIR_TRACK, dirsect, BAM_USED);
         }
         dir_pos = 0;
-        while (dir_pos < 42) {
+        while (dir_pos < 63) {
             //empty entries have track set to 0
-            if (dir[dir_pos * 6 + 0] == 0) {
-                dir[dir_pos * 6 + 0] = track;
-                dir[dir_pos * 6 + 1] = sector;
-                dir[dir_pos * 6 + 2] = loadaddr & 0xff;
-                dir[dir_pos * 6 + 3] = (loadaddr >> 8) & 0xff;
-                dir[dir_pos * 6 + 4] = (length - 1) & 0xff;
-                dir[dir_pos * 6 + 5] = ((length - 1) >> 8) & 0xff;
+            if (dir[dir_pos * 4 + 0] + dir[dir_pos * 4 + 1] + dir[dir_pos * 4 + 2] + dir[dir_pos * 4 + 3] == 0) {
+                dir[dir_pos * 4 + 0] = loadaddr & 0xff;
+                dir[dir_pos * 4 + 1] = (loadaddr >> 8) & 0xff;
+                dir[dir_pos * 4 + 2] = (length - 1) & 0xff;
+                dir[dir_pos * 4 + 3] = ((length - 1) >> 8) & 0xff;
                 d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
                 return 0;
             }
+            //if (dir[dir_pos * 6 + 0] == 0) {
+            //    dir[dir_pos * 6 + 0] = track;
+            //    dir[dir_pos * 6 + 1] = sector;
+            //    dir[dir_pos * 6 + 2] = loadaddr & 0xff;
+            //    dir[dir_pos * 6 + 3] = (loadaddr >> 8) & 0xff;
+            //    dir[dir_pos * 6 + 4] = (length - 1) & 0xff;
+            //    dir[dir_pos * 6 + 5] = ((length - 1) >> 8) & 0xff;
+            //    d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
+            //    return 0;
+            //}
             dir_pos++;
         }
         dirsect--;
     }
     return 1;
+}
+
+void d64_scramble_buffer(unsigned char* buf) {
+    int i;
+    for (i = 0; i < 256; i += 4) {
+        //buf[i + 2] = buf[i + 1] ^ buf [i + 2];
+    }
 }
 
 int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) {
@@ -558,6 +573,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) 
             }
 
             /* write finished sector to disc */
+            if(type == FILETYPE_BITFIRE) d64_scramble_buffer(d64->sectbuf);
             if(!d64_write_sector(d64, d64->track, d64->sector, d64->sectbuf)) return 0;
 
             /* start with an empty block */
@@ -585,6 +601,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) 
         d64->sectbuf[1] = d64->sectpos - 1;
     }
     /* write last sector */
+    if(type == FILETYPE_BITFIRE) d64_scramble_buffer(d64->sectbuf);
     d64_write_sector(d64, d64->track, d64->sector, d64->sectbuf);
     /* blank buffer */
     memset(d64->sectbuf, 0, 256);

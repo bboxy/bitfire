@@ -4,17 +4,17 @@ CFLAGS = -Os -Wall
 LDLIBS =
 CC = gcc
 
-all: bitnax d64write installer
+all: bitnax d64write bitfire
 
 d64write: d64write.c *.h
 	@echo "Buidling d64write..."
 	@$(CC) $< -o $@ $(CFLAGS)
 
-bitnax: lz.c
+bitnax: bitnax.c
 	@echo "Buidling bitnax..."
 	@${CC} $< -o $@ ${CFLAGS}
 
-installer: installer.asm drivecode.asm request_disc.asm resident.asm detect.asm config.inc Makefile resident_minimal_zp.asm
+resident: resident.asm config.inc Makefile
 	@echo -n "Buidling resident part ->"
 	@$(ACME) $(ACMEOPT) -o resident -l resident_labels.txt resident.asm
 	@printf " Size: $$%04x\n" $$((`wc -c < resident` - 2))
@@ -35,9 +35,13 @@ installer: installer.asm drivecode.asm request_disc.asm resident.asm detect.asm 
 	@echo "Creating loader_kickass.inc..."
 	@cat loader_acme.inc | sed "s/\(.*\)/\.var \\1/" >> loader_kickass.inc
 	@#echo "}" >> loader_kickass.inc
-	@echo "Buidling installer..."
-	@$(ACME) $(ACMEOPT) -o installer installer.asm
 	@rm resident_labels.txt
 
+installer: resident drivecode.asm installer.asm config.inc detect.asm Makefile
+	@echo "Buidling installer..."
+	@$(ACME) $(ACMEOPT) -o installer installer.asm
+
+bitfire: installer
+
 clean:
-	@-rm bitnax d64write installer loader_acme.inc loader_c6510.inc loader_kickass.inc resident
+	@-rm bitnax d64write installer loader_acme.inc loader_c6510.inc loader_kickass.inc resident gcr_tables

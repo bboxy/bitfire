@@ -2,9 +2,11 @@
 !cpu 6510
 
 RAW = 1
-;CHECKSUM = 1
+CHECKSUM = 1
+;REQDISC = 1
 
-num_files	= $12
+num_files	= $1c
+;num_files	= $12
 
 runs		= $10
 max		= $12
@@ -73,6 +75,13 @@ display
 		dex
 		bpl -
 
+		ldx #21
+-
+		lda text7,x
+		sta $0518,x
+		dex
+		bpl -
+
 
 		lda #$01
 		sta $d850
@@ -109,6 +118,8 @@ text5
 		!text "max: $0000     "
 text6
 		!text "min: $0000     "
+text7
+		!text "caps-lock for checksum"
 
 benchmark
 		jsr reset
@@ -152,29 +163,29 @@ numb		lda #$00		;file number
 		lda #$01
 		sta $d800,x
 
-		lda #$c7		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
-		sta $dd02
-
-		nop
-		nop
-
-		ldy #$00
--
-		nop
-		nop
-		nop
-		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
-		dey
-		bne -
-
-		nop
-		nop
-
-		lda #$c3
-		sta $dd00		;set bits
-
-		lda #$3f		;unlock bus
-		sta $dd02
+;		lda #$c7		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
+;		sta $dd02
+;
+;		nop
+;		nop
+;
+;		ldy #$00
+;-
+;		nop
+;		nop
+;		nop
+;		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
+;		dey
+;		bne -
+;
+;		nop
+;		nop
+;
+;		lda #$c3
+;		sta $dd00		;set bits
+;
+;		lda #$3f		;unlock bus
+;		sta $dd02
 
 		pla
 !ifdef RAW {
@@ -185,9 +196,15 @@ numb		lda #$00		;file number
 ;		jsr link_load_next_comp
 ++
 }
-!ifdef CHECKSUM {
+		lda #$fd
+		sta $dc00
+		lda $dc01
+		cmp #$7f
+		bne +
+;!ifdef CHECKSUM {
 		jsr checksum
-}
+;}
++
 		inc numb+1
 		lda numb+1
 		cmp #num_files
@@ -198,14 +215,22 @@ numb		lda #$00		;file number
 		jsr hex_runs
 		jsr reset
 
-.side		lda #$f0
-		jsr req_disc
+!ifdef REQDISC {
+;.side		lda #$f0
+;		jsr req_disc
+}
 		jmp next
 
 irq
 		pha
 		dec $d020
 		dec $d019
+;.bnk		lda #$00
+;		sta $dd00
+;		clc
+;		adc #$01
+;		and #$03
+;		sta .bnk+1
 ;sau		lda #$00
 ;		cmp $d012
 ;		bne *-3
@@ -282,9 +307,8 @@ end_w
 		lda #$07
 		sta $d800+00*40,x
 reset_drv
-		jsr bitfire_reset_drive_
+		;jsr bitfire_reset_drive_
 		jmp *
-!src "../reset_drive.asm"
 req_disc
 !src "../request_disc.asm"
 
@@ -411,81 +435,184 @@ hex
 		!text "0123456789abcdef"
 sizes
 !ifdef RAW {
-!word $02f6
-!word $07dd
-!word $157f
-!word $4023
-!word $1ed9
-!word $6469
-!word $4894
-!word $561e
-!word $27da
-!word $5467
-!word $74b4
+!word $c179-$b569
+!word $bf80-$6561
+!word $bd00-$a93e
+!word $4900-$3e1a
+!word $6600-$3db1
+!word $4396-$3162
+!word $62d5-$5dec
+!word $2d00-$2aff
+!word $4500-$35f8
+!word $6358-$548e
+!word $6200-$3774
+!word $7300-$68bb
+!word $67a1-$56c6
+!word $bef7-$bb61
+!word $8000-$78da
+!word $af00-$a06c
+!word $666b-$3b53
+!word $a800-$94af
+!word $c179-$b569
+!word $bf80-$6561
+!word $bd00-$a93e
+!word $4900-$3e1a
+!word $6600-$3db1
+!word $4396-$3162
+!word $62d5-$5dec
+!word $2d00-$2aff
+!word $4500-$35f8
+!word $6358-$548e
 } else {
-!word $1999
-!word $1800
-!word $4000
-!word $7234
-!word $253b
-!word $9679
-!word $8163
-!word $66f1
-!word $2d7e
-!word $7eb4
-!word $8d38
+!word $c179-$a000
+!word $bf80-$2800
+!word $bd00-$7400
+!word $4900-$2f80
+!word $6600-$2800
+!word $4396-$2800
+!word $62d5-$5c00
+!word $2d00-$2800
+!word $4500-$2900
+!word $6358-$4800
+!word $6200-$2800
+!word $7300-$6100
+!word $67a1-$2800
+!word $bef7-$b900
+!word $8000-$6600
+!word $af00-$9000
+!word $666b-$2800
+!word $a800-$8000
+!word $c179-$a000
+!word $bf80-$2800
+!word $bd00-$7400
+!word $4900-$2f80
+!word $6600-$2800
+!word $4396-$2800
+!word $62d5-$5c00
+!word $2d00-$2800
+!word $4500-$2900
+!word $6358-$4800
 }
 
 chksums
 !ifdef RAW {
-!byte $9e
-!byte $26
-!byte $69
-!byte $fe
-!byte $6c
-!byte $af
-!byte $ba
-!byte $0e
-!byte $a7
-!byte $6a
-!byte $04
+!byte $c6
+!byte $b8
+!byte $4c
+!byte $54
+!byte $d1
+!byte $86
+!byte $db
+!byte $03
+!byte $d8
+!byte $d4
+!byte $58
+!byte $9b
+!byte $9b
+!byte $ed
+!byte $35
+!byte $f8
+!byte $c5
+!byte $dd
+!byte $c6
+!byte $b8
+!byte $4c
+!byte $54
+!byte $d1
+!byte $86
+!byte $db
+!byte $03
+!byte $d8
+!byte $d4
 } else {
-!byte $aa
-!byte $d9
-!byte $22
-!byte $49
-!byte $53
-!byte $51
-!byte $de
-!byte $f0
-!byte $e2
+!byte $f2
+!byte $d3
+!byte $a6
+!byte $6f
+!byte $60
+!byte $fd
+!byte $59
+!byte $42
+!byte $bb
+!byte $f6
+!byte $fa
 !byte $79
-!byte $b3
+!byte $02
+!byte $a5
+!byte $35
+!byte $14
+!byte $34
+!byte $1f
+!byte $f2
+!byte $d3
+!byte $a6
+!byte $6f
+!byte $60
+!byte $fd
+!byte $59
+!byte $42
+!byte $bb
+!byte $f6
 }
 
 loads
 !ifdef RAW {
-!word $b2a3
-!word $3823
-!word $3a81
-!word $4611
-!word $1a62
-!word $4610
-!word $4ccf
-!word $24d3
-!word $19a4
-!word $3e4d
-!word $2c84
+!word $b569
+!word $6561
+!word $a93e
+!word $3e1a
+!word $3db1
+!word $3162
+!word $5dec
+!word $2aff
+!word $35f8
+!word $548e
+!word $3774
+!word $68bb
+!word $56c6
+!word $bb61
+!word $78da
+!word $a06c
+!word $3b53
+!word $94af
+!word $b569
+!word $6561
+!word $a93e
+!word $3e1a
+!word $3db1
+!word $3162
+!word $5dec
+!word $2aff
+!word $35f8
+!word $548e
 } else {
-!word $9c00
+!word $a000
 !word $2800
-!word $1000
-!word $1400
-!word $1400
-!word $1400
-!word $1400
-!word $1400
-!word $1400
-!word $1400
-!word $1400
+!word $7400
+!word $2f80
+!word $2800
+!word $2800
+!word $5c00
+!word $2800
+!word $2900
+!word $4800
+!word $2800
+!word $6100
+!word $2800
+!word $b900
+!word $6600
+!word $9000
+!word $2800
+!word $8000
+!word $a000
+!word $2800
+!word $7400
+!word $2f80
+!word $2800
+!word $2800
+!word $5c00
+!word $2800
+!word $2900
+!word $4800
 }
+
