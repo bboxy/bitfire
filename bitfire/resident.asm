@@ -8,6 +8,13 @@
 ;loader zp-addresses
 .filenum	= BITFIRE_ZP_ADDR + 0
 .barrier	= .filenum
+!if BITFIRE_DECOMP = 0 {
+bitfire_load_addr_lo = .filenum			;in case of no loadcompd, store the highbyte of loadaddress separatedly
+bitfire_load_addr_hi = .filenum + 1		;in case of no loadcompd, store the highbyte of loadaddress separatedly
+} else {
+bitfire_load_addr_hi = bitfire_lz_sector_ptr1 + 1
+bitfire_load_addr_lo = bitfire_lz_sector_ptr1 + 0
+}
 }
 
 ;depacker zp-addresses
@@ -19,9 +26,6 @@
 ;define that label here, as we only aggregate labels from this file into loader_*.inc
 bitfire_install_ = BITFIRE_INSTALLER_ADDR
 
-!if BITFIRE_DECOMP = 0 {
-bitfire_load_addr_hi = .filenum			;in case of no loadcompd, store the highbyte of loadaddress separatedly
-}
 
 		* = BITFIRE_RESIDENT_ADDR
 
@@ -57,6 +61,7 @@ link_player
 }
 		jsr link_music_play
 		dec $01
+
 		pla
 		tax
 		pla
@@ -96,12 +101,11 @@ link_decomp_under_io
 }
 
 !if BITFIRE_LOADER = 1 {
-		;XXX TODO filenum as Z addr could be saved for 1 byte extra code here
+		;XXX TODO filenum as ZP addr could be saved for 1 byte extra code here
 		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 
 bitfire_send_byte_
 		sta .filenum			;save value
-		ldx #$ff
 		lda #$ef
 		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
 .bit_loop
@@ -111,25 +115,28 @@ bitfire_send_byte_
 		eor #$30			;flip bit 5 and toggle bite 4
 		sta $dd02
 		and #$1f			;clear bit
-		ror <(.filenum-$ff),x		;fetch next bit from filenumber and waste cycles
+		pha				;slow down, this costs two extra bytes here, but saves 8 bytes on drive-side
+		pla
+		ror <.filenum			;fetch next bit from filenumber and waste cycles
 		bne .bit_loop			;last bit?
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
+
+;bitfire_send_byte_
+;		sta <.filenum
+;		ldx #$08
 ;-
 ;		lda $dd02
 ;		and #$1f
-;		bcc +
-;		adc #$1f
+;		lsr <.filenum
+;		bcs +
+;		ora #$20
 ;+
-;		eor #$30
+;		eor #$10
+;		pha
+;		pla
 ;		sta $dd02
-;		txa
-;		dop
-;bitfire_send_byte_
-;		sec
-;		ror
-;		tax
-;		bne -
-
+;		dex
+;		bpl -
 .poll_end
 		rts
 
@@ -150,45 +157,45 @@ bitfire_loadraw_
 		asl				;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 		bmi .poll_end			;block ready?
 .poll_start
-		lda #$60			;set rts
-		jsr .bitfire_ack_		;signal that we accept data and communication direction, by basically sending 2 atn strobes by fetching a bogus byte (6 bits of payload possible, first two bits are cleared/unusable. Also sets an rts in receive loop
+		ldx #$60			;set rts
+		jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
+		pha
 
-		bpl .skip_load_addr		;#$fc -> first block
-
-		jsr .get_one_byte		;fetch load/blockaddr lo
 !if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
-		sta bitfire_lz_sector_ptr1
-		sta bitfire_lz_sector_ptr2
+		jsr .get_one_byte		;fetch barrier
+		sta .barrier
 }
-		sta bitfire_load_addr_lo	;destination lowbyte
+.bitfire_load_block
+		jsr .get_one_byte		;fetch blockaddr hi
+		sta .bitfire_block_addr + 1	;where to place the block?
+		jsr .get_one_byte
+		sta .bitfire_block_addr + 0
+		tax
 
-		jsr .get_one_byte		;fetch loadaddr hi, returns with a cleared carry
+		pla				;XXX TODO pha + pla is really annoying. how to catch that ack val, or can we put it into another get_one_byte?
+		bmi .skip_load_addr		;#$fc -> first block, fetch load-address
+		lda .bitfire_block_addr + 1	;fetch loadaddr hi
+
+		stx bitfire_load_addr_lo
+!if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
+		stx bitfire_lz_sector_ptr2
+}
 		sta bitfire_load_addr_hi
 !if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
 		sta bitfire_lz_sector_ptr2 + 1
 }
 .skip_load_addr
-!if BITFIRE_DECOMP = 1 {			;decompressor only needs to be setup if there
-		jsr .get_one_byte		;fetch barrier
-		sta .barrier
-}
-
-.bitfire_load_block
-						;XXX TODO also fetch block_addr_lo in future so each block can be placed individually with given size (first block < $100 bytes)
-		jsr .get_one_byte		;fetch blockaddr hi
-		sta .bitfire_block_addr_hi	;where to place the block?
-
 		jsr .get_one_byte		;fetch blocklen
 		tay
-		lda #$99			;sta $xxxx,y
+		ldx #$99			;sta $xxxx,y
 .bitfire_ack_
-		sta .store
+		stx .store
 .get_one_byte
 		ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
 		top
 .get_en_exit
 		ldx #$60
-		stx .finish
+		stx .finish			;XXX TODO would be nice if we could do that with store in same time, but happens at different timeslots :-(
 		bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
 		bmi .get_entry
 .get_loop
@@ -210,8 +217,7 @@ bitfire_loadraw_
 		and $dd00
 		stx $dd02
 .nibble		ora #$00
-.bitfire_block_addr_hi = * + 2
-bitfire_load_addr_lo = * + 1
+.bitfire_block_addr = * + 1
 .store		sta $b00b,y
 		;XXX TODO first bits: asl rol rol -> nibble rest can be lsr'ed, then ora #$03 or and #$fc and ora/and?
 
@@ -254,11 +260,10 @@ bitfire_load_addr_lo = * + 1
 
 .lz_refill_bits
 bitfire_lz_sector_ptr1	= * + 1
-bitfire_load_addr_hi = * + 2
 		ldy $beef,x
 						;store bits? happens on all calls, except when a whole literal is fetched
 		bcc +				;only store lz_bits if carry is set (in all cases, except when literal is fetched for offset)
-		sty .lz_bits
+		sty .lz_bits			;preserve A this way
 		rol .lz_bits
 +
 		inx
@@ -274,17 +279,17 @@ bitfire_load_addr_hi = * + 2
 		pha				;preserve Z, carry, A and Y, needed depending on call
 		sty .lz_tmp
 .lz_fetch_sector				;entry of loop
-		jsr .pollblock			;fetch another block, returns with x = 0 XXX TODO it's a lie, not anymore due to new xfer method
+		jsr .pollblock			;fetch another block
 		bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 		lda bitfire_lz_sector_ptr1 + 1	;get current depack position
-		cmp .barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call, no matter what .bitfire_lz_sector_ptr has as value \o/
+		cmp .barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
 						;on first successful .pollblock they will be set with valid values and things will be checked against correct barrier
 		bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof					;not reached, go on depacking
-		ldx #$00
+		ldx #$00			;restore x = 0 again
 		ldy .lz_tmp			;restore regs + flags
 		pla
-		plp
+		plp				;XXX TODO plp + rts = rti?!
 }
 .lz_same_page
 !if BITFIRE_LOADER = 0 {
@@ -309,26 +314,23 @@ bitfire_load_addr_hi = * + 2
 }
 
 !if BITFIRE_DECOMP = 1 {
-	!if BITFIRE_LOADER = 1 {
-		!if BITFIRE_FRAMEWORK = 1 {
-link_load_next_comp
-		lda #BITFIRE_LOAD_NEXT
-link_load_comp
-		}
-
-bitfire_loadcomp_
-		jsr bitfire_send_byte_		;returns now with x = $ff
-		lda #$08			;enable pollblock/fetch_sector calls (php)
-		ldy #.lz_poll-.lz_skip_poll-2	;currently ldy #$0b
-		;ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
-		bne .loadcompd_entry		;load + decomp file
-	}
 bitfire_decomp_
 	!if BITFIRE_LOADER = 1 {
 .lz_end_of_file	= * + 1				;point to rts, this is always reachable \o/
 		lda #$60			;disable calls
 		ldy #.lz_skip_end-.lz_skip_poll-2	;#$17
 		ldx #$00			;start with first byte of block
+		beq .loadcompd_entry
+	!if BITFIRE_FRAMEWORK = 1 {
+link_load_next_comp
+		lda #BITFIRE_LOAD_NEXT
+link_load_comp
+	}
+bitfire_loadcomp_
+		jsr bitfire_send_byte_		;returns now with x = $ff
+		lda #$08			;enable pollblock/fetch_sector calls (php)
+		ldy #.lz_poll-.lz_skip_poll-2	;currently ldy #$0b
+		ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
 .loadcompd_entry
 		sta .lz_skip_fetch
 		sty .lz_skip_poll + 1

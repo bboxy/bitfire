@@ -3,7 +3,8 @@
 
 RAW = 1
 CHECKSUM = 1
-;REQDISC = 1
+REQDISC = 1
+;BUSLOCK = 1
 
 num_files	= $1c
 ;num_files	= $12
@@ -96,6 +97,7 @@ reset
 		sta min+1
 		sta cnt
 		sta cnt+1
+		lda #$00
 		sta numb+1
 		lda #$ff
 		sta max
@@ -163,34 +165,37 @@ numb		lda #$00		;file number
 		lda #$01
 		sta $d800,x
 
-;		lda #$c7		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
-;		sta $dd02
-;
-;		nop
-;		nop
-;
-;		ldy #$00
-;-
-;		nop
-;		nop
-;		nop
-;		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
-;		dey
-;		bne -
-;
-;		nop
-;		nop
-;
-;		lda #$c3
-;		sta $dd00		;set bits
-;
-;		lda #$3f		;unlock bus
-;		sta $dd02
+!ifdef BUSLOCK {
+		lda #$c7		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
+		sta $dd02
 
+		nop
+		nop
+
+		ldy #$00
+-
+		nop
+		nop
+		nop
+		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
+		dey
+		bne -
+
+		nop
+		nop
+
+		lda #$c3
+		sta $dd00		;set bits
+
+		lda #$3f		;unlock bus
+		sta $dd02
+}
 		pla
 !ifdef RAW {
 		jsr bitfire_loadraw_
 } else {
+;		jsr bitfire_loadraw_
+;		jsr bitfire_decomp_
 ;		jsr bitfire_send_byte_
 		jsr bitfire_loadcomp_
 ;		jsr link_load_next_comp
@@ -216,8 +221,8 @@ numb		lda #$00		;file number
 		jsr reset
 
 !ifdef REQDISC {
-;.side		lda #$f0
-;		jsr req_disc
+.side		lda #$f0
+		jsr req_disc
 }
 		jmp next
 
@@ -307,6 +312,8 @@ end_w
 		lda #$07
 		sta $d800+00*40,x
 reset_drv
+		lda #$ff
+		jsr bitfire_loadraw_
 		;jsr bitfire_reset_drive_
 		jmp *
 req_disc
