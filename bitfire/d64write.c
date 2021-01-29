@@ -749,12 +749,9 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
 
 int main(int argc, char *argv[]) {
     d64 d64;
-    int i, j;
-    FILE* file;
     int side = -1;
 
     int c;
-    int head;
 
     char* d64_path = NULL;
     char* art_path = NULL;
@@ -766,13 +763,6 @@ int main(int argc, char *argv[]) {
     char* d64_header = d64_default_header;
     char* d64_id = d64_default_id;
 
-    char art[41] = { 0 };
-    char header[17] = { 0 };
-    char id[6] = { 0 };
-    char filename[17] = { 0 };
-
-    int boot_sector = 0;
-    int boot_track = 0;
     int lines = 0;
     int dir_art = 0;
     int interleave = FILE_INTERLEAVE;
