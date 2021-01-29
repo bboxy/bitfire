@@ -706,6 +706,47 @@ void screen2petscii(char* data, int size) {
     }
 }
 
+void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector, int lines) {
+    char art[41] = { 0 };
+    char header[17] = { 0 };
+    char id[6] = { 0 };
+    char filename[17] = { 0 };
+    int c, i, j;
+    FILE* file;
+    int head;
+
+    if(file = fopen(art_path, "rb+"), !file) {
+        fatal_message("unable to open '%s'\n", art_path);
+    }
+    c = fgetc(file);
+    c = fgetc(file);
+    j = 0;
+    head = 0;
+    while((c = fgetc(file)) != EOF && lines) {
+        if (j < 39) art[j++] = c;
+        else {
+            art[j] = 0;
+            if (head == 0) {
+                for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
+                memcpy(header, art + 3, 16);
+                memcpy(id, art + 21, 5);
+                screen2petscii(header, 16);
+                screen2petscii(id, 5);
+                d64_set_header(d64, header, id);
+                head++;
+            } else {
+                memcpy(filename, art + 6, 16);
+                screen2petscii(filename, 16);
+                d64_create_direntry(d64, filename, boot_track, boot_sector, FILETYPE_PRG, strtoul(art, NULL, 10));
+                lines--;
+            }
+            j = 0;
+        }
+    }
+    fclose(file);
+    return;
+}
+
 int main(int argc, char *argv[]) {
     d64 d64;
     int i, j;
@@ -884,46 +925,7 @@ int main(int argc, char *argv[]) {
     }
 
     //and a dir art linked to that now as we have track/sector info for the bootfile
-    //XXX TODO do an extra function for this
-    if(dir_art) {
-        boot_sector = d64.sector_link;
-        boot_track = d64.track_link;
-
-        //XXX TODO move to a separate function
-        if(file = fopen(art_path, "rb+"), !file) {
-            fatal_message("unable to open '%s'\n", art_path);
-        }
-        c = fgetc(file);
-        c = fgetc(file);
-        j = 0;
-        head = 0;
-	//XXX TODO parse first line as header/id
-	//
-        while((c = fgetc(file)) != EOF && lines) {
-            if (j < 39) art[j++] = c;
-            else {
-                art[j] = 0;
-                if (head == 0) {
-                    for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
-                    memcpy(header, art + 3, 16);
-                    memcpy(id, art + 21, 5);
-                    screen2petscii(header, 16);
-                    screen2petscii(id, 5);
-                    d64_set_header(&d64, header, id);
-                    head++;
-                } else {
-                    //XXX TODO also read out bocksize, for that, read 4 bytes and to strgtoint
-                    memcpy(filename, art + 6, 16);
-                    screen2petscii(filename, 16);
-                    d64_create_direntry(&d64, filename, boot_track, boot_sector, FILETYPE_PRG, strtoul(art, NULL, 10));
-                    //d64_create_direntry(&d64, art, boot_track, boot_sector, FILETYPE_PRG, 0);
-                    lines--;
-                }
-                j = 0;
-            }
-        }
-        fclose(file);
-    }
+    if(dir_art) d64_apply_dirart(&d64, art_path, d64.track_link, d64.sector_link, lines);
 
     //finally add the standard files
     c = 0;
