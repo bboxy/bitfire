@@ -1,7 +1,7 @@
 What is it
 ----------
 
-Bitfire is a fixed interleave loadersystem with depacker, a basic framework and an image writing tool. Aim was to make the loader as fast as possible while being as tiny as possible. So at some points size and speed had to be traded against each other. An own, however d64-compatible (bam copy is sufficient), file format is introduced to make the code less complex and loading faster. Also, functions that are not used regularly (like turn disk detection) are available as statically linkable functions and thus make the resident part on c64 side even smaller. Being that tiny ($7b to $1fe bytes, depending on configuration) and still fast, makes it perfect for being used in demos. The imaging-tool creates diskimages with all demofiles and a dirart on it. Also it is accompanied by a lz-packer based on doynamite, however smaller in code and a bit faster than that, while yielding nearly the same results. The packer supports a lot of functionality and thus makes other tools obsolete, as it can split files, reference data in previous files, write in several formats, create sfx and much more. The framework supports a base irq and safe loading hooks, as well as a loadnext functionality (but this feature is also available without framework, see examples), however loading by filenumber is still supported if your demo is in need of random file access (like the comaland endpart)
+Bitfire is a fixed interleave loadersystem with depacker, a basic framework and an image writing tool. Aim was to make the loader as fast as possible while being as tiny as possible. So at some points size and speed had to be traded against each other. An own, however d64-compatible (bam copy is sufficient), file format is introduced to make the code less complex and loading faster. Also, functions that are not used regularly (like turn disk detection) are available as statically linkable functions and thus make the resident part on c64 side even smaller. Being that tiny ($8b to $1ea bytes, depending on configuration) and still fast, makes it perfect for being used in demos. The imaging-tool creates diskimages with all demofiles and a dirart on it. Also it is accompanied by a lz-packer based on doynamite, however smaller in code and a bit faster than that, while yielding nearly the same results. The packer supports a lot of functionality and thus makes other tools obsolete, as it can split files, reference data in previous files, write in several formats, create sfx and much more. The framework supports a base irq and safe loading hooks, as well as a loadnext functionality (but this feature is also available without framework, see examples), however loading by filenumber is still supported if your demo is in need of random file access (like the comaland endpart)
 
 Bitnax
 ------
@@ -36,20 +36,20 @@ byte 1: load-address highbyte
 byte 2: (filelength-1) lowbyte
 byte 3: (filelength-1) highbyte
 
-Thus 63 files fit into one sector (the remeining bytes contain the diskside info). This means, 63 files can be loaded sequentially without having any seeking action due to fetching new direntries. The last byte of the dir sectors represent the diskside the files are on. This value will be checked if another diskside is requested. The values range from $f0 to $fe, so demos with up to 15 different disksides can be created (hi Offence! :-P). Also this is less error prone than the usual checks on the disk id.
+Thus 63 files fit into one sector (the remeining bytes contain the diskside info and teh start-position of the first file on the current directory sector). This means, 63 files can be loaded sequentially without having any seeking action due to fetching new direntries. The last byte of the dir sectors represent the diskside the files are on. This value will be checked if another diskside is requested. The values range from $f0 to $fe, so demos with up to 15 different disksides can be created (hi Offence! :-P). Also this is less error prone than the usual checks on the disk id.
 
 d64write
 --------
 
 d64write generates a suitable .d64 for you which can be read by bitfire and incorporates all the workflow for final image creation into a single tool. So it writes hidden files for you, while keeping maximum reading performance and providing a dirart linked to the bootloader.
 
-After the bitfire formatted files are written, standard files are added to the diskimage. So there's still the possibility to add files that can be loaded normally, mixing both types on a disk is no problem. So a bigger bootloader or adding a note is no problem. It is even possible to add further files to a disk with original gear, as the BAM is maintained and used blocks are thus protected from allocation/overwriting. However bitfire-files must be written first, as it assumes starting at track 1, sector 0.
+After the bitfire formatted files are written, standard files are added to the diskimage. So there's still the possibility to add files that can be loaded normally, mixing both types on a disk is no problem. So a bigger bootloader or adding a note is no problem. It is even possible to add further files to a disk with original gear, as the BAM is maintained and used blocks are thus protected from allocation/overwriting. However bitfire-files must be written first, as it assumes starting at track 1, sector 0, to avoid data loss this requres the -c flag to be set, so that d64write starts wit ha fresh formated .d64.
 
 Next up a small file, the bootloader, can be placed into the remaining sectors on track 18 to save blocks. It should be small enough to fit there, or an error occurs. Usually that program should not do more than install the loader and load/run the first file (bootstrap) on disk that then starts the demo(side).
 
 As a final step a dirart can be added to the dir, if there's still enough sectors free to accomodate it. An error will occur if not. d64write accepts a saved screen for that purpose, so it should be easy to create dirarts with e.g. a petscii editor (however take care that not all petscii symbols are accepted for dirart). From that screen every first 16 chars per row are taken for creating a dirart. The number of rows to be read in can be specified. The first row is used to specify header and id separated by an arbitrary char (see example dirart coming along with this release).
 
-If you want to place multiple files, no matter if in standard or bitfire format, you can add the -b or -s option multiple times to one commandline. So the right order is kept on a single call. Files in bitfire format are written sequentially so that no unecessary seektimes are created, that can be broken when standard files are placed in between. That said, it is wisely to place files on disk in the same order to be loaded, if being loaded once (random access is possible of course, but gives penalties due to excessive seeking).
+If you want to place multiple files, (in standard format, for bitfire format it is mandatory to write in one go), you can add the -b or -s option multiple times to one commandline. So the right order is kept on a single call. Files in bitfire format are written sequentially so that no unecessary seektimes are created, that can be broken when standard files are placed in between. That said, it is wisely to place files on disk in the same order to be loaded, if being loaded once (random access is possible of course, but gives penalties due to excessive seeking).
 
 You can choose to write with different interleaves, however 4 always has been the best choice in any tested scenario and thus is the default. If you change the interleave you also have to change it with the loader as it needs to calculate the sectors belonging to each file by this value. To do so simply change the value for BITFIRE_CONFIG_INTERLEAVE in config.inc.
 
@@ -59,9 +59,7 @@ d64write -c cooldemo.d64 -h oxyron -i rules --side 1 --boot cooldemo.lz -b boots
 other files
 -----------
 
-request_disc.asm contains functions that can be linked in statically by including them when needed. All important labels are exported when creating the loader bianries via make. So no need to take care about them.
-
-Just add for e.g. a !src "request_disc.asm" to include the turn disc function to your code.
+link_macros*.inc contain many functions that can be linked in statically by including them when needed and calling a macro. All important labels are exported when creating the loader bianries via make. So no need to take care about them. The acme-version is maintained best, if you lack a function, feel free to extnd the includes with more macros for your favourite cross-assembler.
 
 40 tracks support
 -----------------
@@ -250,7 +248,7 @@ It turned out, that on a SX64 problems can occur during an active buslock, so it
 What it can't
 -------------
 
-This loader is not able to load or loadcompd under IO. This has two reasons: Saving code size and saving cycles during loading. Also it would be a bitch to implement with the design chosen for this loader (no depackbuffer or alike). If you really need data under IO it can be either copied there or loaded raw and depacked there afterwards, so in fact there's not much need for a possibility to load under IO, except a slight improvment in convenience. To split up files use the (--cut-input-addr) to cut them into two parts (for e.g. if we have no overlap: $0800-$cfff and $d000-$ffff).
+This loader is not able to load or loadcompd under IO. This has two reasons: Saving code size and saving cycles during loading. If you really need data under IO it can be either copied there or loaded raw and depacked there afterwards, so in fact there's not much need for a possibility to load under IO, except a slight improvment in convenience. To split up files use the (--cut-input-addr) to cut them into two parts (for e.g. if we have no overlap: $0800-$cfff and $d000-$ffff).
 With the old packing scheme, Packed files have a safety margin at the end, means, their end address was usually a few bytes higher than on the original file (sometimes even more, if a huge literal is found at the end of a file). This could of course bring you in trouble if you came close to the IO range or executed code with it. With the new overlapping packing scheme this is however history.
 
 Building
@@ -261,4 +259,9 @@ The .asm files need ACME 0.94 or newer, i didn't focus much on that, as i always
 Zeropage-usage
 --------------
 
-When the loader and depacker is idle, you can use the whole zeropage and leaving any garbage there, also the addresses reserved for the loader. There's one exception, the loader uses $00 and places the value #$37 there, whenever you use $00, you need to restore this value, or things break.
+When the loader and depacker is idle, you can use the whole zeropage and leaving any garbage there, also the addresses reserved for the loader. There's one exception, the loader uses $00 and places the value #$37 there, whenever you use $00, you need to restore this value before loading again, or things break.
+
+Dirart
+------
+
+These are the positions on screen where the dirart is expected, it looks simply like a normal dir-listing, in doubt, there is a exampledir.bin and a .png to visualize that.
