@@ -119,6 +119,7 @@ typedef struct {
 	bool output;
 	bool checksum;
 	bool exit_on_warn;
+	bool verbose;
 
 	// Some informational counters
 	struct {
@@ -1596,12 +1597,12 @@ int crunch(lz_context* ctx) {
 
 	// Emit margin only when necessary
 	if (ctx->margin > 0 && ctx->load_addr < 0 && ctx->depack_to < 0 && ctx->output_type != OUTPUT_SFX) {
-		printf("overlap: %d bytes\n", ctx->margin);
+		if (ctx->verbose) printf("overlap: %d bytes\n", ctx->margin);
 	}
 
 	// Some stats and info
-	printf("source size: $%04x (%d)\n", source_size, source_size);
-	printf("packed size: $%04x (%d) %s ratio: %.1f%%\n", packed_size - ctx->write_tables * 24, packed_size - ctx->write_tables * 24, ctx->write_tables ? "(+24 byte tables)" : "", ((packed_size - ctx->write_tables * 24) * 100.0 / (ctx->output_end - ctx->output_begin)));
+	if (ctx->verbose) printf("source size: $%04x (%d)\n", source_size, source_size);
+	if (ctx->verbose) printf("packed size: $%04x (%d) %s ratio: %.1f%%\n", packed_size - ctx->write_tables * 24, packed_size - ctx->write_tables * 24, ctx->write_tables ? "(+24 byte tables)" : "", ((packed_size - ctx->write_tables * 24) * 100.0 / (ctx->output_end - ctx->output_begin)));
 
 	// Print more info and calc addresses
 	if(ctx->output_type == OUTPUT_LEVEL || ctx->output_type == OUTPUT_BITFIRE) {
@@ -1612,8 +1613,8 @@ int crunch(lz_context* ctx) {
 			ctx->end_pos = ctx->end_pos + (ctx->relocate_to - ctx->output_begin);
 		}
 
-		printf("source load: $%04x-$%04x\n", ctx->output_begin, ctx->output_end);
-		printf("packed load: $%04x-$%04x\n", ctx->load_addr, ctx->load_addr + packed_size);
+		if (ctx->verbose) printf("source load: $%04x-$%04x\n", ctx->output_begin, ctx->output_end);
+		if (ctx->verbose) printf("packed load: $%04x-$%04x\n", ctx->load_addr, ctx->load_addr + packed_size);
 
 		// Fix optimal load address to file
 		fseek(ctx->dst_file, 0, SEEK_SET);
@@ -1654,9 +1655,9 @@ int crunch(lz_context* ctx) {
 			if (ctx->exit_on_warn) exit(EXIT_FAILURE);
 		}
 		if (ctx->output_type == OUTPUT_BITFIRE) {
-			printf("filetype: bitfire\n");
+			if (ctx->verbose) printf("filetype: bitfire\n");
 		} else {
-			printf("filetype: level\n");
+			if (ctx->verbose) printf("filetype: level\n");
 		}
 	} else if(ctx->output_type == OUTPUT_SFX) {
 		packed_size -= 26;
@@ -1684,9 +1685,9 @@ int crunch(lz_context* ctx) {
 		fputc(ctx->output_begin & 0xff, ctx->dst_file);
 		fputc(ctx->output_begin >> 8, ctx->dst_file);
 
-		printf("start address: $%04x (%d)\n", ctx->start_addr, ctx->start_addr);
-		printf("final size: $%04x (%d)\n", packed_size + decruncher_size, packed_size + decruncher_size);
-		printf("filetype: sfx\n");
+		if (ctx->verbose) printf("start address: $%04x (%d)\n", ctx->start_addr, ctx->start_addr);
+		if (ctx->verbose) printf("final size: $%04x (%d)\n", packed_size + decruncher_size, packed_size + decruncher_size);
+		if (ctx->verbose) printf("filetype: sfx\n");
 	} else {
 	}
 
@@ -1742,6 +1743,7 @@ main(int argc, char *argv[]) {
 	ctx.relocate_to = -1;
 	ctx.write_tables = false;
 	ctx.offset_lengths = false;
+        ctx.verbose = false;
 
 	while(++argv, --argc) {
 		if(argc >= 2 && !strcmp(*argv, "-o")) {
@@ -1773,6 +1775,8 @@ main(int argc, char *argv[]) {
 			argc -= 2;
 		} else if(!strcmp(*argv, "--full-dict")) {
 			ctx.full_dict = true;
+		} else if(!strcmp(*argv, "-v")) {
+			ctx.verbose = true;
 		} else if(!strcmp(*argv, "--overlap")) {
 			ctx.overlap = true;
 		} else if(!strcmp(*argv, "--best-offset-tables")) {
@@ -1832,6 +1836,7 @@ main(int argc, char *argv[]) {
 			"\t[--include-tables]                                   add own tables to packed sfx\n"
 			"\t[--offset-lengths s1/s2/s3/s4:l1/l2/l3/l4]           use alternative offset lengths\n"
 			"\t[--emit-offset-tables tables.asm]                    spit out offset table\n"
+			"\t[-v]                                                 print details\n"
 			"\t[--statistics]                                       print some stats\n"
 			"\t[--trace-coding]                                     print more gibberish\n"
 			"\t{input-file}                                         the input file\n",
