@@ -457,13 +457,13 @@ int d64_format(d64* d64, char* header, char* id, int create) {
     return 1;
 }
 
-int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, int length, int sectpos) {
+int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, int length, int sectpos, int sectnum) {
     int dirsect = BITFIRE_DIRSECT;
     unsigned char dir[256];
     int dir_pos;
     //first dirsect in use? then read in
 
-    while (dirsect > BITFIRE_DIRSECT - 1) {
+    while (dirsect > BITFIRE_DIRSECT - 2) {
         if (d64_get_bam_entry(d64, D64_DIR_TRACK, dirsect) == BAM_USED) {
             d64_read_sector(d64, D64_DIR_TRACK, dirsect, dir);
         } else {
@@ -483,8 +483,9 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
                 //first file in dir sector -> place init values
             	if (dir_pos == 0) {
                     dir[0xfc] = track;
-                    dir[0xfd] = sector;
+                    dir[0xfd] = sectnum;
                     dir[0xfe] = sectpos;
+                    printf("init-values of dir-sector: track: $%02x, sector-count: $%02x, sector-pos: $%02x\n", track, sectnum, sectpos);
                 }
                 d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
                 return 0;
@@ -514,6 +515,14 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) 
     char* pname;
     int loadaddr = 0;
     int startpos = d64->sectpos;
+
+    /* at which sector on track do we start? */
+    int sectnum = sectors[d64->track] - d64_get_free_track_blocks(d64, d64->track);
+
+    /* partly filled sectors do not count, subtract */
+    if (d64->sectpos > 0) sectnum--;
+
+    //printf("track: $%02x used blocks: $%02x\n", d64->track, sectnum);
 
     if(file = fopen(path, "rb"), !file) {
         fatal_message("unable to open '%s'\n", path);
@@ -649,19 +658,19 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) 
             if(d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size)) return 1;
         }
     } else {
-        if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, startpos) != 0) {
+        if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, startpos, sectnum) != 0) {
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
     }
     switch (type) {
         case FILETYPE_BOOT:
-            printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+            printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
         break;
         case FILETYPE_STANDARD:
-            printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, path);
+            printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
         break;
         case FILETYPE_BITFIRE:
-            printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s  starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03lx  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", d64->track_link, d64->sector_link, d64->checksum, d64->sectpos, path);
+            printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03lx  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, d64->sectpos, path);
         break;
     }
     return 0;
@@ -853,6 +862,9 @@ int main(int argc, char *argv[]) {
     d64.sectpos = 0;
     while(++c < argc) {
         if(argc -c > 1 && !strcmp(argv[c], "-b")) {
+            if (!format) {
+                fatal_message("bitfire files will only be written to a fresh disc, to avoid loss of standard files, use the -c option!\n");
+            }
             d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave);
         }
     }
