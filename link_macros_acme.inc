@@ -63,14 +63,31 @@
 			cli
 		}
 
+		!macro reset_drive {
+			lda #BITFIRE_RESET_DRIVE
+			jsr bitfire_send_byte_
+		}
+
 		;request next disk side and reset filenum_counter
 		!macro request_disk .num {
 			lda #.num + $f0
 			jsr bitfire_send_byte_
+
+			bit $dd00
+			bmi *-3
+
+			;restore $dd02 (is maybe $1f after send_byte)
 			lda #$3f
 			sta $dd02
 		}
 
+		!macro wait_floppy_idle {
+			;wait until floppy is idle again
+			bit $dd00
+			bpl *-3
+		}
+
+		;wait for given frame counter value
 		!macro link_wait_syncpoint .part {
 -
 			lda link_syncpoint

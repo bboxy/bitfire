@@ -78,11 +78,10 @@ clear_frame_count .macro
 		.endm
 
 wait_frame_count .macro
-l1		lda link_frame_count + 1
-		cmp #>(\1)
-		bcc l1
-l2		lda link_frame_count + 0
+l2		lda link_frame_count+0
 		cmp #<(\1)
+		lda link_frame_count+1
+		sbc #>(\1)
 		bcc l2
 		.endm
 

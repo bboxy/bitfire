@@ -110,11 +110,9 @@ wait:
 wait:
 	lda link_frame_count+0
 	cmp #<cnt
-	bcc wait
-wait2:
 	lda link_frame_count+1
-	cmp #>cnt
-	bcc wait2
+	sbc #>cnt
+	bcc wait
 }
 
 .macro bus_lock () {

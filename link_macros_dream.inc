@@ -93,14 +93,12 @@ sau:
 		#macro wait_frame_count(cnt)
 		{
 .(
-sau1:
+sau:
 			lda link_frame_count+0
 			cmp #<{cnt}
-			bcc sau1
-sau2:
 			lda link_frame_count+1
-			cmp #>{cnt}
-			bcc sau2
+			sbc #>{cnt}
+			bcc sau
 .)
 		}
 
