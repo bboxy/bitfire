@@ -457,7 +457,7 @@ int d64_format(d64* d64, char* header, char* id, int create) {
     return 1;
 }
 
-int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, int length, int sectpos, int sectnum) {
+int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, int length, int sectpos, int sectnum, int verbose) {
     int dirsect = BITFIRE_DIRSECT;
     unsigned char dir[256];
     int dir_pos;
@@ -485,7 +485,9 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
                     dir[0xfc] = track;
                     dir[0xfd] = sectnum;
                     dir[0xfe] = sectpos;
-                    printf("init-values of dir-sector: track: $%02x, sector-count: $%02x, sector-pos: $%02x\n", track, sectnum, sectpos);
+                    if (verbose) {
+                        printf("init-values of dir-sector: track: $%02x, sector-count: $%02x, sector-pos: $%02x\n", track, sectnum, sectpos);
+                    }
                 }
                 d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
                 return 0;
@@ -504,7 +506,7 @@ void d64_scramble_buffer(unsigned char* buf) {
     }
 }
 
-int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) {
+int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose) {
     FILE* file;
     int start_track;
     int start_sector;
@@ -658,20 +660,22 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave) 
             if(d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size)) return 1;
         }
     } else {
-        if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, startpos, sectnum) != 0) {
+        if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, startpos, sectnum, verbose) != 0) {
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
     }
-    switch (type) {
-        case FILETYPE_BOOT:
-            printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
-        break;
-        case FILETYPE_STANDARD:
-            printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
-        break;
-        case FILETYPE_BITFIRE:
-            printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03lx  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, d64->sectpos, path);
-        break;
+    if (verbose) {
+        switch (type) {
+            case FILETYPE_BOOT:
+                printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
+            break;
+            case FILETYPE_STANDARD:
+                printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
+            break;
+            case FILETYPE_BITFIRE:
+                printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03lx  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, d64->sectpos, path);
+            break;
+        }
     }
     return 0;
 }
@@ -695,20 +699,18 @@ static unsigned char s2p[] = {
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20
 };
 
-void screen2petscii(char* data) {
+void screen2petscii(char* data, int size) {
     int i;
-    for(i = 0; i < 40; i++) {
+    for(i = 0; i < size; i++) {
         data[i] = s2p[(unsigned char)data[i]];
     }
 }
 
 int main(int argc, char *argv[]) {
     d64 d64;
-    int j;
+    int i, j;
     FILE* file;
     int side = -1;
-
-    char art[41] = { 0 };
 
     int c;
     int head;
@@ -723,8 +725,10 @@ int main(int argc, char *argv[]) {
     char* d64_header = d64_default_header;
     char* d64_id = d64_default_id;
 
+    char art[41] = { 0 };
     char header[17] = { 0 };
     char id[6] = { 0 };
+    char filename[17] = { 0 };
 
     int boot_sector = 0;
     int boot_track = 0;
@@ -732,6 +736,7 @@ int main(int argc, char *argv[]) {
     int dir_art = 0;
     int interleave = FILE_INTERLEAVE;
     int format = 0;
+    int verbose = 0;
 
     debug_level = 0;
     d64.supported_tracks = 35;
@@ -749,6 +754,7 @@ int main(int argc, char *argv[]) {
         printf("-a <num> <dirart.prg>   A dirart can be provided, it extracts the first 16 chars of <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
         printf("--interleave <num>      Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("--40                    Enable 40 track support\n");
+        printf("-v			Verbose output\n");
         exit (0);
     }
 
@@ -818,6 +824,9 @@ int main(int argc, char *argv[]) {
         else if(!strcmp(argv[c], "--40")) {
             d64.supported_tracks = 40;
         }
+        else if(!strcmp(argv[c], "-v")) {
+            verbose = 1;
+        }
         else if(!strcmp(argv[c], "-a")) {
             if (argc -c > 1) lines = strtoul(argv[++c], NULL, 10);
             else {
@@ -865,16 +874,17 @@ int main(int argc, char *argv[]) {
             if (!format) {
                 fatal_message("bitfire files will only be written to a fresh disc, to avoid loss of standard files, use the -c option!\n");
             }
-            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave);
+            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave, verbose);
         }
     }
 
     //write the boot file
     if(boot_file) {
-        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE);
+        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, verbose);
     }
 
     //and a dir art linked to that now as we have track/sector info for the bootfile
+    //XXX TODO do an extra function for this
     if(dir_art) {
         boot_sector = d64.sector_link;
         boot_track = d64.track_link;
@@ -894,15 +904,19 @@ int main(int argc, char *argv[]) {
             else {
                 art[j] = 0;
                 if (head == 0) {
-                    screen2petscii(art);
-                    memcpy(header, art, 16);
-                    memcpy(id, art+17, 5);
+                    for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
+                    memcpy(header, art + 3, 16);
+                    memcpy(id, art + 21, 5);
+                    screen2petscii(header, 16);
+                    screen2petscii(id, 5);
                     d64_set_header(&d64, header, id);
                     head++;
                 } else {
-                    screen2petscii(art);
-                    art[16] = 0;
-                    d64_create_direntry(&d64, art, boot_track, boot_sector, FILETYPE_PRG, 0);
+                    //XXX TODO also read out bocksize, for that, read 4 bytes and to strgtoint
+                    memcpy(filename, art + 6, 16);
+                    screen2petscii(filename, 16);
+                    d64_create_direntry(&d64, filename, boot_track, boot_sector, FILETYPE_PRG, strtoul(art, NULL, 10));
+                    //d64_create_direntry(&d64, art, boot_track, boot_sector, FILETYPE_PRG, 0);
                     lines--;
                 }
                 j = 0;
@@ -915,11 +929,11 @@ int main(int argc, char *argv[]) {
     c = 0;
     while(++c < argc) {
         if(argc -c > 1 && !strcmp(argv[c], "-s")) {
-            d64_write_file(&d64, argv[++c], FILETYPE_STANDARD, 1, interleave);
+            d64_write_file(&d64, argv[++c], FILETYPE_STANDARD, 1, interleave, verbose);
         }
     }
 
-    d64_display_bam(&d64);
+    if (verbose) d64_display_bam(&d64);
     d64_write_bam(&d64);
 
     fclose(d64.file);
