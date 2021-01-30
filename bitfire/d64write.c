@@ -251,8 +251,9 @@ static int d64_display_bam(d64* d64) {
     return 1;
 }
 
-static int d64_update_direntry(d64* d64, char* name, int start_track, int start_sector, int detrack, int desector, int desectpos, int type, int blocks) {
-    int name_len = strlen(name);
+static int d64_update_direntry(d64* d64, char* name, int start_track, int start_sector, int detrack, int desector, int desectpos, int type, int blocks, int update_link_only) {
+    int name_len = 0;
+    name_len = strlen(name);
 
     /* read in sector the direntry is on */
     if(!d64_read_sector(d64, detrack, desector, d64->sectbuf)) return 0;
@@ -261,17 +262,19 @@ static int d64_update_direntry(d64* d64, char* name, int start_track, int start_
     d64->sectbuf[desectpos + D64_DSECTOR] = start_sector;
     d64->sectbuf[desectpos + D64_DTYPE]   = type;
     d64->sectbuf[desectpos + D64_DTYPE] = d64->sectbuf[desectpos + D64_DTYPE] | 0x80;
-    /* add filename */
-    if (name_len > 16) {
-        fatal_message("name '%s' too long\n", name);
-        return 0;
+    if (!update_link_only) {
+        /* add filename */
+        if (name_len > 16) {
+            fatal_message("name '%s' too long\n", name);
+            return 0;
+        }
+        memcpy(&d64->sectbuf[desectpos + D64_DNAME], name, name_len);
+        /* pad filename */
+        memset(&d64->sectbuf[desectpos + D64_DNAME + name_len], 0xa0, MAX_C64_NAME - name_len);
+        /* add size information */
+        d64->sectbuf[desectpos + D64_DBLOCKS + 1] = blocks / 256;
+        d64->sectbuf[desectpos + D64_DBLOCKS + 0] = blocks & 0xff;
     }
-    memcpy(&d64->sectbuf[desectpos + D64_DNAME], name, name_len);
-    /* pad filename */
-    memset(&d64->sectbuf[desectpos + D64_DNAME + name_len], 0xa0, MAX_C64_NAME - name_len);
-    /* add size information */
-    d64->sectbuf[desectpos + D64_DBLOCKS + 1] = blocks / 256;
-    d64->sectbuf[desectpos + D64_DBLOCKS + 0] = blocks & 0xff;
 
 //    debug_print_hex(&d64->sectbuf[desectpos], 32, "DIR:", 32);
 
@@ -341,9 +344,10 @@ static int d64_readdir(d64* d64, dirent64* d) {
     return 1;
 }
 
-static int d64_create_direntry(d64* d64, char* name, int start_track, int start_sector, int filetype, int blocks) {
+static int d64_create_direntry(d64* d64, char* name, int start_track, int start_sector, int filetype, int blocks, int link_to) {
     dirent64 d;
     int status;
+    int line = 0;
 
     /* set startpos */
     d64->track       = D64_DIR_TRACK;
@@ -355,11 +359,17 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
     d64->sectsize    = 0;
 
     /* walk through dir to find reusable direntries, position for a found entry will be set appropriately */
+    line = 1;
     while((status = d64_readdir(d64, &d))) {
         debug_message("dir-entry found at t/s='%d/%d' @$%02x\n", d.d_detrack, d.d_desector, d.d_desectpos);
+        if (line == link_to && link_to > 0) break;
         if(!d.d_type && !d.d_closed) break;
+        line++;
     }
 
+    if (link_to > 0 && line != link_to) {
+        fatal_message("can't link '%s' to line %d, dir entry does not exist (max: %d)!\n", name, link_to, line);
+    }
     /* nothing free? */
     if(status == 0) {
         debug_message("last block of dir reached, need to extend dir from t/s='%d/%d' on\n", d64->track, d64->sector);
@@ -384,8 +394,8 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
 
     /* ...and create it on disc */
     //ascii2petscii(name);
-    d64_update_direntry(d64, name, start_track, start_sector, d.d_detrack, d.d_desector, d.d_desectpos, filetype, blocks);
-    return 1;
+    d64_update_direntry(d64, name, start_track, start_sector, d.d_detrack, d.d_desector, d.d_desectpos, filetype, blocks, link_to);
+    return 0;
 }
 
 /* will change the header/id in d64->bam, bam must still be saved to make changes visible */
@@ -506,7 +516,7 @@ void d64_scramble_buffer(unsigned char* buf) {
     }
 }
 
-int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose) {
+int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose, int link_to) {
     FILE* file;
     int start_track;
     int start_sector;
@@ -657,23 +667,23 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
 #endif
 
             ascii2petscii(pname);
-            if(d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size)) return 1;
+            d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size, link_to);
         }
     } else {
-        if (d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, startpos, sectnum, verbose) != 0) {
+        if (d64_create_bitfire_direntry(d64, start_track, d64->sector_link, loadaddr, length, startpos, sectnum, verbose) != 0) {
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
     }
     if (verbose) {
         switch (type) {
             case FILETYPE_BOOT:
-                printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
+                printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, path);
             break;
             case FILETYPE_STANDARD:
-                printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, path);
+                printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"  line-link: %d\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, path, link_to);
             break;
             case FILETYPE_BITFIRE:
-                printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03lx  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, d64->track_link, d64->sector_link, d64->checksum, d64->sectpos, path);
+                printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03lx  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, d64->sectpos, path);
             break;
         }
     }
@@ -737,7 +747,7 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
             } else {
                 memcpy(filename, art + 6, 16);
                 screen2petscii(filename, 16);
-                d64_create_direntry(d64, filename, boot_track, boot_sector, FILETYPE_PRG, strtoul(art, NULL, 10));
+                d64_create_direntry(d64, filename, boot_track, boot_sector, FILETYPE_PRG, strtoul(art, NULL, 10), 0);
                 lines--;
             }
             j = 0;
@@ -753,6 +763,7 @@ int main(int argc, char *argv[]) {
 
     int c;
 
+    char* filename = NULL;
     char* d64_path = NULL;
     char* art_path = NULL;
     char* boot_file = NULL;
@@ -769,23 +780,25 @@ int main(int argc, char *argv[]) {
     int format = 0;
     int verbose = 0;
 
+    int line = 0;
+
     debug_level = 0;
     d64.supported_tracks = 35;
 
     c = 0;
     if (argc <= 1) {
         printf("Usage: d64write (-c|-d) diskimage.d64 -h header -i id -s standard_format.prg -b bitfire_format.prg --boot bootloader.prg --side 1 -a 12 dirart.prg --interleave 5\n");
-        printf("A multiple of files can be given as argument using -s or -b multiple times\n");
-        printf("-c <d64-image>          Select imgae to write to and create/format it\n");
-        printf("-d <d64-image>          Select image. Files will be added\n");
-        printf("-b <file>               Writes a file in bitfire format without a visible dir entry\n");
-        printf("-s <file>               Writes a file in standard format\n");
-        printf("--side <num>            Determines which side this disk image will be when it comes about turning the disc\n");
+        printf("A multiple of files can be given as argument using -s or -b multiple times.\n");
+        printf("-c <d64-image>          Select imgae to write to and create/format it.\n");
+        printf("-d <d64-image>          Select image. Files will be added.\n");
+        printf("-b <file>               Writes a file in bitfire format without a visible dir entry.\n");
+        printf("-s <file> [line]        Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
+        printf("--side <num>            Determines which side this disk image will be when it comes about turning the disc.\n");
         printf("--boot <file>           Writes a standard file into the dirtrack. The dirart is linked to that file.\n");
         printf("-a <num> <dirart.prg>   A dirart can be provided, it extracts the first 16 chars of <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
         printf("--interleave <num>      Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
-        printf("--40                    Enable 40 track support\n");
-        printf("-v			Verbose output\n");
+        printf("--40                    Enable 40 track support.\n");
+        printf("-v			Verbose output.\n");
         exit (0);
     }
 
@@ -842,6 +855,10 @@ int main(int argc, char *argv[]) {
         }
         else if(!strcmp(argv[c], "-s")) {
             c++;
+            if (argc -c > 1) {
+                line = strtoul(argv[++c], NULL, 10);
+		if (!errno) c++;
+            }
         }
         else if(!strcmp(argv[c], "-b")) {
             c++;
@@ -905,13 +922,13 @@ int main(int argc, char *argv[]) {
             if (!format) {
                 fatal_message("bitfire files will only be written to a fresh disc, to avoid loss of standard files, use the -c option!\n");
             }
-            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave, verbose);
+            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave, verbose, 0);
         }
     }
 
     //write the boot file
     if(boot_file) {
-        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, verbose);
+        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, verbose, 0);
     }
 
     //and a dir art linked to that now as we have track/sector info for the bootfile
@@ -921,7 +938,12 @@ int main(int argc, char *argv[]) {
     c = 0;
     while(++c < argc) {
         if(argc -c > 1 && !strcmp(argv[c], "-s")) {
-            d64_write_file(&d64, argv[++c], FILETYPE_STANDARD, 1, interleave, verbose);
+            filename = argv[++c];
+            line = strtoul(argv[++c], NULL, 10);
+            if (line < 1 && !errno) {
+                fatal_message("can't link file '%s' to line nummer %d\n", filename, line);
+            }
+            d64_write_file(&d64, filename, FILETYPE_STANDARD, 1, interleave, verbose, line);
         }
     }
 
