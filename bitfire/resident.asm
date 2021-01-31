@@ -107,35 +107,44 @@ link_decomp_under_io
 bitfire_send_byte_
 		sta .filenum			;save value
 		lda #$ef
+		;tax
 		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
 .bit_loop
 		bcc +
-		adc #$1f			;on all other rounds carry is cleared here
+		;adc #$0f			;on all other rounds carry is cleared here
+		adc #$1f
 +
 		eor #$30			;flip bit 5 and toggle bite 4
 		sta $dd02
+		;and #$2f
 		and #$1f			;clear bit
 		pha				;slow down, this costs two extra bytes here, but saves 8 bytes on drive-side
-		pla
+		pla				;XXX TODO another 3 bytes would fir for slow down
 		ror <.filenum			;fetch next bit from filenumber and waste cycles
 		bne .bit_loop			;last bit?
+						;carry is set here, important for entering receive loop
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
 
+		;XXX TODO would need to swap bits here for easier receiving to have a reg free on otehr side
 ;bitfire_send_byte_
 ;		sta <.filenum
 ;		ldx #$08
+;		sec
 ;-
+;		ror <.filenum
 ;		lda $dd02
 ;		and #$1f
-;		lsr <.filenum
-;		bcs +
+;		bcc +
 ;		ora #$20
 ;+
-;		eor #$10
-;		pha
-;		pla
+;		eor #$30
+;		top
+;.last
+;		lda #$3f
 ;		sta $dd02
+;.entry
 ;		dex
+;		beq .last
 ;		bpl -
 .poll_end
 		rts

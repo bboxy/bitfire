@@ -12,7 +12,7 @@
 
 ;constants and config params
 .MEASURE_SECTOR_TIME	= 0
-.BITFIRE_BOGUS_READS	= 2
+.BITFIRE_BOGUS_READS	= 0;2
 .FORCE_LAST_BLOCK	= 1
 .STEPPING_SPEED		= $98
 .CHECKSUM_CONST1	= $05
@@ -249,13 +249,13 @@ ___			= 0
 
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
-;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
+;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555	;after 10
 ;              1                       ............   2                                      3                                   4             v      5           |-
-;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
+;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555	;after 8
 ;              1                       ............   2                              3                                   4             v      5           |-
-;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
+;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555	;misses after 6 cycles
 ;              1                       ............   2                      3                                   4             v      5           |-
-;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
+;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555		;misses bvs when delayed by 4 cycles
 ;              1                      .............   2              3                                   4             v      5           |-
 ; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the ende and then there's up to 5 cycles delay (branch + fallthrough
 
@@ -321,23 +321,24 @@ ___			= 0
 			tay
 			ldx #$3e			;XXX TODO $3f? and have only 4x4 afterwards? no asr needed?
 ;13
+			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given 
+			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop			;and use 2 bvs as safety zone? Would be pretty much save that it misses however, so need to find out
 			bvs .read_loop			;2 cycle jitter only
 			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
+							;bail out here on zone 0
+			;those loop runs will be reduced one  per speedzone
+.bvs_01			bvs .read_loop
+							;here on zone 1
+.bvs_02			bvs .read_loop
+							;zone 2
+.bvs_03			bvs .read_loop
+							;zone 3
+			;10, 8, 6, 4
+			;if we run out of this loop, we have timed out and better reread, maybe the disc spins too slow yet?
 			jmp .read_sector		;took too long, retry
-
-			;save here to make next read happen earlier :-( also reuse 7 somehow :-(
 ;29
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
@@ -627,9 +628,13 @@ ___			= 0
 			beq .bits
 			lax $1800
 			bmi .lock
+						;XXX TODO can waste anotehr 6 cycles here for spin down check, slower sending would be much appreciated
 			lsr
 			ror <.byte
+			;cpx #$04
+			;ror
 			bcc .bits
+			;sta <.byte
 
 			sty $1800		;set busy bit
 			lda <.byte
@@ -870,34 +875,51 @@ ___			= 0
 !if (.ms_back2 & $ff00) != (.ms_back3 & $ff00) { !error ".ms_back labels not in same page" }
 !if (.ms_back1 & $ff00) != (.ms_back3 & $ff00) { !error ".ms_back labels not in same page" }
 
-			sbc #$01		;carry still set depending on cpy #18
-
-			lsr			;shift to right position
-			ror
-			ror
-			lsr
+			sbc #$11		;carry still set depending on cpy #18
+			asl
+			sta .br0 + 1
+			asl			;shift to right position
+			asl
+			asl
+			asl
+			;XXX TODO, all other bits cleared, can use and + ora now?
 			ora #$0f		;preserve led, motor and stepper-bits
 			tax                     ;0xx01111
 			lda $1c00
 			ora #$60		;x11xxxxx new bitrate bits to be set
 			sax $1c00		;merge
+
+			;XXX TODO reset the bvs and set again according to bitrate -> tya and #$03 asl tay
+			;or make use of the top stuff below and set via A, repplace top by some branch? loop might be cheaper?
+
+			ldy #$a9		;restore 3 bvs
+			sty .bvs_01
+			sty .bvs_02
+			sty .bvs_03
+
+			ldy #$70
+.br0			bne *
+			sty .bvs_03
+			sty .bvs_02
+			sty .bvs_01
 			txa
 
 			ldy #$4c		;common values to set up for 1, 2, 3
 			ldx #>.gcr_40		;should be $02
 
 			and #$60
-			beq .bitrate_3		;a bit pity that this needs another bunch of branches :-( TODO
+			beq .bitrate_3		;a = $00		;a bit pity that this needs another bunch of branches :-( TODO
 			cmp #$40
-			beq .bitrate_1
-			bcc .bitrate_2
+			beq .bitrate_1		;a = $40
+			bcc .bitrate_2		;a = $20
+						;a = $60
 .bitrate_0
 			ldy #$ad
 			lda #$01
 			ldx #$1c
 			top
 .bitrate_1
-			lda #<.gcr_40
+			lda #<.gcr_40		;XXX TODO 0,3,6 -> derivate from bitrate? -> asl + self?
 			top
 .bitrate_2
 			lda #<.gcr_20

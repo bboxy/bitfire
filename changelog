@@ -82,5 +82,13 @@ v0.7
 idle, and add macros for that (bus_lock, bus_unlock $bank)
 - fix spin up handling of read dummy sectors (might have been skipped under
 some circumstances)
-- shrink size
-- save few bytes on some relocated packed files
+
+v1.0
+- add on the fly gcr-decoding and checksumming
+- 72 cycles transfer loop
+- use each sector to 100%, no zeropadded last blcoks of file \o/
+- standard files can be linked to certain lines of dir-art
+- dir-art now also sets blocksize, filetype and locked status of files
+- more sanity checks during disk read
+- loading of file number $ff now resets drive, $f0-$fe for requesting disc-sides
+- 63 dir-entries per dir-sector
