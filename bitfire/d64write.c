@@ -251,7 +251,7 @@ static int d64_display_bam(d64* d64) {
     return 1;
 }
 
-static int d64_update_direntry(d64* d64, char* name, int start_track, int start_sector, int detrack, int desector, int desectpos, int type, int blocks, int update_link_only) {
+static int d64_update_direntry(d64* d64, char* name, int start_track, int start_sector, int detrack, int desector, int desectpos, int type, int blocks, int locked, int update_link_only) {
     int name_len = 0;
     name_len = strlen(name);
 
@@ -260,9 +260,10 @@ static int d64_update_direntry(d64* d64, char* name, int start_track, int start_
     /* now write direntry-content  to sectbuf */
     d64->sectbuf[desectpos + D64_DTRACK]  = start_track;
     d64->sectbuf[desectpos + D64_DSECTOR] = start_sector;
-    d64->sectbuf[desectpos + D64_DTYPE]   = type;
-    d64->sectbuf[desectpos + D64_DTYPE] = d64->sectbuf[desectpos + D64_DTYPE] | 0x80;
     if (!update_link_only) {
+        d64->sectbuf[desectpos + D64_DTYPE]   = type;
+        d64->sectbuf[desectpos + D64_DTYPE] = d64->sectbuf[desectpos + D64_DTYPE] | 0x80;
+        if (locked) d64->sectbuf[desectpos + D64_DTYPE] = d64->sectbuf[desectpos + D64_DTYPE] | 0x40;
         /* add filename */
         if (name_len > 16) {
             fatal_message("name '%s' too long\n", name);
@@ -344,7 +345,7 @@ static int d64_readdir(d64* d64, dirent64* d) {
     return 1;
 }
 
-static int d64_create_direntry(d64* d64, char* name, int start_track, int start_sector, int filetype, int blocks, int link_to, int link_to_num) {
+static int d64_create_direntry(d64* d64, char* name, int start_track, int start_sector, int filetype, int blocks, int locked, int link_to, int link_to_num) {
     dirent64 d;
     int status;
     int line = 0;
@@ -394,7 +395,7 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
 
     /* ...and create it on disc */
     //ascii2petscii(name);
-    d64_update_direntry(d64, name, start_track, start_sector, d.d_detrack, d.d_desector, d.d_desectpos, filetype, blocks, link_to);
+    d64_update_direntry(d64, name, start_track, start_sector, d.d_detrack, d.d_desector, d.d_desectpos, filetype, blocks, locked, link_to);
     return 0;
 }
 
@@ -667,7 +668,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
 #endif
 
             ascii2petscii(pname);
-            d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size, link_to, link_to_num);
+            d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size, 0, link_to, link_to_num);
         }
     } else {
         if (d64_create_bitfire_direntry(d64, start_track, d64->sector_link, loadaddr, length, startpos, sectnum, verbose) != 0) {
@@ -718,6 +719,7 @@ void screen2petscii(char* data, int size) {
     }
 }
 
+//XXX TODO locked und Filetype
 void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector, int lines) {
     char art[41] = { 0 };
     char header[17] = { 0 };
@@ -726,6 +728,9 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
     int c, i, j;
     FILE* file;
     int head;
+    int filetype;
+    int locked;
+    int blocks;
 
     if(file = fopen(art_path, "rb+"), !file) {
         fatal_message("unable to open '%s'\n", art_path);
@@ -749,7 +754,29 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
             } else {
                 memcpy(filename, art + 6, 16);
                 screen2petscii(filename, 16);
-                d64_create_direntry(d64, filename, boot_track, boot_sector, FILETYPE_PRG, strtoul(art, NULL, 10), 0, 0);
+                blocks = strtoul(art, NULL, 10);
+                locked = art[27] == 0x3c;
+                switch (art[24]) {
+                    case 0x13:
+                        filetype = FILETYPE_SEQ;
+                    break;
+                    case 0x10:
+                        filetype = FILETYPE_PRG;
+                    break;
+                    case 0x04:
+                        filetype = FILETYPE_DEL;
+                    break;
+                    case 0x12:
+                        filetype = FILETYPE_REL;
+                    break;
+                    case 0x15:
+                        filetype = FILETYPE_USR;
+                    break;
+                    default:
+                        filetype = FILETYPE_DEL;
+                    break;
+                }
+                d64_create_direntry(d64, filename, boot_track, boot_sector, filetype, blocks, locked, 0, 0);
                 lines--;
             }
             j = 0;
