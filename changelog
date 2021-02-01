@@ -84,6 +84,8 @@ idle, and add macros for that (bus_lock, bus_unlock $bank)
 some circumstances)
 
 v1.0
+- rewrite of many parts
+- reduced dir-entries to 4 byte, only two dir-sectors are needed max
 - add on the fly gcr-decoding and checksumming
 - 72 cycles transfer loop
 - use each sector to 100%, no zeropadded last blcoks of file \o/
