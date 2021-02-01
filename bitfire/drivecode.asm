@@ -177,7 +177,7 @@ ___			= 0
 .sector			= .zp_start + $59		;DS
 .temp			= .zp_start + $5a
 ;.file_descriptor	= .zp_start + $60
-;.load_addr		= .file_descriptor + 0		;2 bytes	-> make this overlap with .preamble? saves up storing? but ned to change layout first in d64write? XXX TODO
+;.load_addr		= .file_descriptor + 0		;2 bytes
 .file_index		= .zp_start + $68
 ;.file_size		= .file_descriptor + 2		;2 bytes
 ;.dir_first_block_pos	= .zp_start + $68		;2 bytes
@@ -274,12 +274,11 @@ ___			= 0
 ;29
 
 .chksum			eor #$00
-			eor $0101,x			;can be omitted then XXX TODO can be moved to .fives to eor things there, eor after each lda/adc? then it would work?
+			eor $0101,x
 			eor $0102,x
-.gcr_entry						;XXX TODO would be nice if loaded earlier
+.gcr_entry
 			sta <.chksum2 + 1
 ;13
-							;XXX TODO ldx $1c01, 3 cycles earlier, but costs 2 cycles on top later onearlier
 			lda $1c01			;44445555	second read
 			ldx #$0f			;ldx + sax can be moved after lda + eor?
 			sax <.fives + 1
@@ -290,10 +289,10 @@ ___			= 0
 			ldx #$03			;save another 2 cycles and use $0f
 .gcr_slow1		lda $1c01			;56666677		third read	;slow down by 6,12,18
 			sax <.sevens + 1		;------77		;encode first 7 with sixes and by that shrink 6table? and add it with sevens?
-			asr #$fc			;-566666-		;XXX TODO value $fc here, and later on sbx, could be reused? coudl also use -56666-- table
+			asr #$fc			;-566666-
 			tax
 
-.threes			lda <.tab00333330_hi		;ZP! XXX TODO This block can also moved above last lda $1c01? but read 3 skews then
+.threes			lda <.tab00333330_hi		;ZP!
 			adc .tab44444000_lo,y
 			pha
 .chksum2		eor #$00
@@ -310,16 +309,16 @@ ___			= 0
 			tay
 							;XXX TODO bit 2 can be used in original form
 			lda .tab00088888_lo,x		;XXX TODO could combine two tables (low + highnibbles) and separate here by and? but must be all other tables that are combined
-			ldx #$07			;if we could reuse $07 here too? not as much waste :-(
+			ldx #$07
 .sevens			adc .tab77700077_hi,y		;
 			pha
 ;21
 			lda $1c01			;11111222	fifth read
 			sax <.twos + 1
-			and #$f8			;could shift with asr and compress ones table?
-							;XXX TODO with shift, bit 2 of twos is in carry and coudl be added as +0 +4?
+			and #$f8			;XXX TODO could shift with asr and compress ones table?
+							;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 			tay
-			ldx #$3e			;XXX TODO $3f? and have only 4x4 afterwards? no asr needed?
+			ldx #$3e
 ;13
 			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given
 			bvs .read_loop
@@ -345,8 +344,6 @@ ___			= 0
 			jmp .read_sector_back
 			jmp .read_header_back
 
-			;XXX reuse X reg and bloat tab77 -> yet too expensive
-
 !ifdef .second_pass {
 	!warn $0100 - *, " bytes remaining in zeropage."
 }
@@ -364,8 +361,7 @@ ___			= 0
 .tab02200222_lo
 .gcr_00
 			lda ($00,x)	;10
-			nop		;XXX TODO could do a nop zpx ($14) that takes 4 cycles
-			;nop		;XXX TODO remove a nop, somehow shoudl be enough
+			nop
 .gcr_20
 			lda ($00,x)	;8
 			nop
@@ -392,7 +388,6 @@ ___			= 0
 			dex
 			bpl -
 			bmi .start_send
-							;XXX TODO use the two remaining bytes here
 .tab2_gap1
 			* = .tab02200222_lo + $22
 !ifdef .second_pass {
@@ -405,8 +400,6 @@ ___			= 0
 			; FRAGMENTS FROM SEEK CODE TO FILL UP GAPS
 			;
 			;----------------------------------------------------------------------------------------------------
-
-			;XXX TODO move seek together and place chunks of set bitrate here?
 .seek_
 			sec
 			sbc <.track		;how many tracks to go?
@@ -446,7 +439,6 @@ ___			= 0
 			bit $1c09
 			bmi *-3
 
-			;XXX TODO schwaulstepping
 			;jsr firststep -> sets how many steps still need to be taken
 			;send_data
 			;wait until counter underflows or already done
@@ -631,13 +623,9 @@ ___			= 0
 			cpx #$04
 			ror
 						;XXX TODO can waste anotehr 6 cycles here for spin down check, slower sending would be much appreciated
-			;cpx #$04
-			;ror
 			bcc .bits
-			;sta <.byte
 
 			sta <.byte
-			sta $07e0
 
 			sty $1800		;set busy bit
 			lda <.byte
