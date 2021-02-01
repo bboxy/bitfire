@@ -321,7 +321,7 @@ ___			= 0
 			tay
 			ldx #$3e			;XXX TODO $3f? and have only 4x4 afterwards? no asr needed?
 ;13
-			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given 
+			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
@@ -619,22 +619,24 @@ ___			= 0
 ;			bcc .bit1		;more bits to fetch?
 ;			sty $1800		;set busy bit
 ;
-			sta <.byte
 .lock
 			ldx $1800
 			bmi .lock
 .bits
 			cpx $1800
 			beq .bits
-			lax $1800
+			ldx $1800
 			bmi .lock
+			cpx #$04
+			ror
 						;XXX TODO can waste anotehr 6 cycles here for spin down check, slower sending would be much appreciated
-			lsr
-			ror <.byte
 			;cpx #$04
 			;ror
 			bcc .bits
 			;sta <.byte
+
+			sta <.byte
+			sta $07e0
 
 			sty $1800		;set busy bit
 			lda <.byte

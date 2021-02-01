@@ -104,48 +104,48 @@ link_decomp_under_io
 		;XXX TODO filenum as ZP addr could be saved for 1 byte extra code here
 		;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 
-bitfire_send_byte_
-		sta .filenum			;save value
-		lda #$ef
-		;tax
-		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
-.bit_loop
-		bcc +
-		;adc #$0f			;on all other rounds carry is cleared here
-		adc #$1f
-+
-		eor #$30			;flip bit 5 and toggle bite 4
-		sta $dd02
-		;and #$2f
-		and #$1f			;clear bit
-		pha				;slow down, this costs two extra bytes here, but saves 8 bytes on drive-side
-		pla				;XXX TODO another 3 bytes would fir for slow down
-		ror <.filenum			;fetch next bit from filenumber and waste cycles
-		bne .bit_loop			;last bit?
+;bitfire_send_byte_
+;		sta .filenum			;save value
+;		;lda #$ff			;but without eor maybe different?
+;		lda #$ef
+;		;tax
+;		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
+;.bit_loop
+;		bcc +
+;		;ieor also preserves carry, and no need to to the adc and overflow magic to keep it, startvalue would be $2f then? but adc woudl be more charming as we could start with $ff and do a tax
+;		;but eor sucks, as ones get shifted into filename then later on
+;		;adc #$0f			;on all other rounds carry is cleared here
+;		adc #$1f
+;+
+;		eor #$30			;flip bit 5 and toggle bite 4
+;		sta $dd02
+;		;and #$2f
+;		and #$1f			;clear bit
+;		pha				;slow down, this costs two extra bytes here, but saves 8 bytes on drive-side
+;		pla				;XXX TODO another 3 bytes would fir for slow down
+;		ror <.filenum			;fetch next bit from filenumber and waste cycles
+;		bne .bit_loop			;last bit?
 						;carry is set here, important for entering receive loop
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
 
-		;XXX TODO would need to swap bits here for easier receiving to have a reg free on otehr side
-;bitfire_send_byte_
-;		sta <.filenum
-;		ldx #$08
-;		sec
-;-
-;		ror <.filenum
-;		lda $dd02
-;		and #$1f
-;		bcc +
-;		ora #$20
-;+
-;		eor #$30
-;		top
-;.last
-;		lda #$3f
-;		sta $dd02
-;.entry
-;		dex
-;		beq .last
-;		bpl -
+		;try again to swap bits, but do no eor #$30 but eor $20 here only, rest of the eor should happen on driveside, so we end with a sane $dd02 value taht is good for the adc $dd00?
+		;
+
+bitfire_send_byte_
+		;one byte longer, but saves us teh ldx #$ff later on on depacking
+		sta <.filenum
+		ldx #$08			;do 9 runs to end up wit ha sane value (1f) and waste a bit of time after filename is sent to give floppy time to enter busy mode
+		lda #$2f
+-
+		lsr <.filenum
+		bcs +
+		ora #$10
++
+		eor #$20
+		sta $dd02
+		and #$2f
+		dex
+		bpl -
 .poll_end
 		rts
 
@@ -339,7 +339,7 @@ bitfire_loadcomp_
 		jsr bitfire_send_byte_		;returns now with x = $ff
 		lda #$08			;enable pollblock/fetch_sector calls (php)
 		ldy #.lz_poll-.lz_skip_poll-2	;currently ldy #$0b
-		ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
+		;ldx #$ff			;force to load a new sector upon first read, first read is a bogus read and will be stored on lz_bits, second read is then the really needed data
 .loadcompd_entry
 		sta .lz_skip_fetch
 		sty .lz_skip_poll + 1
