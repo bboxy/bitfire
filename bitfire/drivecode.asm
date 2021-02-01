@@ -631,7 +631,6 @@ ___			= 0
 			lda <.byte
 
 
-			;XXX TODO do this once and check for timer, turn of motor in case it elapsed, else let it be turned on and save on spin up time
 			;----------------------------------------------------------------------------------------------------
 			;
 			; LOAD FILE / EXECUTE COMMAND, $00..$7f, $ef, $f0..$fe, $ff
@@ -734,7 +733,7 @@ ___			= 0
 			adc .dir_file_size,x
 			sta <.blocks + 0
 
-			;XXX TODO on very huge files, this could fail, as we overflow!!! but then again, fils are max $d000 in size due to i/o limitation?
+			;XXX TODO on very huge files, this could fail, as we overflow!!! but then again, files are max $d000 in size due to i/o limitation?
 			lda <.blocks + 1
 			adc .dir_file_size + 1,x
 			sta <.blocks + 1
@@ -802,7 +801,7 @@ ___			= 0
 			adc #BITFIRE_CONFIG_INTERLEAVE
 			cmp <.max_sectors
 			bcc +
-			;next revolutiona XXX nterleave 4 that is, other interleaves to be done
+								;next revolutiona
 !if BITFIRE_CONFIG_INTERLEAVE = 4 {
 			adc #$00				;increase
 			and #$03				;modulo 4
@@ -855,7 +854,7 @@ ___			= 0
 			adc #0			;a is 12, 11, 10 ...
 			eor #3			;a is 11, 12, 13 now
 						;XXX TODO this is the value that coul be directly fed into the shifting below :-(
-			cpy #18			;XXX TODO do a tay here and a tya later on, saves lda <.max_sectos and sbc #1
+			cpy #18
 			bcs +			;N = 0
 			adc #2			;or 15 if < track 18 -> N = 0
 +
@@ -873,15 +872,12 @@ ___			= 0
 			asl
 			asl
 			asl
-			;XXX TODO, all other bits cleared, can use and + ora now?
+						;XXX TODO, all other bits cleared, can use and + ora now?
 			ora #$0f		;preserve led, motor and stepper-bits
 			tax                     ;0xx01111
 			lda $1c00
 			ora #$60		;x11xxxxx new bitrate bits to be set
 			sax $1c00		;merge
-
-			;XXX TODO reset the bvs and set again according to bitrate -> tya and #$03 asl tay
-			;or make use of the top stuff below and set via A, repplace top by some branch? loop might be cheaper?
 
 			ldy #$a9		;restore 3 bvs
 			sty .bvs_01
@@ -902,6 +898,7 @@ ___			= 0
 			beq .bitrate_3		;a = $00		;a bit pity that this needs another bunch of branches :-( TODO
 			cmp #$40
 			beq .bitrate_1		;a = $40
+			lda #<.gcr_20		;03
 			bcc .bitrate_2		;a = $20
 						;a = $60
 .bitrate_0
@@ -910,13 +907,12 @@ ___			= 0
 			ldx #$1c
 			top
 .bitrate_1
-			lda #<.gcr_40		;XXX TODO 0,3,6 -> derivate from bitrate? -> asl + self?
-			top
+			lda #<.gcr_40		;06	XXX TODO 0,3,6 -> derivate from bitrate? -> asl + self?
+			;top
 .bitrate_2
-			lda #<.gcr_20
-			top
+			;top
 .bitrate_3
-			lda #<.gcr_00
+			;lda #<.gcr_00		;00
 
 			sty .gcr_slow1 + 0
 			sta .gcr_slow1 + 1
