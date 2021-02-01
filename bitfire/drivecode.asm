@@ -380,6 +380,7 @@ ___			= 0
 			;
 			;----------------------------------------------------------------------------------------------------
 .scramble_preamble
+			sty <.preamble_data + 0		;ack/status to set load addr, signal block ready
 -
 			lda <.preamble_data,x		;smaller this way, as lda $zp,x can be used now
 			and #$0f
@@ -1264,8 +1265,7 @@ ___			= 0
 } else {
 .not_first
 }
-			sty <.preamble_data + 0		;ack/status to set load addr, signal block ready
-			;XXX TODO could set barrier one earlier, but would need to set x in depacker :-(
+			;sty <.preamble_data + 0	;moved to .scramble_preamble to save bytes
 
 			ldx #$03 + BITFIRE_DECOMP	;with or without barrier, depending on stand-alone loader or not
 			stx .pre_len + 1		;set preamble size
@@ -1286,7 +1286,6 @@ ___			= 0
 ;			tsx
 ;			bne -
 
-;XXX TODO place side infotag elsewhere, so that 64 entry per page are possible?
 
 ;tables with possible offsets
 .tab11111000_hi		= .tables + $00
@@ -1351,7 +1350,7 @@ ___			= 0
 ;                        !byte $70, ___, $0d, $05, $0f, $00, $09, $01, $60, $06, $0c, $04, $07, $02, $08, ___
 ;                        !byte ___, $60, $40, $c0, ___, ___, ___, ___, $b0, $0e, $0f, $07, $0a, $0a, $0b, $03
 ;                        !byte $30, ___, $0d, $05, $0b, $00, $09, $01, $20, $06, $0c, $04, $03, $02, $08, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___			;XXX TODO place ser2bin here and use free space for dir_sect_load?
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 ;                        !byte $50, ___, ___, ___, $0d, ___, ___, ___, $40, ___, ___, ___, $05, ___, ___, ___
 ;                        !byte ___, $b0, $80, $a0, ___, ___, ___, ___, $80, $0e, $0f, $07, $00, $0a, $0b, $03
 ;                        !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08, ___
@@ -1359,7 +1358,6 @@ ___			= 0
 ;                        !byte $d0, ___, $0d, $05, $0c, $00, $09, $01, $c0, $06, $0c, $04, $04, $02, $08, ___
 ;                        !byte ___, $20, $00, ___, ___, ___, ___, ___, $a0, $0e, $0f, $07, $02, $0a, $0b, $03
 ;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
-			;XXX TODO fill all gaps with junk
 }
 
 .drivecode_end
@@ -1369,7 +1367,6 @@ ___			= 0
 
 ;schnellerer xfer
 ;jmp ($1800) möglich?
-;XXX TODO mapping of last bits can also be directly added without lookup?! \o/
 
 ;if in carry: rol asl asl or ror lsr if $40?
 ;and #$04 or and #$40? would be bit 6
@@ -1377,15 +1374,6 @@ ___			= 0
 ;XXX TODO merge high and lownibbles in one table and separate by and #$0f, possible if we save data due to that and also cycles
 
 ;11111000 table fits into zp if compressed with asr #$f8, preamble then starts @ $89, zero bytes free then, but fits
-;21:49 <Krill> ah, das hab ich mit dem fadeout der led gekoppelt
-;21:49 <Krill> aber sanity checks, da gibt's mindestens noch sektor im richtigen bereich für die spur
-;21:54 <Krill> und ID wird auch gecheckt
-;22:07 <faker^OXY> gut, das kann ich noch spendieren
-;22:08 <faker^OXY> Mein Problem ist momentan eher aus der loop dann shcnell genug rauszukommen wenn ein neuer filename kommt, ich fürchte ich muss da nen echten Handshake einbauen, das kostet mich bytes auf c64-Seite :-(
-;22:12 <Krill> hmm, da gibt's keine toleranz?
-;22:13 <Krill> ich nehm auch noch so viele bits wie möglich nach der block-checksumme mit, die endet ja auf nem halben nibble, aber danach kommen garantieret 1010 (von der GCR-null)
-;22:13 <Krill> -e
-
 
 ;XXX TODO
 ;decode header_type too and against value -> full decode with last two bits!
