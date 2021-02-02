@@ -95,21 +95,19 @@
 			bcc -
 		}
 
-		!macro clear_frame_count {
+		!macro setup_sync .frames {
 			lda #$00
-			sta link_frame_count + 0
+			sta link_frame_count + 0	;avoid that the counter wraps worstcase, as we can't write atomic
+			lda #<($8000 - .frames)
+			sta link_frame_count + 0	;now setup counter
+			lda #>($8000 - .frames)
 			sta link_frame_count + 1
 		}
 
-		!macro wait_frame_count .cnt {
--
-			lda link_frame_count+1
-			cmp #>.cnt
-			bcc -
--
-			lda link_frame_count+0
-			cmp #<.cnt
-			bcc -
+		!macro sync {
+.wait
+			lda link_frame_count + 1	;Counter expired when $8000 is reached
+			bpl .wait
 		}
 
 		!macro bus_lock {

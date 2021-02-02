@@ -265,3 +265,16 @@ Dirart
 ------
 
 These are the positions on screen where the dirart is expected, it looks simply like a normal dir-listing, in doubt, there is a exampledir.bin and a .png to visualize that.
+
+Synching to music
+-----------------
+
+As loading times differ from floppy to floppy, loading can introduce timing jitter in a demo that is difficult to handle when music has to happen on spot with a certain effect.
+To make the parts of a demo happen always at the same time, there are a few possibilities to cover that.
+The framework gives a frame-counter and macros to cover oading with a timer that elapses some time after loading has finished, don't choose values too tight if doing so:
+
++setup_sync $180		;setup timer to $180 frames
+jsr bitfire_loadnext_compd_	;load
++sync				;wait for timer to elapse -> so this happens $180 frames after the setup
+
+Other possibilities are to use syncpoints in SIDs and sync to those syncpoints. There's a syncpoint.inc included to have a single fiel to edit with all framecounts, so that the timings are not scattered all over your project.
