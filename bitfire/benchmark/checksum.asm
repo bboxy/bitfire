@@ -4,7 +4,7 @@
 RAW = 1
 CHECKSUM = 1
 REQDISC = 1
-;BUSLOCK = 1
+BUSLOCK = 1
 
 num_files	= $1c
 ;num_files	= $12
@@ -166,8 +166,7 @@ numb		lda #$00		;file number
 		sta $d800,x
 
 !ifdef BUSLOCK {
-		lda #$c7		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
-		sta $dd02
+		+bus_lock		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
 
 		nop
 		nop
@@ -184,11 +183,7 @@ numb		lda #$00		;file number
 		nop
 		nop
 
-		lda #$c3
-		sta $dd00		;set bits
-
-		lda #$3f		;unlock bus
-		sta $dd02
+		+bus_unlock 3
 }
 		pla
 !ifdef RAW {
@@ -317,7 +312,9 @@ reset_drv
 		;jsr bitfire_reset_drive_
 		jmp *
 req_disc
-!src "../request_disc.asm"
+		+request_disk 0
+		+wait_floppy_idle
+		rts
 
 clear
 		lda #$10
