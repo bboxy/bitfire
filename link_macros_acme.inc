@@ -111,14 +111,14 @@
 		}
 
 		!macro bus_lock {
-			lda #$c7
+			lda #$37
 			sta $dd02
 		}
 
 		!macro bus_unlock .bank {
 			lda #(.bank & 3) | $c0
-			sta $dd00
-			lda #$3f
+			sta $dd00			;setup $dd00 first
+			lda #$3f			;now release atn after all other lines are settled
 			sta $dd02
 		}
 

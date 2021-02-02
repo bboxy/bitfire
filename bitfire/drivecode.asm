@@ -611,11 +611,13 @@ ___			= 0
 ;			bcc .bit1		;more bits to fetch?
 ;			sty $1800		;set busy bit
 ;
-.lock
 			lda #.IDLE | $80	;expect a whole new byte
 			sta $1800
+.lock
 			ldx $1800
 			bmi *-3
+			lda #.IDLE | $80	;XXX TODO can maybe removed, need to test on real hardware
+			ldx $1800		;debounce!!! or we will fail on real hardware :-(
 .bits
 			cpx $1800
 			beq .bits

@@ -179,6 +179,14 @@ numb		lda #$00		;file number
 		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
 		dey
 		bne -
+		ldy #$00
+-
+		nop
+		nop
+		nop
+		inc $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
+		dey
+		bne -
 
 		nop
 		nop
