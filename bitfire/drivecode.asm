@@ -2,6 +2,7 @@
 ; Much <3 goes to Krill for answering all the questions, giving very valueable hints, chats, ideas!!!
 ; Talking about bitorders for serial transfer, and sanity checks helped a lot!
 ; Also Sparkle from Sparte is a good source of inspiration <3
+; Many thanks go out to THCM, Dano and doomed for all the testing <3
 ;--------------------------------------------------------------------------------------------------------------------------
 
 !src "config.inc"
@@ -590,8 +591,6 @@ ___			= 0
 .get_byte
 			ldy #.BUSY		;enough time for signal to settle
 .get_byte_
-			lda #.IDLE | $80	;expect a whole new byte
-			sta $1800
 ;.lock
 ;			ldx $1800		;still locked?
 ;			bmi .lock
@@ -613,8 +612,10 @@ ___			= 0
 ;			sty $1800		;set busy bit
 ;
 .lock
+			lda #.IDLE | $80	;expect a whole new byte
+			sta $1800
 			ldx $1800
-			bmi .lock
+			bmi *-3
 .bits
 			cpx $1800
 			beq .bits
