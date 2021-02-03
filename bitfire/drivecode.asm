@@ -1,7 +1,7 @@
 ;--------------------------------------------------------------------------------------------------------------------------
 ; Much <3 goes to Krill for answering all the questions, giving very valueable hints, chats, ideas!!!
 ; Talking about bitorders for serial transfer, and sanity checks helped a lot!
-; Also Sparkle from Sparte is a good source of inspiration <3
+; Also Sparkle from Sparta is a good source of inspiration <3
 ; Many thanks go out to THCM, Dano and doomed for all the testing <3
 ;--------------------------------------------------------------------------------------------------------------------------
 
@@ -558,7 +558,8 @@ ___			= 0
 			;carry still set/cleared from previous check
 			lax <.filenum
 			cmp #BITFIRE_REQ_DISC
-			bcc .load_file_
+			bcs *+5
+			jmp .load_file_		;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
 
 			eor .dir_diskside	;compare side info
 			bne .turn_disc		;still wrong side
@@ -591,48 +592,32 @@ ___			= 0
 .get_byte
 			ldy #.BUSY		;enough time for signal to settle
 .get_byte_
-;.lock
-;			ldx $1800		;still locked?
-;			bmi .lock
-;.bit1
-;			cpx $1800		;wait for transition
-;			beq .bit1
-;			ldx $1800		;reread register
-;			bmi .lock		;is the bus locked via ATN? if so, wait
-;			cpx #$05		;nope, interpret bit
-;			ror			;and shift in
-;.bit2
-;			cpx $1800		;wait for next transition
-;			beq .bit2
-;			ldx $1800		;reread register
-;			cpx #$01		;nope, interpret bit
-;			ror			;and shift in
-;
-;			bcc .bit1		;more bits to fetch?
-;			sty $1800		;set busy bit
-;
 			lda #.IDLE | $80	;expect a whole new byte
 			sta $1800
-.lock
-			ldx $1800
-			bmi *-3
-			lda #.IDLE | $80	;XXX TODO can maybe removed, need to test on real hardware
-			ldx $1800		;debounce!!! or we will fail on real hardware :-(
+			ldx $1800		;and also for clk and data to drop
+			bne *-3
 .bits
 			cpx $1800
 			beq .bits
 			ldx $1800
-			bmi .lock
+			bmi .wait_unlock	;XXX TODO would be enough?
 			cpx #$04
 			ror
 						;XXX TODO can waste anotehr 6 cycles here for spin down check, slower sending would be much appreciated
 			bcc .bits
-
+			bcs +
+			;cmp #BITFIRE_BUSLOCK	;we are told to get into lock mode and wait until atn drops
+			;bne +
+.wait_lock
+			ldx $1800
+			bpl *-3			;ATN not raised yet, wait
+.wait_unlock
+			ldx $1800		;wait for ATN lo
+			bmi *-3
+			bpl .get_byte_
++
 			sta <.byte
-
 			sty $1800		;set busy bit
-			lda <.byte
-
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1287,11 +1272,12 @@ ___			= 0
 }
 
 !ifdef .second_pass {
-	!warn .table_start - *, " bytes remaining for drivecode."
+	!warn .junk_start - *, " bytes remaining for drivecode."
 }
 
 
 			* = .tables
+.junk_start
 			;for now fill up gap until table start with junk, adapt if code grows up to here
 			!byte $ff, $fe, $fd, $fc, $fb, $fa, $f9, $f8, $f7, $f6, $f5, $f4, $f3, $f2, $f1, $f0
                         !byte $ef, $ee, $ed, $ec, $eb, $ea, $e9, $e8, $e7, $e6, $e5, $e4, $e3, $e2, $e1, $e0
@@ -1352,8 +1338,8 @@ ___			= 0
 
 .second_pass
 
-;schnellerer xfer
-;jmp ($1800) möglich?
+;faster xfer
+;jmp ($1800) possible?
 
 ;if in carry: rol asl asl or ror lsr if $40?
 ;and #$04 or and #$40? would be bit 6
@@ -1362,24 +1348,5 @@ ___			= 0
 
 ;11111000 table fits into zp if compressed with asr #$f8, preamble then starts @ $89, zero bytes free then, but fits
 
-;XXX TODO
-;decode header_type too and against value -> full decode with last two bits!
-
-
-;spin_up -> set up bogus_read_counter? -> count down bogus reads and read_sector_ if != 0 -> check is always there but only active if motor was enabled again 
-
-;on motor on:
-;lda #.BITFIRE_BOGUS_READS
-;sta <.bogus_reads
-
-
-;lda <.bogus_reads
-;beq +
-;dec <.bogus_reads
-;bne .read_sector_
-
-
-;wait x syncs, or measure any, maybe better? measue via x/inx?
 ;halfstep, send_data, timer elapsed? else wait rest, halfstep, wait
-;spinup, start with slowest timing and adapt to real timing on first success?
 ;XXX TODO

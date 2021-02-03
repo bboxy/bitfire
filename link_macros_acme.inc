@@ -111,14 +111,16 @@
 		}
 
 		!macro bus_lock {
-			lda #$37
+			;lda #BITFIRE_BUSLOCK
+			;jsr bitfire_send_byte_
+			lda #$37			;set ATN = hi
 			sta $dd02
 		}
 
 		!macro bus_unlock .bank {
 			lda #(.bank & 3) | $c0
 			sta $dd00			;setup $dd00 first
-			lda #$3f			;now release atn after all other lines are settled
+			lda #$3f			;now release atn
 			sta $dd02
 		}
 
