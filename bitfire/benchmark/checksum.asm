@@ -170,13 +170,32 @@ numb		lda #$00		;file number
 
 		nop
 		nop
+		nop
+		nop
 
 		ldy #$00
 -
 		nop
 		nop
 		nop
-		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		inc $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
 		dey
 		bne -
 ;		ldy #$00
@@ -190,6 +209,10 @@ numb		lda #$00		;file number
 
 		nop
 		nop
+		nop
+		nop
+
+		+bus_unlock 3
 
 		+bus_unlock 3
 }
@@ -216,7 +239,8 @@ numb		lda #$00		;file number
 		inc numb+1
 		lda numb+1
 		cmp #num_files
-		bne next
+		beq *+5
+		jmp next
 
 		jsr display
 		jsr print_count

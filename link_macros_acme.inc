@@ -1,3 +1,15 @@
+		!macro wait_floppy_busy {
+			;wait until floppy is busy
+			bit $dd00
+			bmi *-3
+		}
+
+		!macro wait_floppy_idle {
+			;wait until floppy is idle again
+			bit $dd00
+			bpl *-3
+		}
+
 		;load next file as a raw file (do not decomp on the fly) and jump to .addr
 		!macro link_load_next_raw_jmp .addr {
 			lda #>(.addr-1)
@@ -73,18 +85,13 @@
 			lda #.num + $f0
 			jsr bitfire_send_byte_
 
-			bit $dd00
-			bmi *-3
-
 			;restore $dd02 (is maybe $1f after send_byte)
+			;XXX TODO this is a bit dirty, all lines should be set to low and get_byte should wait for a sane status at end of transfer (1800 = 0)
+			;but get_loop on drive checks for a clear bus anyway before receiving?
 			lda #$3f
 			sta $dd02
-		}
 
-		!macro wait_floppy_idle {
-			;wait until floppy is idle again
-			bit $dd00
-			bpl *-3
+			+wait_floppy_busy
 		}
 
 		;wait for given frame counter value
@@ -111,17 +118,25 @@
 		}
 
 		!macro bus_lock {
-			;lda #BITFIRE_BUSLOCK
-			;jsr bitfire_send_byte_
-			lda #$37			;set ATN = hi
+			;XXX TODO ATTENTION /!\ better don't touch ever again
+			lda #$37			;set ATN
 			sta $dd02
 		}
 
 		!macro bus_unlock .bank {
-			lda #(.bank & 3) | $c0
-			sta $dd00			;setup $dd00 first
-			lda #$3f			;now release atn
+			;XXX TODO ATTENTION /!\ better don't touch ever again
+			;this looks ugly, sorry for this, but it is yet the only way it works on THCM's sx64, the trailing stx $dd00 is needed :-(
+			ldx #(.bank & 3)
+			stx $dd00
+			lda #$3f			;release ATN
 			sta $dd02
+			stx $dd00
+
+			;give some time for things to settle, no idea how much time is needed, leaving this out makes sx64 also fail
+			ldy #$00
+-
+			dey
+			bne -
 		}
 
 		!macro set_depack_pointers .addr {
