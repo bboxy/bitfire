@@ -75,13 +75,20 @@ l
 		.endmacro
 
 		.macro bus_lock
-			lda #$c7
+			lda #$37
 			sta $dd02
 		.endmacro
 
 		.macro bus_unlock bank
-			lda #(bank & 3) | $c0
-			sta $dd00
+                .local l
+			ldx #(bank & 3)
+			stx $dd00
 			lda #$3f
 			sta $dd02
+			stx $dd00
+
+			ldy #$00
+l
+			dey
+			bne l
 		.endmacro

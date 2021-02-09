@@ -89,15 +89,21 @@
 		}
 
 		macro bus_lock {
-			lda #$c7
+			lda #$37
 			sta $dd02
 		}
 
 		macro bus_unlock bank:8 {
-			lda #(bank & 3) | $c0
-			sta $dd00
+			ldx #(bank & 3)
+			stx $dd00
 			lda #$3f
 			sta $dd02
+			stx $dd00
+
+			ldy #$00
+.w:
+			dey
+			bne .w
 		}
 
 ;endif

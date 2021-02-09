@@ -86,15 +86,21 @@ l2		lda link_frame_count+0
 		.endm
 
 bus_lock	.macro
-		lda #$c7
+		lda #$37
 		sta $dd02
 		.endm
 
 bus_unlock	.macro
-		lda #(\1 & 3) | $c0
-		sta $dd00
+		ldx #(\1 & 3)
+		stx $dd00
 		lda #$3f
 		sta $dd02
+		stx $dd00
+
+		ldy #$00
+l3
+		dey
+		bne l3
 		.endm
 
 set_depack_pointers .macro

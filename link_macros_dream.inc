@@ -104,17 +104,24 @@ sau:
 
 		#macro bus_lock
 		{
-			lda #$c7
+			lda #$37
 			sta $dd02
 		}
 
 		#macro bus_unlock(bank)
 		{
-			lda #({bank} & 3) | $c0
-			sta $dd00
+			ldx #({bank} & 3) | $c0
+			stx $dd00
 			lda #$3f
 			sta $dd02
+			stx $dd00
+
+			ldy #$00
+l:
+			dey
+			bne l
 		}
+
 		#macro start_music_nmi()
 		{
 .(
