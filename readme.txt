@@ -231,19 +231,7 @@ and #$fc
 ora #$03
 sta $dd00
 
-If you want to write arbitrary values to $dd00 this can be done when idle, but one needs to lock the bus with the bus_lock macro first, and before loading again unlock it with bus_unlock $bank, or simply use the following code:
-
-lock:
-lda #$c7
-sta $dd02
-
-unlock:
-lda #$c3
-sta $dd00
-lda #$3f
-sta $dd02
-
-It turned out, that on a SX64 problems can occur during an active buslock, so it is a good idea to wait a few cycles after the bus_lock is enabled before you bang $dd00 hard. Also when $dd00 is banged with an RMW command like inc $dd00, things may fail. It seems like the floppy then recognizes/ommits transitions on the bus, though it should be locked under ATN. Weired but reproducible as soon as for e.g. inc $dd00 is used in a loop. It might have to do with the missing clamping diodes on the IEC bus in a SX64. The behaviour could still need some further investigation.
+If you want to write arbitrary values to $dd00 this can be done when idle, but one needs to lock the bus with the bus_lock macro first, and before loading again unlock it with bus_unlock $bank.
 
 What it can't
 -------------

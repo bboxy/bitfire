@@ -206,8 +206,8 @@ bitfire_loadraw_
 		ldx #$3f
 		ora $dd00 - $3f,x
 		stx $dd02
-		lsr
-		lsr
+		lsr				;%xxxxx111
+		lsr				;%xxxxxx11 1
 		dey
 		beq .get_en_exit
 +
@@ -215,7 +215,7 @@ bitfire_loadraw_
 		ora $dd00
 		stx $dd02
 		ror				;c = 1
-		ror				;c = 1 a = $cx
+		ror				;c = 1 a = %11xxxxxx
 		ldx #$3f
 		sax .nibble + 1
 		and $dd00
@@ -226,11 +226,76 @@ bitfire_loadraw_
 
 .get_entry
 		lax <BITFIRE_LAX_ADDR
-		adc $dd00			;a is anything between 38 and 3b after add, so bit 4 is always set, bits 6 and 7 are given by floppy
+		adc $dd00			;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
+						;%xx111xxx
 .finish		stx $dd02			;carry is cleared now, we can exit here and do our rts
-		lsr
-		lsr
+		lsr				;%xxx111xx
+		lsr				;%xxxx111x
 		bne .get_loop			;BRA, a is anything between 0e and 3e
+
+		;33 and 3b
+		;%bb0001xx			lda $dd00
+		;%0bb0001x			lsr
+		;%00bb0000			asr #$fc
+		;%bbbb01xx			adc $dd00
+		;%0bbbb01x			lsr
+		;%00bbbb01			lsr
+		;%bbbbbexx			eor $dd00
+		;%0bbbbbex			lsr
+		;%00bbbbbe			lsr
+		;%11bbbbbb			eor #$c1
+		;				sax .nibble + 1
+		;ccxxxxxxx			and $dd00
+		;				ora #$00
+
+;.get_one_byte
+;		ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
+;		stx .finish
+;		bne .get_entry
+;.get_loop
+;		ldx #$3f
+;
+;		ora $dd00
+;		stx $dd02			;19	-> 14 on 1541
+;
+;		nop
+;		ora #06
+;		lsr				;0xxxx011
+;		lsr				;00xxxx01
+;		ldx #$37
+;
+;		ora $dd00
+;		stx $dd02			;16	-> 16 on 1541
+;
+;		ror				;100xxxx0	1
+;		ror				;1100xxxx	0
+;		clc
+;		nop
+;		ldx #$3f
+;		sax .nibble + 1
+;		and $dd00
+;		stx $dd02			;18	-> 19 on 1541
+;
+;.nibble		ora #$00
+;.bitfire_block_addr = * + 1
+;.store		sta $b00b,y
+;.get_entry
+;		ldx <BITFIRE_LAX_ADDR
+;		nop
+;		nop
+;		lda $dd00
+;.finish		stx $dd02			;17	-> 14 on 1541
+;
+;		lsr
+;		lsr
+;		dey
+;		bne .get_loop
+;.last
+;		ldx #$60
+;		stx .finish
+;		bpl .get_loop
+
+
 
 !if >* != >.get_loop { !error "getloop code crosses page!" }
 ;XXX TODO in fact the branch can also take 4 cycles if needed, ora $dd00 - $3f,x wastes one cycle anyway

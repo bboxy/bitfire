@@ -131,12 +131,15 @@
 			lda #$3f			;release ATN
 			sta $dd02
 			stx $dd00
-
+			pla
+			pha
+			pla
+			pha
 			;give some time for things to settle, no idea how much time is needed, leaving this out makes sx64 also fail
-			ldy #$00
--
-			dey
-			bne -
+;			ldy #$00
+;-
+;			dey
+;			bne -
 		}
 
 		!macro set_depack_pointers .addr {
