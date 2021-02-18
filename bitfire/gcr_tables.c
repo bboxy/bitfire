@@ -178,14 +178,28 @@ void create_table(const unsigned char* gcr, const unsigned char* res_hi, const u
 	}
 }
 
-int merge_table(int* table1, int* table2, int offset, int silent) {
+int merge_table(int* table1, int* table2, int offset, int silent, int merge_lo, int merge_hi) {
 	int i;
 	for (i = 0; i < 256; i++) {
 		//value to check
 		if (table2[i] >= 0) {
 			if (table1[i + offset] >= 0 && table1[i + offset] != table2[i]) {
-				if (silent) return 1;
-				printf("collision at %02x with value %02x\n", i, table1[i + offset]);
+				if (merge_lo) {
+					if ((table1[i + offset] & 0xf) == 0) {
+						table1[i + offset] |= table2[i];
+					} else {
+						printf("merge collision at %02x with value %02x\n", i, table1[i + offset]);
+					}
+				} else if (merge_hi) {
+					if ((table1[i + offset] & 0xf0) == 0) {
+						table1[i + offset] |= table2[i];
+					} else {
+						printf("merge collision at %02x with value %02x\n", i, table1[i + offset]);
+					}
+				} else {
+					if (silent) return 1;
+					printf("collision at %02x with value %02x\n", i, table1[i + offset]);
+				}
 			} else 	if (table2[i] >= 0) {
 				if (i + offset >= 0 && i + offset < 256) {
 					table1[i + offset] = table2[i];
@@ -230,12 +244,10 @@ int main () {
 
 	int table[256];
 
-/*
 	int offset_8 = 0;
 	int offset_4 = 0;
 	int offset_1 = 0;
 	int col;
-*/
 
 	int i;
 
@@ -252,14 +264,14 @@ int main () {
 	};
 
 	//           gcr  resulting values hi and low  table         bits       eor   mask
-	create_table(gcr, results5hi,      results0lo, tabAAAAA000, "EDCBA...", 0x7f, 0xf0);
-	create_table(gcr, results0hi,      results5lo, tab0bb00bbb, ".ba..edc", 0x7f, 0x0f);
-	create_table(gcr, results5hi,      results0lo, tab00AAAAA0, "..EDCBA.", 0x7f, 0xf0);
-	create_table(gcr, results0hi,      results5lo, tabbbbbb000, "edcba...", 0x7f, 0x0f);
-	create_table(gcr, results4hi_orig, results0lo, tab0000AAAA, "....EDCB", 0x7f, 0xf0);
-	create_table(gcr, results1hi_orig, results5lo, tab0Abbbbb0, ".Aedcba.", 0x7f, 0x1f);
-	create_table(gcr, results5hi,      results5lo, tabAAA000AA, "CBA...ED", 0x7f, 0xf0);
-	create_table(gcr, results5hi,      results5lo, tab000bbbbb, "CBAedcba", 0x7f, 0x0f);
+	create_table(gcr, results5hi,      results0lo, tabAAAAA000, "EDCBA...", 0x7f, 0xf0);	//ones
+	create_table(gcr, results0hi,      results5lo, tab0bb00bbb, ".ba..edc", 0x7f, 0x0f);	//twos
+	create_table(gcr, results5hi,      results0lo, tab00AAAAA0, "..EDCBA.", 0x7f, 0xf0);	//threes
+	create_table(gcr, results0hi,      results5lo, tabbbbbb000, "edcba...", 0x7f, 0x0f);	//fours
+	create_table(gcr, results4hi_orig, results0lo, tab0000AAAA, "....EDCB", 0x7f, 0xf0);	//fives
+	create_table(gcr, results1hi_orig, results5lo, tab0Abbbbb0, ".Aedcba.", 0x7f, 0x1f);	//sixths
+	create_table(gcr, results5hi,      results5lo, tabAAA000AA, "CBA...ED", 0x7f, 0xf0);	//sevens
+	create_table(gcr, results5hi,      results5lo, tab000bbbbb, "CBAedcba", 0x7f, 0x0f);	//eigths
 
 	//printf("tabAAAAA000\n");
 	//print_table(tabAAAAA000, 0, 255);
@@ -279,21 +291,18 @@ int main () {
 	//print_table(tab000bbbbb, 0, 255);
 
 	for (i = 0; i < 256; i++) table[i] = -1;
-	merge_table(table, tab0bb00bbb, 0x00, 0);
+	merge_table(table, tab0bb00bbb, 0x00, 0, 0, 0);
 	printf("tab02200222_lo\n");
 	print_table(table, 0, 255);
 
-/*
 	for (offset_1 = 0; offset_1 < 256; offset_1++) {
-		printf("%d\n", offset_1);
 		for (offset_4 = 0; offset_4 < 256; offset_4++) {
 			for (offset_8 = 0; offset_8 < 256; offset_8++) {
 				for (i = 0; i < 256; i++) table[i] = tabAAA000AA[i];
-				merge_table(table, tab0bb00bbb, 0x00, 0);
-				col = 0;
-				if (!col) col = merge_table(table, tab000bbbbb, offset_8, 1);	//88888
-				if (!col) col = merge_table(table, tabbbbbb000, offset_4, 1);	//44444
-				if (!col) col = merge_table(table, tabAAAAA000, offset_1, 1);	//11111
+				col = 0;//merge_table(table, tab0bb00bbb, 0x00, 1, 0, 0);
+				if (!col) col = merge_table(table, tab000bbbbb, offset_8, 1, 0, 0);	//88888
+				if (!col) col = merge_table(table, tabbbbbb000, offset_4, 1, 0, 0);	//44444
+				if (!col) col = merge_table(table, tabAAAAA000, offset_1, 1, 0, 0);	//11111
 				if (!col) {
 					printf("offset_1: $%02x\n", offset_1);
 					printf("offset_4: $%02x\n", offset_4);
@@ -302,20 +311,23 @@ int main () {
 			}
 		}
 	}
-*/
 
 	for (i = 0; i < 256; i++) table[i] = -1;
-	merge_table(table, tabAAA000AA, 0x00, 0);	//77777
-	merge_table(table, tab000bbbbb, 0x00, 0);	//88888
-	merge_table(table, tabbbbbb000, 0x04, 0);	//44444
-	merge_table(table, tabAAAAA000, 0x00, 0);	//11111
+	merge_table(table, tab000bbbbb, 0x00, 0, 0, 0);	//88888
+	merge_table(table, tabAAA000AA, 0x00, 0, 0, 0);	//77777
+	//merge_table(table, tab0bb00bbb, 0x00, 0, 0, 0); //22222
+	merge_table(table, tabbbbbb000, 0x04, 0, 0, 0);	//44444
+	merge_table(table, tabAAAAA000, 0x00, 0, 0, 0);	//11111
+	for (i = 0; i < 256; i++) if (table[i] < 0) table[i] = i;
 	printf("combined\n");
 	print_table(table, 0, 255);
+	printf("11111000\n");
+	print_table(tabAAAAA000, 0, 255);
 
 	for (i = 0; i < 256; i++) table[i] = -1;
-	merge_table(table, tab0000AAAA, 0x00, 0);
-	merge_table(table, tab00AAAAA0, 0x00, 0);
-	merge_table(table, tab0Abbbbb0, 0x01, 0);
+	merge_table(table, tab0000AAAA, 0x00, 0, 0, 0);
+	merge_table(table, tab00AAAAA0, 0x00, 0, 0, 0);
+	merge_table(table, tab0Abbbbb0, 0x01, 0, 0, 0);
 	printf("zeropage\n");
 	print_table(table, 0, 255);
 	return 0;

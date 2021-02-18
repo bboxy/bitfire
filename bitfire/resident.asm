@@ -105,19 +105,36 @@ link_decomp_under_io
 		;XXX ATTENTION /!\ never ever get back to the idea of swapping the two bits on sending a filename for the sake of saving cycls or bytes, it only works this way round when doing bus_lock, as checks on driveside define the bitpositions where the clock is low and hi, that is more sane
 
 bitfire_send_byte_
-		sta .filenum			;save value
 		ldx #$ff
-		lda #$ef
-		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
-.bit_loop
+		sec
+		ror
+		sta .filenum
+		txa
+.bit_loop	and #$1f
 		bcc +
-		adc #$1f
+		eor #$20
 +
-		eor #$30			;flip bit 5 and toggle bite 4
+		eor #$30
 		sta $dd02
-		and #$1f			;clear bit
-		ror <(.filenum - $ff), x	;fetch next bit from filenumber and waste cycles
-		bne .bit_loop			;last bit?
+		lsr <(.filenum - $ff), x	;fetch next bit from filenumber and waste cycles
+		bne .bit_loop
+
+;bitfire_send_byte_
+;		sta .filenum			;save value
+;		ldx #$ff
+;		lda #$ef
+;		sec				;on first run we fall through bcc and thus end up with carry set and $0f after adc -> with eor #$30 we end up with $3f, so nothing happens on the first $dd02 write
+;.bit_loop
+;		bcc +
+;		adc #$1f
+;+
+;		eor #$30			;flip bit 5 and toggle bite 4
+;		sta $dd02
+;		and #$1f			;clear bit
+;		pha
+;		pla
+;		ror <(.filenum - $ff), x	;fetch next bit from filenumber and waste cycles
+;		bne .bit_loop			;last bit?
 						;carry is set here, important for entering receive loop
 						;this all could be done shorter (save on the eor #$30 and invert on floppy side), but this way we save a ldx #$ff later on, and we do not need to reset $dd02 to a sane state after transmission, leaving it at $1f is just fine. So it is worth.
 

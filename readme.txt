@@ -239,6 +239,8 @@ What it can't
 This loader is not able to load or loadcompd under IO. This has two reasons: Saving code size and saving cycles during loading. If you really need data under IO it can be either copied there or loaded raw and depacked there afterwards, so in fact there's not much need for a possibility to load under IO, except a slight improvment in convenience. To split up files use the (--cut-input-addr) to cut them into two parts (for e.g. if we have no overlap: $0800-$cfff and $d000-$ffff).
 With the old packing scheme, Packed files have a safety margin at the end, means, their end address was usually a few bytes higher than on the original file (sometimes even more, if a huge literal is found at the end of a file). This could of course bring you in trouble if you came close to the IO range or executed code with it. With the new overlapping packing scheme this is however history.
 
+The loader does not implement a bunch of workwrounds to support virtual drives with broken firmware. Get your latest firmware and bother the developer of that hardware to fix things. The loader worked fine so far with a 1541u-II and Firmware 3.7, as well with an up to date Vice.
+
 Building
 --------
 

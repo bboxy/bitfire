@@ -5,6 +5,7 @@
 !zone installer {
 .dc_src		= $fc
 .dc_dst		= $fe
+.mydrive	= $fb
 
 .listen		= $ffb1
 .listen_sa	= $ff93
@@ -18,45 +19,33 @@
 		sta $01
 		lda #$00
 		sta $d015
-		sta .iec_units
-
-		lda #8
-		sta $ba
-		;jmp do_install
-
-		ldx #4
--
-		jsr .open_w_15
-		bmi +
-		inc .iec_units
 		lda $ba
-		sta .my_drive
-		jsr .unlisten
-+
-		inc $ba
-		dex
-		bne -
-.iec_units = * + 1
-		lda #$00
-		cmp #1
-		beq .do_install
-		ldx #$00
+		sta .mydrive
+
+		ldx #8
 -
-		lda .pebcak,x
-		beq .init_inst
-		sta $07c0,x
+		stx $ba
+		jsr .open_w_15
+		bmi .not_present
+		jsr .unlisten
+		ldx $ba
+		cpx .mydrive
+		beq .not_present
+		jsr .install_responder
+.not_present
+		ldx $ba
 		inx
+		cpx #$0c
 		bne -
 .do_install
-.my_drive = * + 1
-		lda #$08
+		lda .mydrive
 		sta $ba
 
 		;install bootloader with fast m-w and onetime loader-init
 		jsr .install_bootstrap
 		sei
 
-		lda #$c3
+		lda #$c3		;XXX TODO, needed? $03 would suffice?
 		sta $dd00
 
 		lda #$3f
@@ -77,6 +66,7 @@
                 sec
                 ror
 		sta .dc_src
+		;transfer like this?
                 lda #$2f
 .s_loop
                 and #$2f                        ;clear bit 4 and 0..2 and waste some cycles here
@@ -204,18 +194,10 @@
 		;ldx #$10
 		;jsr wait
 		;install first routines via m-w
-		lda #<.bootstrap_start
-		sta .dc_src
-		lda #>.bootstrap_start
-		sta .dc_src+1
 
-		lda #<.bootstrap
-		sta .dc_dst
-		lda #>.bootstrap
-		sta .dc_dst+1
-
-		ldx #(.bootstrap_size / $20) + 1
+		ldx #$00
 .bs_loop
+
 		jsr .open_w_15
 
 		lda #'m'
@@ -224,44 +206,34 @@
 		jsr .iecout
 		lda #'w'
 		jsr .iecout
-		lda .dc_dst		;target-address
+		txa
+		clc
+		adc #<.bootstrap_run
+		php
 		jsr .iecout
-		lda .dc_dst+1
+		plp
+		lda #>.bootstrap_run
+		adc #$00
 		jsr .iecout
-		lda #$20	;payload
+		ldy #$20
+		tya
 		jsr .iecout
-
-		ldy #$00
 -
-		lda (.dc_src),y
+		lda .bootstrap_start,x
 		jsr .iecout
-		iny
-		cpy #$20
+		inx
+		dey
 		bne -
-
-		tya
-		clc
-		adc .dc_dst
-		sta .dc_dst
-		bcc *+4
-		inc .dc_dst+1
-
-		tya
-		clc
-		adc .dc_src
-		sta .dc_src
-		bcc *+4
-		inc .dc_src+1
 
 		jsr .unlisten
 
-		dex
-		bne .bs_loop
+		cpx #.bootstrap_size
+		bcc .bs_loop
 
-		;now execute installer
+		;now execute bootstrap
 		jsr .open_w_15
 
-		;ldx #$00
+		ldx #$00
 -
 		lda .me_code,x
 		jsr .iecout
@@ -270,18 +242,92 @@
 		bne -
 		jmp .unlisten
 
-.pebcak
-!convtab scr {
-		!text "more than 1 drive on bus, turn off plz!"
-		!byte 0
-}
-
 .me_code
-!byte $4d,$2d,$45,<.bootstrap_run,>.bootstrap_run
+		!text "m-e"
+		!word .bootstrap_run
+
 !src "drivecode.asm"
 
 !if (BITFIRE_RESIDENT_AUTOINST != 0) {
 .res_start
 !bin "resident",,2
 }
+
+.install_responder
+		jsr .open_w_15
+
+		ldx #0
+.datalo		lda .atnlo,x
+		jsr .iecout
+		inx
+		cpx #.atnlo_end - .atnlo
+		bne .datalo
+		jsr .unlisten
+
+		jsr .open_w_15
+		ldx #0
+.datahi		lda .atnhi,x
+		jsr .iecout
+		inx
+		cpx #.atnhi_end - .atnhi
+		bne .datahi
+		jsr .unlisten
+
+		jsr .open_w_15
+
+		ldx #0
+.exec		lda .responder,x
+		jsr .iecout
+		inx
+		cpx #.responder_end - .responder
+		bne .exec
+		jmp .unlisten
+
+;XXX TODO keep current drive in $ba? kill all other drives beforehand, then upload code to #8
+.responder_code	= $0205
+.atnlo_code	= $0400
+.atnhi_code	= .atnlo_code + $80
+
+.responder
+		!text "m-e"
+		!word .responder_code
+!pseudopc .responder_code {
+		sei
+		lda #$ff
+		sta $1803
+		ldx #$04
+		stx $1801
+		lsr		;lda #$7f
+		sta $1802
+		ldy #$00
+		ldx #$10
+		sty $1800
+		jmp ($1800)
+}
+.responder_end
+
+.atnlo		!text "m-w"
+		!word .atnlo_code
+		!byte .atnlo_end - .atnlo_start
+.atnlo_start
+!pseudopc .atnlo_code {
+		jmp ($1800)
+		* = .atnlo_code + $10
+		sty $1800
+		jmp ($1800)
+}
+.atnlo_end
+
+.atnhi		!text "m-w"
+		!word .atnhi_code
+		!byte .atnhi_end - .atnhi_start
+.atnhi_start
+!pseudopc .atnhi_code {
+		stx $1800
+		jmp ($1800)
+		* = .atnhi_code + $10
+		jmp ($1800)
+}
+.atnhi_end
+
 }

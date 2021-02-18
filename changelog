@@ -94,3 +94,7 @@ v1.0
 - more sanity checks during disk read
 - loading of file number $ff now resets drive, $f0-$fe for requesting disc-sides
 - 63 dir-entries per dir-sector
+- sfx.asm can now be adopted and is integrated into bitnax at compile time
+- bus_lock feature improved
+- an ATN-responder is uploaded to all remaining drives, so they can stay turned on
+- loader is started from current drive ($ba)

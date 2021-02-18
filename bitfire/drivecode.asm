@@ -37,11 +37,11 @@
 .LED_ON			= $08
 .MOTOR_OFF		= $fb
 .MOTOR_ON		= $04
-.RESET_DRIVE		= $eaa0
 ___			= 0
 _FF			= $ff
 
 ;adresses
+.reset_drive		= $eaa0
 .drivecode		= $0000
 .bootstrap		= $0700
 .tables			= $0600
@@ -54,15 +54,6 @@ _FF			= $ff
 .dir_first_file_sector_index= .directory + $fd		;how many blocks are used on this track up to the file
 .dir_first_block_pos	= .directory + $fe		;startposition within block
 							;with those three values, the absolute position on disk is represented
-;header information on stack
-.header_checksum	= $107
-.header_sector		= $106
-.header_track		= $105
-.header_id1		= $104
-.header_id2		= $103
-.header_0f_1		= $102
-.header_0f_2		= $101
-
 .bootstrap_start
 !pseudopc .bootstrap {
 .bootstrap_run
@@ -83,9 +74,6 @@ _FF			= $ff
 			sei
 			lda $05ff
 			sta .fn + 1		;remember diskside#
-
-			;ldx #<.drivecode_-1
-			;txs
 
 			lda #%01111010		;DDR set bits for drivenumber to 0, ATN out, CLK out and DATA out are outputs
 			sta $1802
@@ -170,7 +158,7 @@ _FF			= $ff
 .filenum 		= .zp_start + $21
 .block_num		= .zp_start + $22
 .end_of_file		= .zp_start + $23
-;.byte			= .zp_start + $28
+.byte			= .zp_start + $28
 .dir_entry_num		= .zp_start + $29
 .blocks 		= .zp_start + $30		;2 bytes
 .wanted			= .zp_start + $3e		;21 bytes
@@ -315,7 +303,7 @@ _FF			= $ff
 			;10, 8, 6, 4
 			;if we run out of this loop, we have timed out and better reread, maybe the disc spins too slow yet?
 -
-			jmp .read_sector_		;took too long, retry
+			jmp .read_sector		;took too long, retry
 ;29
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
@@ -414,7 +402,7 @@ _FF			= $ff
 			asl			;counter is twice the number of tracks (halftracks)
 			tax
 .step
-			lda #.STEPPING_SPEED
+.stepping_speed		lda #.STEPPING_SPEED
 			sta $1c09
 			tya
 			bpl .seek__
@@ -437,6 +425,8 @@ _FF			= $ff
 			bit $1c09
 			bmi *-3
 
+			;XXX TODO skip final wait, do stepping when transferring last sektor? but also need to do it beforehand to be at right position for file?
+			;XXX TODO dec stepping speed if not min for each turn after whoel seek, reset stepping speed?
 			dex
 			bne .step
 +
@@ -478,19 +468,19 @@ _FF			= $ff
 .preamble_entry
 			bit $1800
 			bmi *-3
-			sax $1800		;76540213	-> xxxx0x1x
-			asl			;6540213x 7
-			ora #$10		;654x213x 7
+			sax $1800		;76540213	-> dddd0d1d
+			asl			;6540213. 7
+			ora #$10		;654X213. 7	-> dddX2d3d
 			bit $1800
 			bpl *-3
-			sta $1800		;654x213x 7	-> xxxx2x3x
-			ror			;7654x213 x
-			asr #%11111011		;x7654x-1 x	-> xxx54xxx
+			sta $1800
+			ror			;7654X213 x
+			asr #%11110000		;.7654... x	-> ddd54d.d
 			bit $1800
 			bmi *-3
 			sta $1800
-			lsr			;xxx765--	-> xxx76xxx
-			asr #%11111011		;xx7654x-
+			lsr			;..7654..
+			asr #%00110000		;...76...	-> ddd76d.d
 .pre_len		cpy #$ff
 			iny
 			bit $1800
@@ -519,12 +509,19 @@ _FF			= $ff
 			beq .track_finished
 			jmp .cont_track
 .track_finished
-						;autoincrement to_track and take care of skipping track 18
+			;set stepping speed to $0c, if we loop once, set it to $18
+			;ldx #$8c			;autoincrement to_track and take care of skipping track 18
+			;dop
 			lda #18
-			;sec			;set by send_block and also set if beq
+			ldx #$98
+			top
 -
+			ldx #$98
+			;sec			;set by send_block and also set if beq
 			isc <.to_track
 			beq -			;skip dirtrack however
+
+			stx .stepping_speed + 1
 
 			;XXX TODO make this check easier? only done hre?
 			lda <.end_of_file	;EOF
@@ -585,36 +582,33 @@ _FF			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.lock
-			ldx $1800		;optimize: ldx here
-			bmi *-3
+			;remove as next step, incl. check
 .get_byte
 			ldy #.BUSY		;enough time for signal to settle
 .get_byte_
+.lock
 			lda #$80		;execpt a whole new byte and start with a free bus
 			sta $1800
 
 			ldx $1800		;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
 			bne *-3
-
-			;check before send if atn goes hi, if so, motor off and led on
-.gloop
 .wait_bit1
-			cpx $1800		;wait for transition
-			beq .wait_bit1
-			ldx $1800		;reread register
-			bmi .lock		;is the bus locked via ATN? if so, wait
-			cpx #$05		;nope, interpret bit
-			ror			;and shift in
+			cpx $1800
+			beq .wait_bit1		;change in $1800
+			ldx $1800
+			bmi .lock		;atn is high? violation
+			;cpx #$04		;clock is not set, but data?
+			;bcc .lock		;then lock, it is a protocoll violation
+			cpx #$05
+			ror
 .wait_bit2
-			cpx $1800		;wait for next transition
+			cpx $1800
 			beq .wait_bit2
-			ldx $1800		;reread register
-			bmi .lock		;is the bus locked? XXX TODO can be omitted?
-			cpx #$01		;nope, interpret bit
-			ror			;and shift in
+			ldx $1800
+			cpx #$01
+			ror
 
-			bcc .gloop		;more bits to fetch?
+			bcc .wait_bit1		;more bits to fetch?
 			sty $1800		;set busy bit
 
 			;----------------------------------------------------------------------------------------------------
@@ -628,7 +622,7 @@ _FF			= $ff
 .load_file
 			cmp #BITFIRE_RESET
 			bne *+5
-			jmp .RESET_DRIVE
+			jmp .reset_drive
 			cmp #BITFIRE_LOAD_NEXT
 			beq +
 			sta <.filenum		;set new filenum
@@ -768,7 +762,6 @@ _FF			= $ff
 			sta <.first_block_size
 
 			;XXX TODO test corner cases, write $0100 big file at beginning, write several small files and load them
-			;we calc block_num, first_block_size and last_block_size
 
 			;lda <.first_block_size
 			cmp .dir_file_size + 0,x		;compare with file_size
@@ -834,6 +827,8 @@ _FF			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .set_bitrate
+			ldx #$98
+			stx .stepping_speed + 1
 			tay
 !if .SANCHECK_TRACK = 1 {
 			ldx #$0f
@@ -878,15 +873,15 @@ _FF			= $ff
 			sax $1c00		;merge
 !if .SANCHECK_BVS_LOOP = 1 {
 			ldy #$a9		;restore 3 bvs
-			sty .bvs_01
-			sty .bvs_02
-			sty .bvs_03
+			sty <.bvs_01
+			sty <.bvs_02
+			sty <.bvs_03
 
 			ldy #$70
 .br0			bne *
-			sty .bvs_03
-			sty .bvs_02
-			sty .bvs_01
+			sty <.bvs_03
+			sty <.bvs_02
+			sty <.bvs_01
 }
 			txa
 
@@ -907,15 +902,11 @@ _FF			= $ff
 			top
 .bitrate_1
 			lda #<.gcr_40		;06	XXX TODO 0,3,6 -> derivate from bitrate? -> asl + self?
-			;top
 .bitrate_2
-			;top
 .bitrate_3
-			;lda #<.gcr_00		;00
-
-			sty .gcr_slow1 + 0
-			sta .gcr_slow1 + 1
-			stx .gcr_slow1 + 2
+			sty <.gcr_slow1 + 0
+			sta <.gcr_slow1 + 1
+			stx <.gcr_slow1 + 2
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -971,10 +962,8 @@ _FF			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.read_sector		;need to read sector header beforehand to compare with our wanted list, if we would seek a certain sector, the kernal routines would do?
-			;read_header and do checksum, if not okay, do again
-.read_sector_
-.read_gcr_header
+.read_sector
+.read_gcr_header					;read_header and do checksum, if not okay, do again
 			ldx #$07			;bytes to fetch
 			ldy #$52			;type (header)
 .read_gcr
@@ -1004,14 +993,14 @@ _FF			= $ff
 			bvc *
 			clv
 			cpy $1c01			;11111222
-			bne .read_sector_		;start over with a new header again, do not wait for a sectorheadertype to arrive
+			bne .read_sector		;start over with a new header again, do not wait for a sectorheadertype to arrive
 			bvc *
 			lda $1c01			;22333334
 			ldx #$3e
 			sax <.threes + 1
 			asr #$c1			;lookup? -> 4 cycles
 .header_t2		eor #$c0
-			bne .read_sector_		;start over with a new header again, do not wait for a sectorheadertype to arrive
+			bne .read_sector		;start over with a new header again, do not wait for a sectorheadertype to arrive
 			nop
 			pha
 			pla
@@ -1020,7 +1009,7 @@ _FF			= $ff
 			lda #.EOR_VAL
 			jmp .gcr_entry			;36 cycles until entry
 .read_header_back_
-			bne .read_sector_
+			bne .read_sector
 
 			pla				;header_id1
 !if .SANCHECK_HEADER_ID = 1 {
@@ -1032,14 +1021,14 @@ _FF			= $ff
 			stx <.current_id1		;fall through is no problem, tests will succeed
 .no_set_id
 			cpy <.current_id2
-			bne .read_sector_
+			bne .read_sector
 			cpx <.current_id1
-			bne .read_sector_
+			bne .read_sector
 }
 			pla				;.header_track
 !if .SANCHECK_TRACK = 1 {
 			cmp <.track_frob		;needs to be precalced, else we run out of time
-			bne .read_sector_
+			bne .read_sector
 }
 			;XXX TODO, can only be $1x or 0x
 			pla				;header_sector
@@ -1059,7 +1048,7 @@ _FF			= $ff
 			lda <.bogus_reads
 			beq +
 			dec <.bogus_reads
-			bne .read_sector_
+			bne .read_sector
 +
 }
 }
@@ -1076,7 +1065,7 @@ _FF			= $ff
 			iny
 			bne .last			;if block index is $ff, we reread, as block is not wanted then
 .rs_retry2
-			jmp .read_sector_		;will be sbc (xx),y if disabled
+			jmp .read_sector		;will be sbc (xx),y if disabled
 							;max 111/112 cycles passed, so still header_gap bytes flying by and we finish in time
 .last
 			;----------------------------------------------------------------------------------------------------
@@ -1157,12 +1146,8 @@ _FF			= $ff
 			;cmp <.last_block_num		;do compare beforehand for both cases
 			bcc .set_positions		;bcs = last_block, so a small file that starts and ends in same sector, bcc = big_file, all done
 			tya
-			sbc <.blocks + 0
-			;eor #$ff
-			;lda <.blocks + 0		;correct offset by blocksize
-			;clc
-			;sbc <.first_block_size
-			;jmp .set_positions		;can the eor #$ff used later on?!
+			clc
+			adc <.blocks + 0
 			jmp .set_positions - 2
 .is_not_first_block
 			;ldy #$ff			;y is $ff already

@@ -119,7 +119,7 @@
 
 		!macro bus_lock {
 			;XXX TODO ATTENTION /!\ better don't touch ever again
-			lda #$37			;set ATN
+			lda #$17			;set ATN
 			sta $dd02
 		}
 
@@ -128,18 +128,17 @@
 			;this looks ugly, sorry for this, but it is yet the only way it works on THCM's sx64, the trailing stx $dd00 is needed :-(
 			ldx #(.bank & 3)
 			stx $dd00
-			lda #$3f			;release ATN
+			lda #$1f			;release ATN
 			sta $dd02
 			stx $dd00
-			pla
-			pha
-			pla
-			pha
+			lda #$3f			;release DATA
+			sta $dd02
+			stx $dd00
 			;give some time for things to settle, no idea how much time is needed, leaving this out makes sx64 also fail
-;			ldy #$00
-;-
-;			dey
-;			bne -
+			ldx #$07
+-
+			dex
+			bne -
 		}
 
 		!macro set_depack_pointers .addr {

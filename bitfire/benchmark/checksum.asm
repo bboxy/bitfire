@@ -4,7 +4,7 @@
 RAW = 1
 CHECKSUM = 1
 REQDISC = 1
-BUSLOCK = 1
+;BUSLOCK = 1
 
 num_files	= $1c
 ;num_files	= $12
@@ -211,8 +211,6 @@ numb		lda #$00		;file number
 		nop
 		nop
 		nop
-
-		+bus_unlock 3
 
 		+bus_unlock 3
 }
