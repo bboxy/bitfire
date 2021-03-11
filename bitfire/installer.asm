@@ -1,3 +1,28 @@
+;
+; (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+;
+; Redistribution and use in source and binary forms, with or without
+; modification, are permitted provided that the following conditions are met:
+;     * Redistributions of source code must retain the above copyright
+;       notice, this list of conditions and the following disclaimer.
+;     * Redistributions in binary form must reproduce the above copyright
+;       notice, this list of conditions and the following disclaimer in the
+;       documentation and/or other materials provided with the distribution.
+;     * The name of its author may not be used to endorse or promote products
+;       derived from this software without specific prior written permission.
+;
+; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+; ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+; WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+; DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+; DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+; (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+; ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;
+
 !src "config.inc"
 !convtab pet
 !cpu 6510
@@ -151,7 +176,7 @@
 		lda #$3f			;drop atn to signal end of transfer
 		sta $dd02
 
-!if BITFIRE_AUTODETECT = 1 {
+!if (BITFIRE_AUTODETECT == 1) {
 		!src "detect.asm"
 }
 		lda #$7f
@@ -311,8 +336,10 @@
 		!byte .atnlo_end - .atnlo_start
 .atnlo_start
 !pseudopc .atnlo_code {
+;00
 		jmp ($1800)
 		* = .atnlo_code + $10
+;10
 		sty $1800
 		jmp ($1800)
 }
@@ -323,9 +350,16 @@
 		!byte .atnhi_end - .atnhi_start
 .atnhi_start
 !pseudopc .atnhi_code {
+;80
+		;stx $1800
+		;top
+;84
+		;bne .reset_check	;BRA
+		;jmp ($1800)
 		stx $1800
-		jmp ($1800)
+		jmp ($1800)		;get $84 free, set $1801 to $7a and check if really $84?
 		* = .atnhi_code + $10
+;90
 		jmp ($1800)
 }
 .atnhi_end

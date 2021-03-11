@@ -1,5 +1,7 @@
 /*
- * (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+ * Modified version (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+ *
+ * Based on original (c) Copyright 2021 by Einar Saukas. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -23,24 +25,33 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int debug_level;
+#define INITIAL_OFFSET 1
 
-#ifndef DEBUG_FUNCS_H
-#define DEBUG_FUNCS_H
+#define FALSE 0
+#define TRUE 1
 
-//void debug_print_hex(unsigned char, int, char*, int);
+typedef struct block_t {
+    struct block_t *chain;
+    struct block_t *ghost_chain;
+    int bits;
+    int index;
+    int offset;
+    int length;
+    int references;
+} BLOCK;
 
-#ifdef _MSC_VER
-	#define debug_message(format,...);  { if(ENABLE_DEBUG) { fprintf(stdout,"DEBUG: %s: %s(): ",__FILE__,__FUNCTION__); fprintf(stdout,format,__VA_ARGS__); } }
-	#define info_message(format,...);   { if(ENABLE_INFO) { fprintf(stdout,"INFO: "); fprintf(stdout,format,__VA_ARGS__); } }
-	#define fail_message(format,...);   { if(ENABLE_FAIL) { fprintf(stdout,"FAIL: %s: ",__FILE__); fprintf(stdout,format,__VA_ARGS__); } }
-	#define fatal_message(format,...);  { if(ENABLE_FATAL) { fprintf(stderr,"ERROR: "); fprintf(stderr,format,__VA_ARGS__); exit(2); } }
-#else
-	#define debug_message(format,args...);  { if(ENABLE_DEBUG) { fprintf(stdout,"DEBUG: %s: %s(): ",__FILE__,__FUNCTION__); fprintf(stdout,format,##args); } }
-	#define info_message(format,args...);   { if(ENABLE_INFO) { fprintf(stdout,"INFO: "); fprintf(stdout,format,##args); } }
-	#define fail_message(format,args...);   { if(ENABLE_FAIL) { fprintf(stdout,"FAIL: %s: ",__FILE__); fprintf(stdout,format,##args); } }
-	#define fatal_message(format,args...);  { if(ENABLE_FATAL) { fprintf(stderr,"ERROR: "); fprintf(stderr,format,##args); exit(2); } }
+BLOCK *allocate(int bits, int index, int offset, int length, BLOCK *chain);
 
-#endif
+void assign(BLOCK **ptr, BLOCK *chain);
 
-#endif /* DEBUG_FUNCS_H */
+BLOCK *optimize(unsigned char *input_data, int input_size, int skip, int offset_limit);
+
+unsigned char *compress(BLOCK *optimal, unsigned char *input_data, int input_size, int skip, int backwards_mode, int *output_size, int *delta, int inplace, int *inplace_end_pos);
+
+int costof_run(int length);
+
+int costof_literal(int length);
+
+int costof_rep(int length);
+
+int costof_match(int offset, int length);

@@ -1,13 +1,43 @@
+;
+; (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+;
+; Redistribution and use in source and binary forms, with or without
+; modification, are permitted provided that the following conditions are met:
+;     * Redistributions of source code must retain the above copyright
+;       notice, this list of conditions and the following disclaimer.
+;     * Redistributions in binary form must reproduce the above copyright
+;       notice, this list of conditions and the following disclaimer in the
+;       documentation and/or other materials provided with the distribution.
+;     * The name of its author may not be used to endorse or promote products
+;       derived from this software without specific prior written permission.
+;
+; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+; ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+; WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+; DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+; DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+; (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+; ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;
+
 !convtab scr
 !cpu 6510
 
-RAW = 1
-CHECKSUM = 1
+CHECKSUM = 0
 REQDISC = 1
-;BUSLOCK = 1
+BUSLOCK = 0
 
-num_files	= $1c
-;num_files	= $12
+TIME_RAW = 0
+TIME_LOADCOMP = 1
+TIME_DECOMP = 0
+
+TIME_STRICT = 1
+
+;num_files	= $1c
+num_files	= $12
 
 runs		= $10
 max		= $12
@@ -21,13 +51,17 @@ dst		= $18
 		* = $1000
 !bin "../installer",,2
 		* = $0800
+		lda $ba
 		lda #$0b
+!if TIME_STRICT == 1 {
+		sta $d011
+}
 		sta $d020
 		sta $d021
 		ldx #$00
 -
 		lda #$20
-		sta $0400,x
+		sta $0428,x
 		sta $0500,x
 		sta $0600,x
 		sta $0700,x
@@ -55,12 +89,12 @@ display
 		dex
 		bne -
 
-		ldx #num_files - 1
+		ldx #num_files
 -
 		txa
 		ora #$80
-		sta $0400+00*40,x
 		dex
+		sta $0400+1*40,x
 		bpl -
 
 		ldx #$0e
@@ -142,30 +176,25 @@ benchmark
 		sta $d01a
 		lda #$ff
 		sta $d012
-		lda #$1b
+		lda $d011
+		and #$7f
 		sta $d011
 		lda #<irq
 		sta $fffe
 		lda #>irq
 		sta $ffff
+!if TIME_STRICT == 0 {
 		cli
+}
 
 next
-!ifdef BITFIRE_TRANSFER_CHECKSUM {
-		ldx #$00
-		lda #$00
--
-		sta $0f00,x
-		dex
-		bne -
-}
 numb		lda #$00		;file number
 		lax numb+1
 		pha
 		lda #$01
-		sta $d800,x
+		sta $d828,x
 
-!ifdef BUSLOCK {
+!if BUSLOCK == 1 {
 		+bus_lock		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
 
 		nop
@@ -214,26 +243,46 @@ numb		lda #$00		;file number
 
 		+bus_unlock 3
 }
+
+!if TIME_RAW == 1 {
+		jsr .start_timer
 		pla
-!ifdef RAW {
+		pha
 		jsr bitfire_loadraw_
-} else {
-;		jsr bitfire_loadraw_
-;		jsr bitfire_decomp_
-;		jsr bitfire_send_byte_
-		jsr bitfire_loadcomp_
-;		jsr link_load_next_comp
-++
+		pla
+		asl
+		asl
+		tax
+		jsr .stop_timer
 }
+!if TIME_DECOMP = 1 {
+		pla
+		pha
+		jsr bitfire_loadraw_
+		jsr .start_timer
+		jsr bitfire_decomp_
+}
+!if TIME_LOADCOMP = 1 {
+		jsr .start_timer
+		pla
+		pha
+		jsr bitfire_loadcomp_
+}
+		pla
+		asl
+		asl
+		tax
+		jsr .stop_timer
+
+!if CHECKSUM == 0 {
 		lda #$fd
 		sta $dc00
 		lda $dc01
 		cmp #$7f
-		bne +
-;!ifdef CHECKSUM {
+		bne *+5
+}
 		jsr checksum
-;}
-+
+
 		inc numb+1
 		lda numb+1
 		cmp #num_files
@@ -244,8 +293,11 @@ numb		lda #$00		;file number
 		jsr print_count
 		jsr hex_runs
 		jsr reset
+!if TIME_STRICT == 1{
+		jam
+}
 
-!ifdef REQDISC {
+!if REQDISC == 1 {
 .side		lda #$f0
 		jsr req_disc
 }
@@ -283,7 +335,7 @@ checksum
 		asl
 		tay
 		lda #$0f
-		sta $d800,x
+		sta $d828,x
 		lda loads,y
 		sta src
 		lda loads+1,y
@@ -325,17 +377,17 @@ endh = * + 1
 		;bne end_w
 
 		lda #$05
-		sta $d800+00*40,x
+		sta $d828+00*40,x
 
 		jmp clear
 
 no
 		lda #$02
-		sta $d800+00*40,x
+		sta $d828+00*40,x
 		jmp reset_drv
 end_w
 		lda #$07
-		sta $d800+00*40,x
+		sta $d828+00*40,x
 reset_drv
 		lda #$ff
 		jsr bitfire_loadraw_
@@ -465,10 +517,46 @@ hex_runs
 .barerts
 		rts
 
+.start_timer
+                lda #$00
+                sta $dc0e
+                lda #$40
+                sta $dc0f
+                lda #$ff
+                sta $dc04
+                sta $dc05
+                sta $dc06
+                sta $dc07
+                lda #$41
+                sta $dc0f
+                lda #$01
+                sta $dc0e
+                rts
+.stop_timer
+                lda #$00
+                sta $dc0e
+                lda #$40
+                sta $dc0f
+
+                lda $dc04
+                eor #$ff
+                sta $0f03,x
+                lda $dc05
+                eor #$ff
+                sta $0f02,x
+                lda $dc06
+                eor #$ff
+                sta $0f01,x
+                lda $dc07
+                eor #$ff
+                sta $0f00,x
+                rts
+
+
 hex
 		!text "0123456789abcdef"
 sizes
-!ifdef RAW {
+!if TIME_RAW == 1 {
 !word $c179-$b569
 !word $bf80-$6561
 !word $bd00-$a93e
@@ -529,7 +617,7 @@ sizes
 }
 
 chksums
-!ifdef RAW {
+!if TIME_RAW == 1 {
 !byte $c6
 !byte $b8
 !byte $4c
@@ -590,7 +678,7 @@ chksums
 }
 
 loads
-!ifdef RAW {
+!if TIME_RAW == 1 {
 !word $b569
 !word $6561
 !word $a93e

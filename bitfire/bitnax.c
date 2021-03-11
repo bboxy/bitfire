@@ -16,9 +16,8 @@ typedef enum {
 	true
 } bool;
 
-#define VERIFY_COST_MODEL  0
-#define DEFAULT_LENGTHS    "3/6/8/10:4/7/10/13"
-#define BITFIRE_WITH_MOFF  0
+#define VERIFY_COST_MODEL  1
+#define MATCH_LIMIT 32768-128
 
 #define OUTPUT_NONE	0
 #define OUTPUT_SFX	2
@@ -26,8 +25,7 @@ typedef enum {
 #define OUTPUT_BITFIRE	4
 
 enum {
-	RUN_LIMIT = 0x100,
-	OFFSET_LENGTH_LIMIT = 15
+	RUN_LIMIT = 0xffff
 };
 
 enum {
@@ -50,6 +48,7 @@ enum {
 typedef struct {
 	signed short match_length;
 	unsigned short match_offset;
+	unsigned short repeat;
 
 	union {
 		signed hash_link;
@@ -89,12 +88,7 @@ typedef struct {
 
 	const char *input_name;
 	char *output_name;
-	const char *emit_offset_tables;
-	unsigned iterations;
 
-	bool offset_lengths;
-	bool write_tables;
-	bool show_stats;
 	bool is_cbm;
 	bool show_trace;
 	bool overlap;
@@ -102,34 +96,7 @@ typedef struct {
 	bool checksum;
 	bool exit_on_warn;
 	bool verbose;
-
-	// Some informational counters
-	struct {
-		unsigned output_size;
-		unsigned short_freq[4];
-		unsigned long_freq[4];
-		unsigned literal_bytes;
-		unsigned literal_runs;
-		unsigned match_bytes;
-		unsigned match_count;
-		unsigned offset_distance;
-		unsigned max_offset;
-		unsigned len_freq[259];
-		unsigned llen_freq[259];
-	} stats;
 } lz_context;
-
-// A bit of global configuration data
-typedef struct  {
-	unsigned bits;
-	unsigned base;
-	signed limit;
-} offset_length_t;
-
-static offset_length_t cfg_short_offset[4];
-static offset_length_t cfg_long_offset[4];
-#define cfg_short_limit (cfg_short_offset[3].limit)
-#define cfg_long_limit (cfg_long_offset[3].limit)
 
 /******************************************************************************
  * Various utility functions and bithacks
@@ -219,7 +186,6 @@ void output_close(lz_context *ctx) {
 	}
 
 	fwrite(ctx->dst_literals, ctx->dst_used, 1, ctx->dst_file);
-	ctx->stats.output_size = ftell(ctx->dst_file);
 	fclose(ctx->dst_file);
 }
 
@@ -338,83 +304,46 @@ void cut_input_addr(lz_context *ctx, unsigned first, unsigned last, bool full_di
  * Try to figure out what matches would be the most beneficial
  ******************************************************************************/
 
-unsigned costof_run_8class(unsigned run) {
+unsigned costof_run(unsigned run) {
 	return _log2(run) * 2 + 1;
 }
 
-unsigned costof_run(unsigned run) {
-	unsigned bits;
-	run--;
-	if (run == 0) return 1;
-	if (run == 1) return 2;
-	bits = _log2(run);
-	return bits * 2 + 2;
-	//return _log2(run) * 2 + 1;
-}
-
-unsigned costof_literals_8class(unsigned address, unsigned length) {
-        unsigned cost;
-
-        cost = length * 8;
-        cost += costof_run_8class(length);
-
-        // A type bit is still always needed after maximum length
-        // run since another run may follow
-        if(length == RUN_LIMIT) cost++;
+unsigned costof_literals(unsigned address, unsigned length) {
+        unsigned cost = 1;
+        cost += costof_run(length);
+        cost += length * 8;
         return cost;
 }
 
-unsigned costof_literals(unsigned address, unsigned length) {
-	unsigned cost;
-
-	cost = length * 8;
-	cost += _log2(length) * 2 + 1; //costof_run(length);
-
-	// A type bit is still always needed after maximum length
-	// run since another run may follow
-	if(length == RUN_LIMIT) cost++;
-	return cost;
+unsigned costof_rep(signed offset, unsigned length) {
+	unsigned cost = 1;
+        cost += costof_run(length);
+        return cost;
 }
 
-unsigned costof_match_8class(const offset_length_t *class, signed offset, unsigned length) {
-        unsigned cost = 3;
-
-        while(offset > class->limit)
-                ++class;
-        cost += class->bits;
-
-        return cost + costof_run_8class(length - 1);
-}
-
-unsigned costof_match(const offset_length_t *class, signed offset, unsigned length) {
-	unsigned cost = 3;
-
-	while(offset > class->limit)
-		++class;
-	cost += class->bits;
-
-	return cost + costof_run(length - 1);
+unsigned costof_match(signed offset, unsigned length) {
+	unsigned cost = 1;
+        cost += costof_run(length - 1);
+        cost += 7 + costof_run((offset-1)/128+1);
+        return cost;
 }
 
 lz_info optimal_parsing_literal(lz_context *ctx, const lz_info *info, unsigned cursor) {
 	signed length;
 	unsigned cost;
+
 	lz_info result;
 
 	length = -info[cursor + 1].match_length;
 
-	if(length > 0 && length < RUN_LIMIT)
+	if(length > 0)
 		cost = info[cursor + ++length].cumulative_cost;
 	else {
 		cost = info[cursor + 1].cumulative_cost;
 		length = 1;
 	}
 
-	if (ctx->output_type == OUTPUT_BITFIRE) {
-		cost += costof_literals_8class(cursor, length);
-	} else {
-		cost += costof_literals(cursor, length);
-	}
+	cost += costof_literals(cursor, length);
 
 	result.match_length = -length;
 	result.cumulative_cost = cost;
@@ -422,28 +351,16 @@ lz_info optimal_parsing_literal(lz_context *ctx, const lz_info *info, unsigned c
 	return result;
 }
 
-lz_info optimal_parsing (lz_context *ctx, const lz_info *info, unsigned cursor, signed match_offset, unsigned match_length, unsigned match_limit, lz_info best_match) {
+lz_info optimal_parsing (lz_context *ctx, const lz_info *info, unsigned cursor, signed match_offset, unsigned match_length, unsigned match_limit, lz_info best_match, unsigned last_offset, bool allow_repeat) {
 	unsigned cost;
-
-	if(match_length == 2) {
-		if(match_offset <= cfg_short_limit) {
-			if (ctx->output_type == OUTPUT_BITFIRE) {
-				cost = costof_match_8class(cfg_short_offset, match_offset, match_length);
-			} else {
-				cost = costof_match(cfg_short_offset, match_offset, match_length);
-			}
-			goto try_short_match;
-		} else if(++match_length > match_limit)
-			return best_match;
-	}
-
 	do {
-		if (ctx->output_type == OUTPUT_BITFIRE) {
-			cost = costof_match_8class(cfg_long_offset, match_offset, match_length);
-		} else {
-			cost = costof_match(cfg_long_offset, match_offset, match_length);
-		}
-try_short_match:
+		//if (allow_repeat && match_offset == last_offset) {
+		//	cost = costof_rep(match_offset, match_length);
+		//	best_match.repeat = 1;
+		//} else {
+			cost = costof_match(match_offset, match_length);
+			best_match.repeat = 0;
+		//}
 		cost += info[cursor + match_length].cumulative_cost;
 
 		if(cost < best_match.cumulative_cost) {
@@ -527,15 +444,18 @@ unsigned find_matches(lz_context *ctx) {
 	const unsigned char *src_data = ctx->src_data;
 	lz_info *info = ctx->info;
 
-	unsigned offset_limit = min(INFINITE_WINDOW, cfg_long_limit);
+	unsigned offset_limit = min(INFINITE_WINDOW, MATCH_LIMIT);
 	unsigned cursor = ctx->src_end;
+        unsigned last_offset = 1;
+	bool allow_repeat = true;
 
-	info[cursor].cumulative_cost = 0;
+	// omit first type bit, start with -1
+	info[cursor].cumulative_cost = -1;
 
 	while(cursor != src_begin) {
 		unsigned match_length;
 		signed cursor_limit;
-		unsigned length_limit;
+		unsigned length_limit = 65536;
 		signed *hash_bucket;
 		signed hash_link;
 		lz_info best_match;
@@ -545,7 +465,6 @@ unsigned find_matches(lz_context *ctx) {
 		match_length = 1;
 		cursor_limit = cursor - offset_limit;
 
-		length_limit = RUN_LIMIT;
 		length_limit = min(length_limit, remainder(cursor, INFINITE_WINDOW));
 		length_limit = min(length_limit, src_end - cursor);
 
@@ -583,21 +502,27 @@ unsigned find_matches(lz_context *ctx) {
 						cursor - hash_link,
 						match_length + 1,
 						i,
-						best_match
+						best_match,
+						last_offset,
+						allow_repeat
 					);
 
 					match_length = i;
-
-					if(match_length == RUN_LIMIT)
-						break;
 				}
 			}
 
 			hash_link = info[hash_link].hash_link;
 		}
-
 		info[cursor] = best_match;
+		if(best_match.match_offset) {
+			last_offset = best_match.match_offset;
+			allow_repeat = false;
+		} else {
+			allow_repeat = true;
+		}
 	}
+	//info[src_begin].cumulative_cost--;
+        //printf("%d\n", info[src_begin].cumulative_cost);
 	return info[src_begin].cumulative_cost;
 }
 
@@ -606,8 +531,42 @@ unsigned find_matches(lz_context *ctx) {
  * Write the generated matches and literal runs
  ******************************************************************************/
 
-// burps out remaining literals as a plain bnary blob
-void encode_literals_plain (lz_context *ctx, unsigned cursor, unsigned length) {
+int bit_size(int value) {
+    int bits = 1;
+    while (value > 1) {
+        bits++;
+        value >>= 1;
+    }
+    return bits;
+}
+
+void write_interlaced_elias_gamma(lz_context *ctx, int value, int skip) {
+    int bits = bit_size(value);
+    int i;
+
+    for (i = 2; i <= value; i <<= 1)
+        ;
+    i >>= 1;
+
+
+    if (bits >= 9) {
+        /* change bit-order, send LSB first */
+        /* remove preceeding 1 first */
+        value = value & ((0xffff ^ i));
+        /* move LSB bits to the beginning */
+        value = (value >> 8) | ((value & 0xff) << (bits - 9));
+    }
+
+    while ((i >>= 1) > 0) {
+        if (!skip) output_bit(ctx, 0);
+	skip = 0;
+        if (!skip) output_bit(ctx, (value & i) != 0);
+	skip = 0;
+    }
+    if (!skip) output_bit(ctx, 1);
+}
+
+void encode_literals_plain(lz_context *ctx, unsigned cursor, unsigned length) {
 	const unsigned char *data;
 	unsigned start = length;
 
@@ -615,249 +574,54 @@ void encode_literals_plain (lz_context *ctx, unsigned cursor, unsigned length) {
 		printf ("plain literal(%u bytes)\n",length);
 	}
 
-	ctx->stats.literal_bytes += length;
-	++ctx->stats.literal_runs;
-	++ctx->stats.llen_freq[length];
-
 	data = &ctx->src_data[cursor];
 	do
 		output_literal(ctx, data[start - length--]);
 	while(length);
 }
 
-void encode_literals_8class (lz_context *ctx, unsigned cursor, unsigned length) {
-	signed bit;
+void encode_literals(lz_context *ctx, unsigned cursor, unsigned length) {
 	const unsigned char *data;
 	unsigned start = length;
 
 	if(ctx->show_trace) {
 		printf ("literal(%u bytes)\n",length);
 	}
-	ctx->stats.literal_bytes += length;
-	++ctx->stats.literal_runs;
-	++ctx->stats.llen_freq[length];
 
-	bit = _log2(length);
-	while(--bit >= 0) {
-		output_bit(ctx, 1);
-		output_bit(ctx, length >> bit);
+	if (ctx->src_begin != cursor) output_bit(ctx, 0);
+
+        write_interlaced_elias_gamma(ctx, length, 0);
+
+	data = &ctx->src_data[cursor];
+	do
+		output_literal(ctx, data[start - length--]);
+	while(length);
+}
+
+void encode_rep(lz_context *ctx, signed offset, unsigned length) {
+	if(ctx->show_trace) {
+		printf("rep(-%u, %u bytes)\n",offset,length);
 	}
 
-	output_bit(ctx, 0);
-
-	data = &ctx->src_data[cursor];
-	do
-		output_literal(ctx, data[start - length--]);
-	while(length);
-}
-
-void encode_literals (lz_context *ctx, unsigned cursor, unsigned length) {
-	signed bit;
-	const unsigned char *data;
-	unsigned start = length;
-
-	ctx->stats.literal_bytes += length;
-	++ctx->stats.literal_runs;
-	++ctx->stats.llen_freq[length];
-
-	if(ctx->show_trace) printf ("length: ");
-	bit = _log2(length);
-        while(--bit >= 0) {
-                output_bit(ctx, 1);
-                output_bit(ctx, length >> bit);
-		if (ctx->show_trace) printf(" ");
-        }
-
         output_bit(ctx, 0);
-
-	data = &ctx->src_data[cursor];
-	do
-		output_literal(ctx, data[start - length--]);
-	while(length);
-	if (ctx->show_trace) printf("\n");
+        write_interlaced_elias_gamma(ctx, length, 0);
 }
 
-void encode_match_8class (lz_context *ctx, signed offset, unsigned length) {
-	unsigned offset_bits;
-	unsigned offset_prefix;
-	const offset_length_t *offset_class;
-	signed length_bit;
-#if BITFIRE_WITH_MOFF
-	const unsigned prefix_order[] = {0,1,2,3,7,6,5,4};
-#else
-	const unsigned prefix_order[] = {1,2,0,3,4,5,6,7};
-#endif
-
+void encode_match(lz_context *ctx, signed offset, unsigned length) {
 	if(ctx->show_trace) {
 		printf("match(-%u, %u bytes)\n",offset,length);
 	}
 
-	++ctx->stats.match_count;
-	ctx->stats.match_bytes += length;
-	ctx->stats.offset_distance += offset;
+        output_bit(ctx, 1);
+        write_interlaced_elias_gamma(ctx, (offset - 1) / 128 + 1, 0);
 
-	// Write length
-	length_bit = _log2(--length) - 1;
+        output_literal(ctx, (((offset - 1) % 128) << 1) | (length == 2));
 
-	// Write offset prefix
-	if(length == 2 - 1) {
-		offset_prefix = 0;
-		assert(offset <= cfg_short_limit);
-		offset_class = cfg_short_offset;
-
-		while(offset > offset_class->limit) {
-			++offset_class;
-			++offset_prefix;
-		}
-
-		offset_prefix = prefix_order[offset_prefix];
-
-		++ctx->stats.short_freq[offset_prefix & 3];
-	} else {
-		offset_prefix = 4;
-		assert(offset <= cfg_long_limit);
-		offset_class = cfg_long_offset;
-
-		while(offset > offset_class->limit) {
-			++offset_class;
-			++offset_prefix;
-		}
-
-		offset_prefix = prefix_order[offset_prefix];
-
-		++ctx->stats.long_freq[offset_prefix & 3];
-	}
-
-	output_bit(ctx, offset_prefix >> 2);
-
-	while(length_bit >= 0) {
-		output_bit(ctx, length >> length_bit);
-		output_bit(ctx, --length_bit < 0);
-	}
-
-	output_bit(ctx, offset_prefix >> 1);
-	output_bit(ctx, offset_prefix >> 0);
-
-	// Write offset payload
-	offset -= offset_class->base;
-
-	offset_bits = offset_class->bits;
-	if (offset_bits > 7) {
-		while(offset_bits & 7) output_bit(ctx,  offset >> --offset_bits);
-	} else {
-		while(offset_bits & 7) output_bit(ctx, ~offset >> --offset_bits);
-	}
-	if(offset_bits)	output_literal(ctx, ~offset);
-	++ctx->stats.len_freq[length + 2];
-}
-
-void encode_match (lz_context *ctx, signed offset, unsigned length) {
-	unsigned offset_bits;
-	unsigned offset_prefix;
-	const offset_length_t *offset_class;
-	signed length_bit;
-	unsigned init_bit;
-
-	if (offset == 0) length = RUN_LIMIT + 2;
-	++ctx->stats.match_count;
-	ctx->stats.match_bytes += length;
-	ctx->stats.offset_distance += offset;
-	if (ctx->stats.max_offset < offset) ctx->stats.max_offset = offset;
-
-	if(ctx->show_trace) printf ("length: ");
-	// Write initial length bit
-	length_bit = _log2(--length);
-	init_bit = --length_bit < 0;
-	output_bit(ctx, init_bit);
-
-	length--;
-
-	//nothing to do if length == 1, as the only needed bit is already written
-	if (length == 0) {
-	} else if (length == 1) {
-		//special case, no additional bits will follow after 0 as payload is 0
-		output_bit(ctx, 0);
-	//now handle lengths > 2
-	} else {
-		output_bit(ctx, 1);
-		length_bit = _log2(length);
-	        while(--length_bit >= 0) {
-			if (ctx->show_trace) printf(" ");
-	                output_bit(ctx, length >> length_bit);
-			//if (ctx->show_trace) printf(" ");
-			if (length >= 255) {
-				//skip stop bit if number has 8 bits
-				if (length_bit != 0) {
-					output_bit(ctx, length_bit != 0);
-				} else {
-					if (ctx->show_trace) printf("s");
-				}
-			} else {
-				output_bit(ctx, length_bit != 0);
-			}
-	        }
-	}
-	if (ctx->show_trace) printf("\n");
-
-	if (length >= RUN_LIMIT) return;
-
-	// Write offset prefix
-	if(length == 0) {
-		assert(offset <= cfg_short_limit);
-		offset_prefix = 0;
-		offset_class = cfg_short_offset;
-
-		while(offset > offset_class->limit) {
-			++offset_class;
-			++offset_prefix;
-		}
-
-		++ctx->stats.short_freq[offset_prefix];
-		++ctx->stats.len_freq[length + 2];
-
-		// Note that the encoding for short matches is reversed relative to
-		// the long ones in order to expose holes in the decruncher's offset
-		// tables
-		offset_prefix = ~offset_prefix;
-	} else {
-		assert(offset <= cfg_long_limit);
-		offset_prefix = 0;
-		offset_class = cfg_long_offset;
-
-		while(offset > offset_class->limit) {
-			++offset_class;
-			++offset_prefix;
-		}
-
-		++ctx->stats.long_freq[offset_prefix];
-		++ctx->stats.len_freq[length + 2];
-	}
-
-	if(ctx->show_trace) printf("offset: (%d)", init_bit);
-	output_bit(ctx, offset_prefix >> 1);
-	output_bit(ctx, offset_prefix >> 0);
-	if(ctx->show_trace) printf("-");
-
-	// Write offset payload
-	offset -= offset_class->base;
-	offset = ~offset;
-
-	offset_bits = offset_class->bits;
-	while(offset_bits & 7)
-		output_bit(ctx, offset >> --offset_bits);
-
-	if(offset_bits) {
-		output_literal(ctx, offset);
-		if (ctx->show_trace) printf("$%02x", offset & 0xff);
-	}
-
-	if (ctx->show_trace) printf("\n");
+        write_interlaced_elias_gamma(ctx, length - 1, 1);
 }
 
 void render_output(lz_context *ctx) {
 	unsigned cursor;
-
-	bool implicit_match = false;
 
 //	unsigned output_end = ctx->output_end;
 	signed dest_pos;
@@ -909,64 +673,29 @@ void render_output(lz_context *ctx) {
 			unsigned offset = info[cursor].match_offset;
 			sentinel_needed = false;
 
-			if(!implicit_match) {
-				if(ctx->show_trace) printf ("type_bit ");
-				if(update) output_bit(ctx, 0);
-				if(ctx->show_trace) printf ("\n");
-			}
-
-			if (ctx->output_type == OUTPUT_BITFIRE) {
-				if (!update) {
-					encode_literals_plain(ctx, cursor, length);
-				} else {
-					encode_match_8class(ctx, offset, length);
-				}
+			if (!update) {
+				encode_literals_plain(ctx, cursor, length);
 			} else {
-				encode_match(ctx, offset, length);
+				if (info[cursor].repeat) {
+					encode_rep(ctx, offset, length);
+				} else {
+					encode_match(ctx, offset, length);
+				}
 			}
 			if(ctx->show_trace) printf ("\n");
 
-			implicit_match = false;
 			last_match = cursor + length;
 		} else {
 			sentinel_needed = true;
 			length = -length;
 
 			if(ctx->show_trace) printf ("type_bit ");
-			if(update) output_bit(ctx, 1);
+			if(update && ctx->output_type != OUTPUT_BITFIRE) output_bit(ctx, 1);
 			if(ctx->show_trace) printf ("\n");
 
-			// Normally a match implicitly follows a literal run except for the
-			// case of a maximum length literal run
-			implicit_match = length < RUN_LIMIT;
-
-			// The parser may generate a short run followed by one or more maximum
-			// length runs for split literals. This needs to be avoided manually
-			// by reversing the order
-			if(implicit_match) {
-				signed next_length = -info[cursor + length].match_length;
-				//is the next run a literal too? is the length of the current literal smaller then the run limit and is the next element a literal of maximum runlength? If so, swap both, and if things continue, do so also on upcoming turns.
-				if(next_length > 0 && next_length == RUN_LIMIT && length < RUN_LIMIT) {
-				//if(next_length > 0) {
-					info[cursor].match_length = -next_length;
-					info[cursor + next_length].match_length = -length;
-
-					//check that first element is < RUN_LIMIT if we swap elements
-					assert(length < RUN_LIMIT);
-
-					length = next_length;
-					implicit_match = false;
-				}
-			}
-
-			if (ctx->output_type == OUTPUT_BITFIRE) {
-				if (!update) {
-					encode_literals_plain(ctx, cursor, length);
-				} else {
-					encode_literals_8class(ctx, cursor, length);
-				}
-			}
-			else {
+			if (!update) {
+				encode_literals_plain(ctx, cursor, length);
+			} else {
 				encode_literals(ctx, cursor, length);
 			}
 			if(ctx->show_trace) printf ("\n");
@@ -981,14 +710,14 @@ void render_output(lz_context *ctx) {
 		unsigned expected = info[ctx->output_begin].cumulative_cost;
 		unsigned actual = ctx->file_size;
 
-		if(expected != actual) {
+		//if(expected != actual) {
 			printf (
 				"expected: %u\n"
 				"actual:   %u\n",
 				expected,
 				actual
 			);
-		}
+		//}
 	}
 #	endif
 
@@ -1014,320 +743,20 @@ void render_output(lz_context *ctx) {
 		if (sentinel_needed || ctx->overlap || ctx->load_addr >= 0 || ctx->depack_to >= 0) {
 			// The sentinel is a maximum-length match
 			if(ctx->show_trace) printf("EOF\n");
-			if(!implicit_match) {
-				if(ctx->show_trace) printf ("type_bit ");
-				output_bit(ctx, 0);
-				if(ctx->show_trace) printf ("\n");
-			}
 
 //			printf("%d bits saved\n", saved);
 
-			if (ctx->output_type == OUTPUT_BITFIRE) {
-				length_bit = _log2(RUN_LIMIT);
-				output_bit(ctx, --length_bit >= 0);
+			length_bit = _log2(RUN_LIMIT);
+			output_bit(ctx, --length_bit >= 0);
 
-				while(length_bit >= 0) {
-					output_bit(ctx, RUN_LIMIT >> length_bit);
-					output_bit(ctx, --length_bit < 0);
-				}
-			} else {
-				encode_match(ctx, 1, RUN_LIMIT+3);
+			while(length_bit >= 0) {
+				output_bit(ctx, RUN_LIMIT >> length_bit);
+				output_bit(ctx, --length_bit < 0);
 			}
 		}
 	}
 
 	return;
-}
-
-
-/******************************************************************************
- * Parse out the set of offset bit lengths from a descriptor string
- ******************************************************************************/
-
-//XXX TODO basically the same, except table->base = 0 and base is unused?
-static void prepare_offset_lengths_8class(offset_length_t *table, size_t count) {
-	unsigned limit = 0;
-	unsigned previous = 0;
-
-	do {
-		unsigned int bits = table->bits;
-
-		if(bits <= previous)
-			fatal("offset lengths must be listed in ascending order");
-		previous = bits;
-		if(bits > OFFSET_LENGTH_LIMIT)
-			fatal("offset lengths cannot be wider than %u bits", OFFSET_LENGTH_LIMIT);
-
-		limit = 1 << bits;
-		table->base = 1;
-		table->limit = limit;
-		++table;
-	} while(--count);
-}
-
-static void prepare_offset_lengths(offset_length_t *table, size_t count) {
-	unsigned base;
-	unsigned limit = 0;
-	unsigned previous = 0;
-
-	do {
-		unsigned int bits = table->bits;
-
-		if(bits <= previous)
-			fatal("offset lengths must be listed in ascending order");
-		previous = bits;
-		if(bits > OFFSET_LENGTH_LIMIT)
-			fatal("offset lengths cannot be wider than %u bits", OFFSET_LENGTH_LIMIT);
-
-		base = limit + 1;
-		limit += 1 << bits;
-		table->base = base;
-		table->limit = limit;
-		++table;
-	} while(--count);
-}
-
-bool parse_offset_lengths(lz_context* ctx, const char *text) {
-	if(sscanf(text, "%u/%u/%u/%u:%u/%u/%u/%u",
-		&cfg_short_offset[0].bits, &cfg_short_offset[1].bits,
-		&cfg_short_offset[2].bits, &cfg_short_offset[3].bits,
-		&cfg_long_offset[0].bits, &cfg_long_offset[1].bits,
-		&cfg_long_offset[2].bits, &cfg_long_offset[3].bits) != 8) {
-		return false;
-	}
-	if (ctx->output_type == OUTPUT_BITFIRE && !BITFIRE_WITH_MOFF) {
-		prepare_offset_lengths_8class(cfg_short_offset, 4);
-		prepare_offset_lengths_8class(cfg_long_offset, 4);
-	} else {
-		prepare_offset_lengths(cfg_short_offset, 4);
-		prepare_offset_lengths(cfg_long_offset, 4);
-	}
-	return true;
-}
-
-
-/******************************************************************************
- * Generate decruncher the tables corresponding to a particular offset length
- * sequence.
- * These are admittedly rather convoluted and tied tightly to how matches are
- * handled in the implementation. See the source for details
- ******************************************************************************/
-
-static char single_offset (const offset_length_t *class, unsigned shift) {
-	signed offset = class->base + 1;
-	if(class->bits > 8)
-		offset += 0x8000;
-	else if(class->bits == 8)
-		offset += 0x0100;
-	offset = -offset;
-	offset >>= shift;
-	offset &= 0xFF;
-
-	return offset;
-}
-
-static void write_single_offset (FILE *file, const offset_length_t *class, unsigned shift) {
-	char binary[9];
-
-	signed offset = class->base + 1;
-	if(class->bits > 8)
-		offset += 0x8000;
-	else if(class->bits == 8)
-		offset += 0x0100;
-	offset = -offset;
-	offset >>= shift;
-	offset &= 0xFF;
-
-	{
-		char *digit = &binary[8];
-		*digit = '\0';
-		do {
-			*--digit = (offset & 1)["01"];
-			offset >>= 1;
-		} while(digit != binary);
-	}
-
-	fprintf (
-		file,
-		"%s\t\t.byte %%%s\t\t;%u-%u%s\n",
-		class->bits < shift ? ";" : "",
-		binary,
-		class->base,
-		class->limit,
-		class->bits < shift ? " (unreferenced)" : ""
-	);
-}
-
-void write_offsets(FILE* file) {
-	static char const length_codes[] = {
-		0,
-		0xff,
-		0x7f,
-		0x3f,
-		0x1f,
-		0x0f,
-		0x07,
-		0x03,
-		0,
-		0xbf,
-		0x5f,
-		0x2f,
-		0x17,
-		0x0b,
-		0x05,
-		0x02
-	};
-
-	ptrdiff_t i;
-
-	for(i = 0; i <= 3; ++i) {
-		unsigned bits = cfg_long_offset[i].bits;
-		fputc(length_codes[bits], file);
-	}
-	for(i = 3; i >= 0; --i) {
-		unsigned bits = cfg_short_offset[i].bits;
-		fputc(length_codes[bits], file);
-	}
-	for(i = 0; i <= 3; ++i)
-		fputc(single_offset(&cfg_long_offset[i], 0), file);
-	for(i = 3; i >= 0; --i)
-		fputc(single_offset(&cfg_short_offset[i], 0), file);
-	// MSB of base offsets
-	for(i = 0; i <= 3; ++i)
-		fputc(single_offset(&cfg_long_offset[i], 8), file);
-	for(i = 3; i >= 0; --i)
-		fputc(single_offset(&cfg_short_offset[i], 8), file);
-}
-
-void write_offset_tables(const char *name) {
-	static const char long_title[] = "\t\t;Long (>2 byte matches)\n";
-	static const char short_title[] = "\t\t;Short (2 byte matches)\n";
-
-	static const char *const length_codes[] = {
-		NULL,
-		"11111111", // 1-bits
-		"01111111", // 2-bits
-		"00111111", // 3-bits
-		"00011111", // 4-bits
-		"00001111", // 5-bits
-		"00000111", // 6-bits
-		"00000011", // 7-bits
-		"00000000", // 8-bits: This needs a bit of special-processing
-		"10111111", // 9-bits
-		"01011111", // 10-bits
-		"00101111", // 11-bits
-		"00010111", // 12-bits
-		"00001011", // 13-bits
-		"00000101", // 14-bits
-		"00000010"  // 15-bits
-	};
-
-	ptrdiff_t i;
-	unsigned near_longs;
-
-	// Open the target file
-	FILE *file = fopen(name, "w");
-	if(!file)
-		fatal("cannot create '%s'", name);
-
-	// Bit lengths
-	fprintf(file, "_lz_moff_length\n");
-	fprintf(file, long_title);
-	near_longs = 0;
-	for(i = 0; i <= 3; ++i) {
-		unsigned bits = cfg_long_offset[i].bits;
-		fprintf(file, "\t\t.byte %%%s\t\t;%u bits\n",
-			length_codes[bits], bits);
-		if(bits < 8)
-			++near_longs;
-	}
-	fprintf(file, short_title);
-	for(i = 3; i >= 0; --i) {
-		unsigned bits = cfg_short_offset[i].bits;
-		fprintf(file, "\t\t.byte %%%s\t\t;%u bits\n",
-			length_codes[bits], bits);
-	}
-	// LSB of base offsets
-	fprintf(file, "_lz_moff_adjust_lo\n");
-	fprintf(file, long_title);
-	for(i = 0; i <= 3; ++i)
-		write_single_offset(file, &cfg_long_offset[i], 0);
-	fprintf(file, short_title);
-	for(i = 3; i >= 0; --i)
-		write_single_offset(file, &cfg_short_offset[i], 0);
-	// MSB of base offsets
-	fprintf(file, "_lz_moff_adjust_hi = *-%u\n", near_longs);
-	fprintf(file, long_title);
-	for(i = 0; i <= 3; ++i)
-		write_single_offset(file, &cfg_long_offset[i], 8);
-	fprintf(file, short_title);
-	for(i = 3; i >= 0; --i)
-		write_single_offset(file, &cfg_short_offset[i], 8);
-
-	fclose(file);
-}
-
-
-/******************************************************************************
- * Print some basic statistics about the encoding of the file
- ******************************************************************************/
-void print_statistics(const lz_context *ctx, FILE *file) {
-	unsigned input_size = ctx->src_end - ctx->src_begin;
-	unsigned i;
-
-	printf (
-		"input file:\t"    "%u bytes\n"
-		"output file:\t"   "%u bytes, %u bits (%.2f%% ratio)\n"
-		"short offsets:\t" "{ %u-%u: %u, %u-%u: %u, %u-%u: %u, %u-%u: %u }\n"
-		"long offsets:\t"  "{ %u-%u: %u, %u-%u: %u, %u-%u: %u, %u-%u: %u }\n"
-		"%u matches:\t"    "%u bytes, %f avg, %d max\n"
-		"%u literals:\t"   "%u bytes, %f avg\n"
-		"avg offset:\t"    "%f bytes\n",
-
-		input_size,
-		ctx->stats.output_size,
-		ctx->info[ctx->src_begin].cumulative_cost,
-		100.0 * ctx->stats.output_size / input_size,
-
-		cfg_short_offset[0].base,
-		cfg_short_offset[0].limit,
-		ctx->stats.short_freq[0],
-		cfg_short_offset[1].base,
-		cfg_short_offset[1].limit,
-		ctx->stats.short_freq[1],
-		cfg_short_offset[2].base,
-		cfg_short_offset[2].limit,
-		ctx->stats.short_freq[2],
-		cfg_short_offset[3].base,
-		cfg_short_offset[3].limit,
-		ctx->stats.short_freq[3],
-		cfg_long_offset[0].base,
-		cfg_long_offset[0].limit,
-		ctx->stats.long_freq[0],
-		cfg_long_offset[1].base,
-		cfg_long_offset[1].limit,
-		ctx->stats.long_freq[1],
-		cfg_long_offset[2].base,
-		cfg_long_offset[2].limit,
-		ctx->stats.long_freq[2],
-		cfg_long_offset[3].base,
-		cfg_long_offset[3].limit,
-		ctx->stats.long_freq[3],
-
-		ctx->stats.match_count,
-		ctx->stats.match_bytes,
-		(double) ctx->stats.match_bytes / ctx->stats.match_count,
-		ctx->stats.max_offset,
-
-		ctx->stats.literal_runs,
-		ctx->stats.literal_bytes,
-		(double) ctx->stats.literal_bytes / ctx->stats.literal_runs,
-
-		(double) ctx->stats.offset_distance / ctx->stats.match_count
-	);
-	for (i = 0; i < 256; i++) {
-		printf("% 6d   % 6d\n", ctx->stats.llen_freq[i], ctx->stats.len_freq[i]);
-	}
 }
 
 /******************************************************************************
@@ -1339,160 +768,9 @@ signed read_number(char* arg) {
 	return strtoul(arg, NULL, 10);
 }
 
-unsigned compress(lz_context* ctx, char* output_name) {
-	generate_hash_table(ctx);
-	return find_matches(ctx);
-}
-
 /******************************************************************************
- * 
+ *
  ******************************************************************************/
-
-void iterate(lz_context* ctx) {
-	unsigned packed_size;
-
-	unsigned temp;
-	signed j;
-	unsigned smin, smax;
-	unsigned lmin, lmax;
-	unsigned from, to;
-
-	char lengths[24];
-	unsigned lbits[6], sbits[6];
-	unsigned lbest, sbest;
-
-	lbits[0] = 3;
-	lbits[1] = 7;
-	lbits[2] = 10;
-	lbits[3] = 13;
-
-	setbuf(stdout, NULL);
-
-	packed_size = 0;
-	smin = 1;
-	smax = 15;
-
-	lmin = 1;
-	lmax = 15;
-
-	ctx->iterations = 1;
-	while (ctx->iterations--) {
-		for (j = smin; j <= smax - 3; j++) {
-			sbits[0] = j;
-			sbits[3] = smax;
-			sbits[1] = j + (smax - j) / 3;
-			sbits[2] = j + (smax - j) / 3 * 2;
-			sprintf(lengths,"%u/%u/%u/%u:%u/%u/%u/%u",sbits[0],sbits[1],sbits[2],sbits[3],lbits[0],lbits[1],lbits[2],lbits[3]);
-			parse_offset_lengths(ctx, lengths);
-			temp = compress(ctx, ctx->output_name);
-			if (packed_size == 0 || temp < packed_size) {
-				printf("best bitlengths: %s        \r", lengths);
-				smin = j; packed_size = temp;
-			}
-		}
-		for (j = smax; j > smin + 3; j--) {
-			sbits[0] = smin;
-			sbits[3] = j;
-			sbits[1] = smin + (j - smin) / 3;
-			sbits[2] = smin + (j - smin) / 3 * 2;
-			sprintf(lengths,"%u/%u/%u/%u:%u/%u/%u/%u",sbits[0],sbits[1],sbits[2],sbits[3],lbits[0],lbits[1],lbits[2],lbits[3]);
-			parse_offset_lengths(ctx, lengths);
-			temp = compress(ctx, ctx->output_name);
-			if (packed_size == 0 || temp < packed_size) {
-				printf("best bitlengths: %s        \r", lengths);
-				smax = j; packed_size = temp;
-			}
-
-		}
-		sbits[0] = smin;
-		sbits[3] = smax;
-		sbits[1] = smin + (smax - smin) / 3;
-		sbits[2] = smin + (smax - smin) / 3 * 2;
-
-		for (j = lmin; j <= lmax - 3; j++) {
-			lbits[0] = j;
-			lbits[3] = lmax;
-			lbits[1] = j + (lmax - j) / 3;
-			lbits[2] = j + (lmax - j) / 3 * 2;
-			sprintf(lengths,"%u/%u/%u/%u:%u/%u/%u/%u",sbits[0],sbits[1],sbits[2],sbits[3],lbits[0],lbits[1],lbits[2],lbits[3]);
-			parse_offset_lengths(ctx, lengths);
-			temp = compress(ctx, ctx->output_name);
-			if (packed_size == 0 || temp < packed_size) {
-				printf("best bitlengths: %s        \r", lengths);
-				lmin = j; packed_size = temp;
-			}
-		}
-		for (j = lmax; j > lmin + 3; j--) {
-			lbits[0] = lmin;
-			lbits[3] = j;
-			lbits[1] = lmin + (j - lmin) / 3;
-			lbits[2] = lmin + (j - lmin) / 3 * 2;
-			sprintf(lengths,"%u/%u/%u/%u:%u/%u/%u/%u",sbits[0],sbits[1],sbits[2],sbits[3],lbits[0],lbits[1],lbits[2],lbits[3]);
-			parse_offset_lengths(ctx, lengths);
-			temp = compress(ctx, ctx->output_name);
-			if (packed_size == 0 || temp < packed_size) {
-				printf("best bitlengths: %s        \r", lengths);
-				lmax = j; packed_size = temp;
-			}
-
-		}
-		lbits[0] = lmin;
-		lbits[3] = lmax;
-		lbits[1] = lmin + (lmax - lmin) / 3;
-		lbits[2] = lmin + (lmax - lmin) / 3 * 2;
-
-
-	}
-
-	packed_size = 0;
-	ctx->iterations = 2;
-
-	while (ctx->iterations--) {
-
-                for (j = 0; j < 4; j++) {
-                        lbest = lbits[j];
-			if (j == 0) from = 1;
-			else from = lbits[j-1] + 1;
-
-			if (j == 3) to = 16;
-			else to = lbits[j+1] - 1;
-
-                        for (lbits[j] = from; lbits[j] < to; lbits[j]++) {
-                                sprintf(lengths,"%u/%u/%u/%u:%u/%u/%u/%u",sbits[0],sbits[1],sbits[2],sbits[3],lbits[0],lbits[1],lbits[2],lbits[3]);
-                                parse_offset_lengths(ctx, lengths);
-                                temp = compress(ctx, ctx->output_name);
-                                if (packed_size == 0 || temp < packed_size) {
-                                        printf("best bitlengths: %s        \r", lengths);
-                                        lbest = lbits[j]; packed_size = temp;
-                                }
-                        }
-                       	lbits[j] = lbest;
-                }
-                for (j = 0; j < 4; j++) {
-                        sbest = sbits[j];
-			if (j == 0) from = 1;
-			else from = sbits[j-1] + 1;
-
-			if (j == 3) to = 16;
-			else to = sbits[j+1] - 1;
-
-                        for (sbits[j] = from; sbits[j] < to; sbits[j]++) {
-                                sprintf(lengths,"%u/%u/%u/%u:%u/%u/%u/%u",sbits[0],sbits[1],sbits[2],sbits[3],lbits[0],lbits[1],lbits[2],lbits[3]);
-                                parse_offset_lengths(ctx, lengths);
-                                temp = compress(ctx, ctx->output_name);
-                                if (packed_size == 0 || temp < packed_size) {
-                                        printf("best bitlengths: %s        \r", lengths);
-                                        sbest = sbits[j]; packed_size = temp;
-                                }
-                        }
-                       	sbits[j] = sbest;
-		}
-	}
-
-	sprintf(lengths,"%u/%u/%u/%u:%u/%u/%u/%u",sbits[0],sbits[1],sbits[2],sbits[3],lbits[0],lbits[1],lbits[2],lbits[3]);
-	parse_offset_lengths(ctx, lengths);
-	printf("best bitlengths: %s        \n", lengths);
-}
 
 int crunch(lz_context* ctx) {
 	unsigned packed_size;
@@ -1507,8 +785,6 @@ int crunch(lz_context* ctx) {
 	cut_input_addr(ctx, ctx->cut_addr_first, ctx->cut_addr_last, ctx->full_dict);
 
 	source_size = ctx->src_end - ctx->src_begin;
-
-	if (ctx->iterations > 0) iterate(ctx);
 
 	// Do the compression
 	generate_hash_table(ctx);
@@ -1541,13 +817,12 @@ int crunch(lz_context* ctx) {
 		fputc(ctx->start_addr >> 8, ctx->dst_file);
 	}
 
-	if(ctx->write_tables) write_offsets(ctx->dst_file);
-
 	// avoid to enable depack_to mechanisms when src-addr is already depack-destination
 	if(ctx->depack_to == ctx->src_begin) {
 		ctx->depack_to = -1;
 	}
 
+        // XXX TODO not necessary if we can rely on our cost_model
 	// Do a dry run with rendering output to find out packed_filesize
 	ctx->output = false;
 	render_output(ctx);
@@ -1584,7 +859,7 @@ int crunch(lz_context* ctx) {
 
 	// Some stats and info
 	if (ctx->verbose) printf("source size: $%04x (%d)\n", source_size, source_size);
-	if (ctx->verbose) printf("packed size: $%04x (%d) %s ratio: %.1f%%\n", packed_size - ctx->write_tables * 24, packed_size - ctx->write_tables * 24, ctx->write_tables ? "(+24 byte tables)" : "", ((packed_size - ctx->write_tables * 24) * 100.0 / (ctx->output_end - ctx->output_begin)));
+	if (ctx->verbose) printf("packed size: $%04x (%d) %s ratio: %.1f%%\n", packed_size, packed_size, "", (packed_size * 100.0 / (ctx->output_end - ctx->output_begin)));
 
 	// Print more info and calc addresses
 	if(ctx->output_type == OUTPUT_LEVEL || ctx->output_type == OUTPUT_BITFIRE) {
@@ -1604,21 +879,21 @@ int crunch(lz_context* ctx) {
 		fputc(ctx->load_addr >> 8, ctx->dst_file);
 		// Add depack address
 		if (ctx->depack_to >=0) {
-			fputc(ctx->depack_to & 0xff, ctx->dst_file);
 			fputc(ctx->depack_to >> 8, ctx->dst_file);
+			fputc(ctx->depack_to & 0xff, ctx->dst_file);
 		} else {
 			if (ctx->relocate_to >= 0) {
-				fputc(ctx->relocate_to & 0xff, ctx->dst_file);
 				fputc(ctx->relocate_to >> 8, ctx->dst_file);
+				fputc(ctx->relocate_to & 0xff, ctx->dst_file);
 			} else {
-				fputc(ctx->output_begin & 0xff, ctx->dst_file);
 				fputc(ctx->output_begin >> 8, ctx->dst_file);
+				fputc(ctx->output_begin & 0xff, ctx->dst_file);
 			}
 		}
 		if (!ctx->overlap) {
 			// Add end address
-			fputc(ctx->end_pos & 0xff, ctx->dst_file);
 			fputc(ctx->end_pos >> 8, ctx->dst_file);
+			fputc(ctx->end_pos & 0xff, ctx->dst_file);
 		}
 
 		// Do some sanity checks
@@ -1684,7 +959,6 @@ int crunch(lz_context* ctx) {
 	}
 
 	// Display some statistics gathered in the process
-	if(ctx->show_stats) print_statistics(ctx, stdout);
 	return EXIT_SUCCESS;
 }
 
@@ -1700,16 +974,12 @@ main(int argc, char *argv[]) {
 	unsigned name_length;
 	lz_context ctx;
 
-	memset(&ctx.stats, 0, sizeof ctx.stats);
 	// Parse the command line
 	program_name = *argv;
 
-	ctx.iterations = 0;
 	ctx.output_name = NULL;
 	ctx.cut_addr_first = 0;
 	ctx.cut_addr_last = INT_MAX;
-	ctx.emit_offset_tables = NULL;
-	ctx.show_stats = false;
 
         ctx.is_cbm = true;
 	ctx.show_trace = false;
@@ -1723,8 +993,6 @@ main(int argc, char *argv[]) {
 	ctx.depack_to = -1;
 	ctx.start_addr = -1;
 	ctx.relocate_to = -1;
-	ctx.write_tables = false;
-	ctx.offset_lengths = false;
         ctx.verbose = false;
 
 	while(++argv, --argc) {
@@ -1734,7 +1002,6 @@ main(int argc, char *argv[]) {
 		} else if(argc >= 2 && !strcmp(*argv, "--sfx")) {
 			ctx.start_addr = read_number(*++argv);
 			ctx.output_type = OUTPUT_SFX;
-			ctx.write_tables = true;
 			--argc;
 		} else if(argc >= 2 && !strcmp(*argv, "--load-addr")) {
 			ctx.load_addr = read_number(*++argv);
@@ -1761,20 +1028,6 @@ main(int argc, char *argv[]) {
 			ctx.verbose = true;
 		} else if(!strcmp(*argv, "--overlap")) {
 			ctx.overlap = true;
-		} else if(!strcmp(*argv, "--best-offset-tables")) {
-			ctx.iterations = 1;
-		} else if(argc >= 2 && !strcmp(*argv, "--offset-lengths")) {
-			ctx.offset_lengths = true;
-			if(!parse_offset_lengths(&ctx, *++argv))
-				break;
-			--argc;
-		} else if(argc >= 2 && !strcmp(*argv, "--emit-offset-tables")) {
-			ctx.emit_offset_tables = *++argv;
-			--argc;
-		} else if(!strcmp(*argv, "--include-tables")) {
-			ctx.write_tables = true;
-		} else if(!strcmp(*argv, "--statistics")) {
-			ctx.show_stats = true;
 		} else if(!strcmp(*argv, "--trace-coding")) {
 			ctx.show_trace = true;
 		} else if(!strcmp(*argv, "--binfile")) {
@@ -1786,15 +1039,6 @@ main(int argc, char *argv[]) {
 		} else {
 			break;
 		}
-	}
-
-	if (!ctx.offset_lengths) parse_offset_lengths(&ctx, DEFAULT_LENGTHS);
-
-	if(ctx.emit_offset_tables) {
-		write_offset_tables(ctx.emit_offset_tables);
-		// It allowed to just generate the offset tables
-		if(!argc)
-			return EXIT_SUCCESS;
 	}
 
 	if(argc != 1) {
@@ -1814,12 +1058,7 @@ main(int argc, char *argv[]) {
 			"\t[--binfile]                                          file has no 2 byte load-address (--relocate-to can help)\n"
 			"\t[--checksum]                                         print eor checksum over file\n"
 			"\t[--exit_on_warn]                                     exit with error instead of giving a warning\n"
-			"\t[--best-offset-tables]                               evaluate best offset tables, slow\n"
-			"\t[--include-tables]                                   add own tables to packed sfx\n"
-			"\t[--offset-lengths s1/s2/s3/s4:l1/l2/l3/l4]           use alternative offset lengths\n"
-			"\t[--emit-offset-tables tables.asm]                    spit out offset table\n"
 			"\t[-v]                                                 print details\n"
-			"\t[--statistics]                                       print some stats\n"
 			"\t[--trace-coding]                                     print more gibberish\n"
 			"\t{input-file}                                         the input file\n",
 			program_name
@@ -1848,18 +1087,6 @@ main(int argc, char *argv[]) {
 		}
 		if (ctx.relocate_to >= 0) {
 			fatal("option --relocate-to not supported with --sfx");
-		}
-	}
-
-	if (ctx.output_type == OUTPUT_BITFIRE) {
-		if (ctx.offset_lengths) {
-			fatal("option --offset_lengths not supported with --bitfire");
-		}
-		if (ctx.write_tables) {
-			fatal("option --write_tables not supported with --bitfire");
-		}
-		if (ctx.iterations > 0) {
-			fatal("option --best_offset_tables not supported with --bitfire");
 		}
 	}
 

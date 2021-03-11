@@ -1,5 +1,5 @@
 /*
- * (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+ * (c) Copyright 2021 by Einar Saukas. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -23,24 +23,58 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int debug_level;
+#include <stdio.h>
+#include <stdlib.h>
 
-#ifndef DEBUG_FUNCS_H
-#define DEBUG_FUNCS_H
+#include "zx0.h"
 
-//void debug_print_hex(unsigned char, int, char*, int);
+#define QTY_BLOCKS 10000
 
-#ifdef _MSC_VER
-	#define debug_message(format,...);  { if(ENABLE_DEBUG) { fprintf(stdout,"DEBUG: %s: %s(): ",__FILE__,__FUNCTION__); fprintf(stdout,format,__VA_ARGS__); } }
-	#define info_message(format,...);   { if(ENABLE_INFO) { fprintf(stdout,"INFO: "); fprintf(stdout,format,__VA_ARGS__); } }
-	#define fail_message(format,...);   { if(ENABLE_FAIL) { fprintf(stdout,"FAIL: %s: ",__FILE__); fprintf(stdout,format,__VA_ARGS__); } }
-	#define fatal_message(format,...);  { if(ENABLE_FATAL) { fprintf(stderr,"ERROR: "); fprintf(stderr,format,__VA_ARGS__); exit(2); } }
-#else
-	#define debug_message(format,args...);  { if(ENABLE_DEBUG) { fprintf(stdout,"DEBUG: %s: %s(): ",__FILE__,__FUNCTION__); fprintf(stdout,format,##args); } }
-	#define info_message(format,args...);   { if(ENABLE_INFO) { fprintf(stdout,"INFO: "); fprintf(stdout,format,##args); } }
-	#define fail_message(format,args...);   { if(ENABLE_FAIL) { fprintf(stdout,"FAIL: %s: ",__FILE__); fprintf(stdout,format,##args); } }
-	#define fatal_message(format,args...);  { if(ENABLE_FATAL) { fprintf(stderr,"ERROR: "); fprintf(stderr,format,##args); exit(2); } }
+BLOCK *ghost_root = NULL;
+BLOCK *dead_array = NULL;
+int dead_array_size = 0;
 
-#endif
+BLOCK *allocate(int bits, int index, int offset, int length, BLOCK *chain) {
+    BLOCK *ptr;
 
-#endif /* DEBUG_FUNCS_H */
+    if (ghost_root) {
+        ptr = ghost_root;
+        ghost_root = ptr->ghost_chain;
+        if (ptr->chain) {
+            if (!--ptr->chain->references) {
+                ptr->chain->ghost_chain = ghost_root;
+                ghost_root = ptr->chain;
+            }
+        }
+    } else {
+        if (!dead_array_size) {
+            dead_array = (BLOCK *)malloc(QTY_BLOCKS*sizeof(BLOCK));
+            if (!dead_array) {
+                fprintf(stderr, "Error: Insufficient memory\n");
+                exit(1);
+            }
+            dead_array_size = QTY_BLOCKS;
+        }
+        ptr = &dead_array[--dead_array_size];
+    }
+    ptr->bits = bits;
+    ptr->index = index;
+    ptr->offset = offset;
+    ptr->length = length;
+    if (chain)
+        chain->references++;
+    ptr->chain = chain;
+    ptr->references = 0;
+    return ptr;
+}
+
+void assign(BLOCK **ptr, BLOCK *chain) {
+    chain->references++;
+    if (*ptr) {
+        if (!--(*ptr)->references) {
+            (*ptr)->ghost_chain = ghost_root;
+            ghost_root = *ptr;
+        }
+    }
+    *ptr = chain;
+}

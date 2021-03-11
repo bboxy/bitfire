@@ -4,7 +4,10 @@ CFLAGS = -Os -Wall
 LDLIBS =
 CC = gcc
 
-all: bitnax d64write bitfire gcr_tables
+all: zx0 d64write bitfire gcr_tables bitnax
+
+zx0: FORCE
+	@make --no-print-directory -C $@
 
 d64write: d64write.c *.h
 	@echo "Buidling d64write..."
@@ -17,18 +20,6 @@ bitnax: bitnax.c sfx.h
 gcr_tables: gcr_tables.c
 	@echo "Buidling gcr table tool..."
 	@${CC} $< -o $@ ${CFLAGS}
-
-sfx.h: sfx.asm
-	@echo "Buidling sfx-binary..."
-	@echo '#ifndef SFX_H' > $@
-	@echo '#define SFX_H' >> $@
-	@$(ACME) $(ACMEOPT) --vicelabels $(basename $@).lst -o $(basename $@) $<
-	@grep 'BITNAX' $(basename $@).lst | sed -r 's/al C:([0-9a-f]+)\s\.(.*)/#define \2 0x\1/' >> $@
-	@echo 'static const char decruncher[] = {' >> $@
-	@hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/\n/g' | sed -e 's/.\{50\}/&\n/g' | sed -e 's/^/&    /g' >> $@
-	@echo '};' >> $@
-	@echo '#endif /* SFX_H */' >> $@
-	@rm $(basename $@).lst sfx
 
 resident: resident.asm config.inc Makefile
 	@echo -n "Buidling resident part ->"
@@ -60,4 +51,7 @@ installer: resident drivecode.asm installer.asm config.inc detect.asm Makefile
 bitfire: installer
 
 clean:
-	@-rm bitnax d64write installer loader_acme.inc loader_c6510.inc loader_kickass.inc resident gcr_tables killdrive.prg sfx.h
+	@-rm bitnax d64write installer loader_acme.inc loader_c6510.inc loader_kickass.inc resident gcr_tables
+	@make --no-print-directory -C zx0/ clean
+
+FORCE:

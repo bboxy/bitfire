@@ -1,6 +1,6 @@
 ;options for resident part
 BITFIRE_RESIDENT_ADDR		= $0200
-BITFIRE_ZP_ADDR			= $f7
+BITFIRE_ZP_ADDR			= $f0
 BITFIRE_LAX_ADDR		= $00
 
 ;Framework options, certain features can be switched on/off separatedly
@@ -16,7 +16,7 @@ BITFIRE_DECOMP_ZERO_OVERLAP	= 1		;Packed files have no overlap and can be comple
 ;Include the loader
 BITFIRE_LOADER			= 1		;Include the loader or maybe decide for a standalone depacker + framework for onefilers
 
-BITFIRE_NMI_GAPS		= 0		;Leaves gaps @ $0200 and $0300 (if resident part is at default location) for NMI handlers, needed for stable NMIs with THCM's digistuff.
+BITFIRE_NMI_GAPS		= 1		;Leaves gaps @ $0200 and $0300 (if resident part is at default location) for NMI handlers, needed for stable NMIs with THCM's digistuff.
 
 BITFIRE_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resident part for later use, so upcoming parts do not need an own detection anymore but can read out that values again
 
@@ -25,7 +25,7 @@ BITFIRE_INSTALLER_ADDR		= $1000
 BITFIRE_RESIDENT_AUTOINST	= 1		;Set this to zero if you want to do the install of the resident part on your own, but why would you want to do so anyway? :-D
 
 ;options for drivecode
-BITFIRE_CONFIG_MOTOR_ALWAYS_ON	= 1		;If you want to be annoying, let the motor spin during the whole demo :-D
+BITFIRE_CONFIG_MOTOR_ALWAYS_ON	= 0		;If you want to be annoying, let the motor spin during the whole demo :-D
 BITFIRE_CONFIG_INTERLEAVE	= 4		;Turned out to be the best choice, if you really think you know it better, change it and get slowed down :-)
 
 ;constants, better don't touch

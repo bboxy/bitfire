@@ -1,5 +1,7 @@
 /*
- * (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+ * Modified version (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+ *
+ * Based on original (c) Copyright 2021 by Einar Saukas. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -23,20 +25,58 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int debug_level;
-
-#ifndef INCLUDES_H
-#define INCLUDES_H
-
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <errno.h>
 
-#ifdef _MSC_VER
-#else
-	#include <libgen.h>
-#endif
+#include "zx0.h"
 
-#endif /* INCLUDES_H */
+#define QTY_BLOCKS 10000
+
+BLOCK *ghost_root = NULL;
+BLOCK *dead_array = NULL;
+int dead_array_size = 0;
+
+BLOCK *allocate(int bits, int index, int offset, int length, BLOCK *chain) {
+    BLOCK *ptr;
+
+    if (ghost_root) {
+        ptr = ghost_root;
+        ghost_root = ptr->ghost_chain;
+        if (ptr->chain) {
+            if (!--ptr->chain->references) {
+                ptr->chain->ghost_chain = ghost_root;
+                ghost_root = ptr->chain;
+            }
+        }
+    } else {
+        if (!dead_array_size) {
+            dead_array = (BLOCK *)malloc(QTY_BLOCKS*sizeof(BLOCK));
+            if (!dead_array) {
+                fprintf(stderr, "Error: Insufficient memory\n");
+                exit(1);
+            }
+            dead_array_size = QTY_BLOCKS;
+        }
+        ptr = &dead_array[--dead_array_size];
+    }
+    ptr->bits = bits;
+    ptr->index = index;
+    ptr->offset = offset;
+    ptr->length = length;
+    if (chain)
+        chain->references++;
+    ptr->chain = chain;
+    ptr->references = 0;
+    return ptr;
+}
+
+void assign(BLOCK **ptr, BLOCK *chain) {
+    chain->references++;
+    if (*ptr) {
+        if (!--(*ptr)->references) {
+            (*ptr)->ghost_chain = ghost_root;
+            ghost_root = *ptr;
+        }
+    }
+    *ptr = chain;
+}
