@@ -246,7 +246,6 @@ unsigned char *compress(BLOCK *optimal, unsigned char *input_data, int input_siz
             overwrite = (input_index) - (input_size - *output_size + output_index);
             /* we would overwrite our packed data with a match, or have a literal that directly is followed by plain literal, so they can be aggregated */
             if ((overwrite >= 0 && optimal->offset) || (overwrite == 0 && !optimal->offset)) {
-                printf("overwrite: %d  length: %d\n", overwrite, optimal->length);
                 if (optimal->offset) {
                     /* accept match and update end_position, literals are skipped then, as they fall back to last position */
                     *inplace_end_pos = input_index - skip;
