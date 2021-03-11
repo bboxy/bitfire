@@ -116,18 +116,21 @@ wait:
 }
 
 .macro bus_lock () {
-	lda #$37
+	lda #$17
 	sta $dd02
 }
 
 .macro bus_unlock (bank) {
 	ldx #[bank & 3] | $c0
 	stx $dd00
-	lda #$3f
+	lda #$1f			;release ATN
+	sta $dd02
+	stx $dd00
+	lda #$3f			;release DATA
 	sta $dd02
 	stx $dd00
 
-	ldy #$00
+	ldy #$07
 l:
 	dey
 	bne l
@@ -136,11 +139,9 @@ l:
 //set start address of the packed file in memory. A=LSB, A=MSB
 .macro set_depack_pointers (addr) {
 	lda #<addr
-	sta bitfire_lz_sector_ptr1
-	sta bitfire_lz_sector_ptr2
+	sta bitfire_load_addr_lo
 	lda #>addr
-	sta bitfire_lz_sector_ptr1 + 1
-	sta bitfire_lz_sector_ptr2 + 1
+	sta bitfire_load_addr_hi
 }
 .macro start_music_nmi () {
 	ldx #<link_player

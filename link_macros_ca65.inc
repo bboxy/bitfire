@@ -75,7 +75,7 @@ l
 		.endmacro
 
 		.macro bus_lock
-			lda #$37
+			lda #$17
 			sta $dd02
 		.endmacro
 
@@ -83,11 +83,14 @@ l
                 .local l
 			ldx #(bank & 3)
 			stx $dd00
-			lda #$3f
+			lda #$1f			;release ATN
+			sta $dd02
+			stx $dd00
+			lda #$3f			;release DATA
 			sta $dd02
 			stx $dd00
 
-			ldy #$00
+			ldy #$07
 l
 			dey
 			bne l

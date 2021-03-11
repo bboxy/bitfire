@@ -78,7 +78,7 @@ be on the safe side
 v0.7
 - add also sln and vcproj files for bitnax
 - possibility to choose between NMI and raster IRQ for baseirq
-- add possibility for buslock to allow arbitrary $dd00 writes when loader is
+- add possibility for buslock to allow arbitary $dd00 writes when loader is
 idle, and add macros for that (bus_lock, bus_unlock $bank)
 - fix spin up handling of read dummy sectors (might have been skipped under
 some circumstances)
@@ -98,3 +98,4 @@ v1.0
 - bus_lock feature improved
 - an ATN-responder is uploaded to all remaining drives, so they can stay turned on
 - loader is started from current drive ($ba)
+- added and adopted zx0 by Elias Einar as new standard packer/depacker, tiny files, fast depack \o/

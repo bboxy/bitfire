@@ -86,18 +86,21 @@ l2		lda link_frame_count+0
 		.endm
 
 bus_lock	.macro
-		lda #$37
+		lda #$17
 		sta $dd02
 		.endm
 
 bus_unlock	.macro
 		ldx #(\1 & 3)
 		stx $dd00
-		lda #$3f
+		lda #$1f			;release ATN
 		sta $dd02
 		stx $dd00
-
-		ldy #$00
+		lda #$3f			;release DATA
+		sta $dd02
+		stx $dd00
+		;give some time for things to settle, no idea how much time is needed, leaving this out makes sx64 also fail
+		ldy #$07
 l3
 		dey
 		bne l3
@@ -105,11 +108,9 @@ l3
 
 set_depack_pointers .macro
 		lda #<(\1)
-		sta bitfire_lz_sector_ptr1
-		sta bitfire_lz_sector_ptr2
+		sta bitfire_load_addr_lo
 		lda #>(\1)
-		sta bitfire_lz_sector_ptr1 + 1
-		sta bitfire_lz_sector_ptr2 + 1
+		sta bitfire_load_addr_hi
 		.endm
 
 start_music_nmi .macro

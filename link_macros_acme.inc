@@ -143,11 +143,9 @@
 
 		!macro set_depack_pointers .addr {
 			lda #<.addr
-			sta bitfire_lz_sector_ptr1
-			sta bitfire_lz_sector_ptr2
+			sta bitfire_load_addr_lo
 			lda #>.addr
-			sta bitfire_lz_sector_ptr1 + 1
-			sta bitfire_lz_sector_ptr2 + 1
+			sta bitfire_load_addr_hi
 		}
 
 		!macro start_music_nmi {
