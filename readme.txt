@@ -8,6 +8,9 @@ zx0
 
 The packer supports output of both, sfx as well as levelpacked files suitable for Bitfire
 
+-o						Name of oputput file
+-f						Force overwrite of output file
+-q						Compress faster, but with a slightly worse ratio, you might prefer that option during development, but remove it for the final build
 --sfx startaddr					Spit out an executable for c64
 --use-prefix					Reference also the stuff that is cut off the file when using --cut-input-addr. The referenced part must be in c64-memory however to make this work upon depacking. It saves a few bytes on splitted files, as more matches can be found
 --relocate-packed				Force packed file to be loaded to a differnet location (for e.g. if it starts/ends in IO range)
@@ -138,17 +141,14 @@ jsr bitfire_decomp_
 
 Will load third file from disk and depack it afterwards.
 
-!src "request_disc.asm"
-lda #$f1
-jsr bitfire_request_disc_
+!src "link_macros_acme.inc"
++request_disc 1
 
-Will wait until side 2 is inserted into floppy and directory is sucessfully read. If you want to wait for disc change in a different manner, just have a look into request_disc.asm, there are just a few lines of code.
+Will wait until side 2 (counted from side 0 on) is inserted into floppy and directory is sucessfully read. If you want to wait for disc change in a different manner, just have a look into macro, there are just a few lines of code.
 
-lda #$80
+lda #BITFIRE_RESET
 jsr bitfire_send_byte_
-...
-
-Will start code upload to the floppy. Have a look into reset_drive.asm for a useful example. One should call it at the end of the demo to bring back the floppy to a sane state.
+Will reset the drive after the demo.
 
 lda #BITFIRE_LOAD_NEXT
 jsr bitfire_loadraw_
