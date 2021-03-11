@@ -34,7 +34,7 @@ TIME_RAW = 0
 TIME_LOADCOMP = 1
 TIME_DECOMP = 0
 
-TIME_STRICT = 1
+TIME_STRICT = 0
 
 ;num_files	= $1c
 num_files	= $12
