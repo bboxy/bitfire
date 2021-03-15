@@ -50,7 +50,7 @@ Things are shifted and masked together, so that the read values represent the fo
 00005555
 05666660        note: the last bit portion of 5 is added with the 6th nibble
 77700077
-00088888
+77788888	note: resulting table is big, but this saves a masking operation
 ```
 
 The tables can be arranged in a away (with offsets) that many of them fit together into one area to save space.
