@@ -30,14 +30,14 @@ $fe | disc-side info
 
 ## GCR-loop
 
-The data on disc is GCR-enocded, so every nibble of a byte is represented by a quintuple on disc. To make teh decoding fast enough, tables are used to look up data-portions for low- and high-nibbles that are finally merged together to the originating bytes. that happens t
+The data on disc is GCR-enocded, so every nibble of a byte is represented by a quintuple on disc. To make the decoding fast enough, tables are used to look up data-portions for low- and high-nibbles that are finally merged together to the originating bytes. that happens t
 hat fast now, that also the checksumming of a sector is done on the fly. The tables also have further advantages, as bits can be swapped, so they suit better for the serial transfer later on. However debugging or sending variblae values over the serial bus, are more complicated then, as they need to be scrambled/descrambled beforehand.
 
 So 8 nibbles are represented like this on disc and stored in 8 quintuples on disc
 
 `11111222 22333334 44445555 56666677 77788888`
 
-Things are shifted and masked together, so that the read values represent teh following orders:
+Things are shifted and masked together, so that the read values represent the following orders:
 
 `11111000`
 
@@ -60,8 +60,8 @@ Read bytes are directly stored on the stack wie PHA, as tis only needs 3 cycles 
 
 ## zx0 packer
 
-The original [zx0 packer](https://github.com/einar-saukas/ZX0) is done by Einar Saukas (thanks for the many mails and discussions and exchange of ideas!) and yields a really good pack-ratio. There has not been a 6502 port of the depacker yet, but now there is :-D I made a few adoptions to the encoding to be able to save a bit on code and cycles on the depacker side. I also added all the features that were available with bitnax. It now handles c64-files very comfortably.
-Most notably changes are the drop of the xor 0xff on the LSB of the offset, so offsets are now subtracted and not added. Also i changes teh order of MSB and LSB bits, sent via the interlaced elias gamma encoding. Lengths greater than 8 bit happen very rarely, and thus an extra 8 bit loop is done first and only extended to 16 bit if necessary. This speeds up bitfetching in 6502.
+The original [zx0 packer](https://github.com/einar-saukas/ZX0) is done by Einar Saukas (thanks for the many mails and discussions and exchange of ideas!) and yields a really good pack-ratio and depacking speed! There has not been a 6502 port of the depacker yet, but now there is :-D I made a few adoptions to the encoding to be able to save a bit on code and cycles on the depacker side. I also added all the features that were available with bitnax. It now handles c64-files very comfortably.
+Most notably changes in the encoding are the drop of the xor 0xff on the LSB of the offset, so offsets are now subtracted and not added. Also i changed the order of MSB and LSB bits, sent via the interlaced elias gamma encoding. Lengths greater than 8 bit happen very rarely, and thus an extra 8 bit loop is done first and only extended to 16 bit if necessary. This speeds up bitfetching in 6502 quite a bit.
 Also inplace depacking was added, so that files can be directly loaded and depacked within the memory range the unpacked data would land anyway. So no more safety-margins. deltas, overlap or however you name it has to be taken care of, except, if you depack out of another location. To achieve that, the end-marker is clamped off, and encoding is interupted as soon as a match or literal would overwrite the still packed data, from there on the data is output as plain unencoded literal. It is there in memory, where it belongs anyway.
 
-Besides the adopted version there's also a compatible version for the original zx0, it can be found [here](https://github.com/bboxy/bitfire/tree/master/bitfire/zx0/6502) including the original zx0.
+Besides the adopted version there's also a compatible version for the original zx0 format, it can be found [here](https://github.com/bboxy/bitfire/tree/master/bitfire/zx0/6502) including the original zx0.
