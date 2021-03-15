@@ -36,25 +36,18 @@ The data on disc is GCR-enocded, so every nibble of a byte is represented by a q
 
 So 8 nibbles are represented like this on disc and stored in 8 quintuples on disc:
 
-`11111222 22333334 44445555 56666677 77788888`
+``11111222 22333334 44445555 56666677 77788888``
 
 Things are shifted and masked together, so that the read values represent the following orders:
 
-`11111000`
-
-`02200222`
-
-`00333330`
-
-`44444000`
-
-`00005555`
-
-`05666660        note: the last bit portion of 5 is added with the 6th nibble`
-
-`77700077`
-
-`00088888`
+``11111000
+02200222
+00333330
+44444000
+00005555
+05666660        note: the last bit portion of 5 is added with the 6th nibble
+77700077
+00088888``
 
 The tables can be arranged in a away (with offsets) that many of them fit together into one area to save space.
 Read bytes are directly stored on the stack wie PHA, as this only needs 3 cycles for a written byte. This however makes it impossible to use the stack on most of the code, as JSR calls would destroy data on the stack.
