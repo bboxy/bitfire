@@ -30,10 +30,9 @@ $fe | disc-side info
 
 ## GCR-loop
 
-The data on disc is GCR-enocded, so every nibble of a byte is represented by a quintuple on disc. To make the decoding fast enough, tables are used to look up data-portions for low- and high-nibbles that are finally merged together to the originating bytes. that happens t
-hat fast now, that also the checksumming of a sector is done on the fly. The tables also have further advantages, as bits can be swapped, so they suit better for the serial transfer later on. However debugging or sending variblae values over the serial bus, are more complicated then, as they need to be scrambled/descrambled beforehand.
+The data on disc is GCR-enocded, so every nibble of a byte is represented by a quintuple on disc. To make the decoding fast enough, tables are used to look up data-portions for low- and high-nibbles that are finally merged together to the originating bytes. That happens that fast now, that also the checksumming of a sector is done on the fly. The tables also have further advantages, as bits can be swapped, so they suit better for the serial transfer later on. However debugging or sending variable values over the serial bus are more complicated then, as they need to be scrambled/descrambled beforehand to the needed bitorder.
 
-So 8 nibbles are represented like this on disc and stored in 8 quintuples on disc
+So 8 nibbles are represented like this on disc and stored in 8 quintuples on disc:
 
 `11111222 22333334 44445555 56666677 77788888`
 
@@ -55,8 +54,8 @@ Things are shifted and masked together, so that the read values represent the fo
 
 `00088888`
 
-The tables can be arranged ina away (with offsets) that many of them fit together into one area to save space.
-Read bytes are directly stored on the stack wie PHA, as tis only needs 3 cycles for a written byte. This however makes it impossible to use the stack on most of the code, as JSR calls would destryo data on the stack.
+The tables can be arranged in a away (with offsets) that many of them fit together into one area to save space.
+Read bytes are directly stored on the stack wie PHA, as this only needs 3 cycles for a written byte. This however makes it impossible to use the stack on most of the code, as JSR calls would destroy data on the stack.
 
 ## zx0 packer
 
