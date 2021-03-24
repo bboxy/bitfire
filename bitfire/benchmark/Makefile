@@ -1,3 +1,5 @@
+ACME ?= acme
+ACMEOPT = -f cbm
 D64WRITE = ../d64write
 D64WRITE_OPTS = -v
 
@@ -12,7 +14,7 @@ lz:
 
 installer: checksum.asm Makefile ../ ../../
 	$(MAKE) -C ../
-	acme -f cbm -o $@ $<
+	$(ACME) $(ACMEOPT) -o $@ $<
 	$(ZX0) $(ZX0_OPTS) --sfx 0x0800 -o $@.prg $@
 	#../../orig_mapping/bitnax -v --sfx 0x0800 -o $@.prg $@
 	$(D64WRITE) $(D64WRITE_OPTS) -c side1.d64 -h oxyron -i \<3 --side 1 \

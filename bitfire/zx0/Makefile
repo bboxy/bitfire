@@ -1,6 +1,6 @@
-CC = gcc
+CC ?= cc
 CFLAGS  = -Ofast -Wall
-ACME = acme
+ACME ?= acme
 ACMEOPT = -f cbm
 
 V ?= 0

@@ -1,8 +1,8 @@
-ACME = acme
+ACME ?= acme
 ACMEOPT = -f cbm
 CFLAGS = -Os -Wall
 LDLIBS =
-CC = gcc
+CC ?= cc
 
 V ?= 0
 ifeq ($(V),1)
