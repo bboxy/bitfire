@@ -7,11 +7,11 @@ ZX0_OPTS = -f
 all: installer
 
 lz:
-	make -C ../zx0/
+	$(MAKE) -C ../zx0/
 	rm files/*.lz; for i in files/*; do $(ZX0) $(ZX0_OPTS) -o $$i.lz $$i; done
 
 installer: checksum.asm Makefile ../ ../../
-	make -C ../
+	$(MAKE) -C ../
 	acme -f cbm -o $@ $<
 	$(ZX0) $(ZX0_OPTS) --sfx 0x0800 -o $@.prg $@
 	#../../orig_mapping/bitnax -v --sfx 0x0800 -o $@.prg $@
@@ -42,4 +42,4 @@ installer: checksum.asm Makefile ../ ../../
 clean:
 	-rm side1.d64 side2.d64 installer installer.prg
 	#-rm files/*.lz
-	make -C ../ clean
+	$(MAKE) -C ../ clean

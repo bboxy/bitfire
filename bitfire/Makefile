@@ -7,7 +7,7 @@ CC = gcc
 all: zx0 d64write bitfire gcr_tables bitnax
 
 zx0: FORCE
-	@make --no-print-directory -C $@
+	@$(MAKE) --no-print-directory -C $@
 
 d64write: d64write.c *.h
 	@echo "Buidling d64write..."
@@ -52,6 +52,6 @@ bitfire: installer
 
 clean:
 	@-rm bitnax d64write installer loader_acme.inc loader_c6510.inc loader_kickass.inc resident gcr_tables
-	@make --no-print-directory -C zx0/ clean
+	@$(MAKE) --no-print-directory -C zx0/ clean
 
 FORCE:
