@@ -1,7 +1,0 @@
-bitfire/benchmark/files/*.lz
-bitfire/benchmark/*.d64
-bitfire/bitnax
-bitfire/d64write
-bitfire/installer
-bitfire/resident
-bitfire/*.inc

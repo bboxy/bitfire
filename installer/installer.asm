@@ -20,7 +20,7 @@
 		txs
 
 		;load stage 2, either loaded by bootloader or after turn disk
-		jsr link_load_next_comp
+		jsr link_load_next_raw
 
 		;XXX TODO here it would also be possible to laod a custom link_resident part per side, but would require includes per side and resident part
 		jmp $0100

@@ -99,3 +99,6 @@ v1.0
 - an ATN-responder is uploaded to all remaining drives, so they can stay turned on
 - loader is started from current drive ($ba)
 - added and adopted zx0 by Einar Saukas as new standard packer/depacker, tiny files, fast depack \o/
+- new dir structure
+- zx0 speed update by soci/singular
+- wait 4s until motor spin down
