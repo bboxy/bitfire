@@ -34,10 +34,10 @@ resident: resident.asm config.inc Makefile
 	@printf " Size: $$%04x\n" $$((`wc -c < resident` - 2))
 	@echo "Creating loader_acme.inc..."
 	@#fetch all global labels for resident part
-	$(VR)grep "bitfire_*" resident_labels.txt | sed "s/\s*;\s*.*//g" | tr -d "\t" | sed 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' | sed "s/\= / \= /" > loader_acme.inc
-	$(VR)grep "link_*" resident_labels.txt | sed "s/\s*;\s*.*//g" | tr -d "\t" | sed 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' | sed "s/\= / \= /" >> loader_acme.inc
+	$(VR)grep "bitfire_*" resident_labels.txt | sed "s/[[:space:]]*;[[:space:]]*.*//g" | tr -d "\t" | sed -e 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' -e "s/\= / \= /" > loader_acme.inc
+	$(VR)grep "link_*" resident_labels.txt | sed "s/[[:space:]]*;[[:space:]]*.*//g" | tr -d "\t" | sed -e 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' -e "s/\= / \= /" >> loader_acme.inc
 	@#fetch all config labels
-	$(VR)grep "BITFIRE_*" resident_labels.txt | sed "s/\s*;\s*.*//g" | tr -d "\t" | sed 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' | sed "s/\= / \= /" >> loader_acme.inc
+	$(VR)grep "BITFIRE_*" resident_labels.txt | sed "s/[[:space:]]*;[[:space:]]*.*//g" | tr -d "\t" | sed -e 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' -e "s/\= / \= /" >> loader_acme.inc
 	@echo "Creating loader_c6510.inc..."
 	@#convert to c6510 format (add const, wipe out underscores and add prefix with .)
 	$(VR)echo "if def BITFIRE.ISINCLUDED == 0" > loader_c6510.inc
