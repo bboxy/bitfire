@@ -1,3 +1,5 @@
+ACME ?= acme
+ACMEOPT = -f cbm
 D64WRITE = ../d64write
 D64WRITE_OPTS = -v
 
@@ -7,12 +9,12 @@ ZX0_OPTS = -f
 all: installer
 
 lz:
-	make -C ../zx0/
+	$(MAKE) -C ../zx0/
 	rm files/*.lz; for i in files/*; do $(ZX0) $(ZX0_OPTS) -o $$i.lz $$i; done
 
 installer: checksum.asm Makefile ../ ../../
-	make -C ../
-	acme -f cbm -o $@ $<
+	$(MAKE) -C ../
+	$(ACME) $(ACMEOPT) -o $@ $<
 	$(ZX0) $(ZX0_OPTS) --sfx 0x0800 -o $@.prg $@
 	#../../orig_mapping/bitnax -v --sfx 0x0800 -o $@.prg $@
 	$(D64WRITE) $(D64WRITE_OPTS) -c side1.d64 -h oxyron -i \<3 --side 1 \
@@ -42,4 +44,4 @@ installer: checksum.asm Makefile ../ ../../
 clean:
 	-rm side1.d64 side2.d64 installer installer.prg
 	#-rm files/*.lz
-	make -C ../ clean
+	$(MAKE) -C ../ clean
