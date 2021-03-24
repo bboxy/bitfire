@@ -1,6 +1,6 @@
 ACME ?= acme
 ACMEOPT = -f cbm
-CFLAGS = -Os -Wall
+bitfire_CFLAGS ?= $(CFLAGS) -Os -Wall
 LDLIBS =
 CC ?= cc
 
@@ -18,15 +18,15 @@ zx0: FORCE
 
 d64write: d64write.c *.h
 	@echo "Buidling d64write..."
-	$(VR)$(CC) $< -o $@ $(CFLAGS)
+	$(VR)$(CC) $< -o $@ $(bitfire_CFLAGS)
 
 bitnax: bitnax.c sfx.h
 	@echo "Buidling bitnax..."
-	$(VR)${CC} $< -o $@ ${CFLAGS}
+	$(VR)${CC} $< -o $@ ${bitfire_CFLAGS}
 
 gcr_tables: gcr_tables.c
 	@echo "Buidling gcr table tool..."
-	$(VR)${CC} $< -o $@ ${CFLAGS}
+	$(VR)${CC} $< -o $@ ${bitfire_CFLAGS}
 
 resident: resident.asm config.inc Makefile
 	@echo -n "Buidling resident part ->"

@@ -1,5 +1,5 @@
 CC ?= cc
-CFLAGS  = -Ofast -Wall
+zx0_CFLAGS ?= $(CFLAGS) -Ofast -Wall
 ACME ?= acme
 ACMEOPT = -f cbm
 
@@ -17,10 +17,10 @@ zx0_HDR:= zx0.h sfx.h
 
 zx0: $(zx0_SRC) $(zx0_HDR)
 	@echo "Buidling zx0..."
-	$(VR)$(CC) $(CFLAGS) -o $@ $(zx0_SRC)
+	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $(zx0_SRC)
 
 dzx0: dzx0.c
-	$(VR)$(CC) $(CFLAGS) -o $@ $^
+	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
 
 sfx.h: sfx.asm
 	$(VR)echo '#ifndef SFX_H' > $@
