@@ -12,9 +12,12 @@ endif
 
 all: zx0 dzx0
 
-zx0: zx0.c compress.c optimize.c memory.c zx0.h sfx.h
+zx0_SRC:= zx0.c compress.c optimize.c memory.c
+zx0_HDR:= zx0.h sfx.h
+
+zx0: $(zx0_SRC) $(zx0_HDR)
 	@echo "Buidling zx0..."
-	$(VR)$(CC) $(CFLAGS) -o $@ $^
+	$(VR)$(CC) $(CFLAGS) -o $@ $(zx0_SRC)
 
 dzx0: dzx0.c
 	$(VR)$(CC) $(CFLAGS) -o $@ $^
