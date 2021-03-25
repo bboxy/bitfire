@@ -1,15 +1,3 @@
-		!macro wait_floppy_busy {
-			;wait until floppy is busy
-			bit $dd00
-			bmi *-3
-		}
-
-		!macro wait_floppy_idle {
-			;wait until floppy is idle again
-			bit $dd00
-			bpl *-3
-		}
-
 		;load next file as a raw file (do not decomp on the fly) and jump to .addr
 		!macro link_load_next_raw_jmp .addr {
 			lda #>(.addr-1)
@@ -80,20 +68,25 @@
 			jsr bitfire_send_byte_
 		}
 
+		!macro wait_floppy_busy {
+			;wait until floppy is busy
+			bit $dd00
+			bmi *-3
+		}
+
+		!macro wait_floppy_idle {
+			;wait until floppy is idle again
+			bit $dd00
+			bpl *-3
+		}
+
 		;request next disk side and reset filenum_counter
 		!macro request_disk .num {
 			lda #.num + $f0
 			jsr bitfire_send_byte_
-
-			;restore $dd02 (is maybe $1f after send_byte)
-			;XXX TODO this is a bit dirty, all lines should be set to low and get_byte should wait for a sane status at end of transfer (1800 = 0)
-			;but get_loop on drive checks for a clear bus anyway before receiving?
+			+wait_floppy_busy
 			lda #$3f
 			sta $dd02
-			pha
-			pla
-
-			+wait_floppy_busy
 			+wait_floppy_idle
 		}
 

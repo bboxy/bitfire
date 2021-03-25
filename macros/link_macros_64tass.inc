@@ -61,6 +61,17 @@ link_player_irq .macro
 request_disk	.macro
 		lda #(\1) + $f0
 		jsr bitfire_send_byte_
+l1		bit $dd00
+		bmi l1
+		lda #$3f
+		sta $dd02
+l2		bit $dd00
+		bpl l2
+		.endm
+
+request_disk	.macro
+		lda #(\1) + $f0
+		jsr bitfire_send_byte_
 		lda #$3f
 		sta $dd02
 		.endm

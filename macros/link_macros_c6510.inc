@@ -65,9 +65,13 @@
 		macro m_request_disk n:8
 		{
 			lda #n + $f0
-			jsr bitfire.sendbyte
+			jsr bitfire_send_byte_
+.l1:			bit $dd00
+			bmi .l1
 			lda #$3f
 			sta $dd02
+.l2:			bit $dd00
+			bpl .l2
 		}
 
                 macro m_wait_syncpoint part:16

@@ -151,6 +151,8 @@ bitfire_send_byte_
 +
 			eor #$30
 			sta $dd02
+			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
+			pla
 			lsr <(.filenum - $ff), x	;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 .ld_pend
@@ -309,8 +311,6 @@ bitfire_loadcomp_
 			bne .lz_start_over		;start with a literal
 
 	!if CONFIG_NMI_GAPS = 1 {
-
-			nop				;1 byte free here
 
 			;!ifdef .lz_gap2 {
 			;	!warn .lz_gap2 - *, " bytes left until gap2"

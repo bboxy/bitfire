@@ -67,10 +67,16 @@
 		}
 
 		#macro request_disk(num) {
+.(
 			lda #{num} + $f0
 			jsr bitfire_send_byte_
+l1:			bit $dd00
+			bmi l1
 			lda #$3f
 			sta $dd02
+l2:			bit $dd00
+			bpl l2
+).
 		}
 
 		#macro wait_syncpoint(part)

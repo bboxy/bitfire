@@ -614,7 +614,6 @@ _FF			= $ff
 			;remove as next step, incl. check
 .get_byte
 !if CONFIG_MOTOR_ALWAYS_ON = 1 {
-			ldy #.BUSY				;enough time for signal to settle
 .lock
 			lda #$80				;execpt a whole new byte and start with a free bus XXX TODO can maybe omitted if motor spins down, as it puts lins down already
 			sta $1800
@@ -670,9 +669,7 @@ _FF			= $ff
 			ror
 
 			bcc .wait_bit1				;more bits to fetch?
-!if CONFIG_MOTOR_ALWAYS_ON = 0 {
 			ldy #.BUSY				;enough time for signal to settle
-}
 			sty $1800				;set busy bit
 
 			;----------------------------------------------------------------------------------------------------
@@ -1415,3 +1412,12 @@ _FF			= $ff
 
 ;XXX TODO optimize code size on stepping
 ;XXX TODO optimze eof detection?
+
+
+
+;check in loader read of $0700 after turn disc?
+;klappt laden und entpacken von eigentlichem file? ZP adessen konflikt?
+;watch exec 0100 -> step through
+;else revert changes in drivecode and check again, only happens with spin up/down?
+;does it kill 1c00 vals with double and?
+;turn disc, make it send a single byte to ack? -> wait block ready, receive a byte and then floppy goes idle?
