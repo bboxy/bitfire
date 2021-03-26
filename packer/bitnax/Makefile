@@ -1,7 +1,6 @@
 ACME ?= acme
-ACMEOPT = -f cbm
-CFLAGS = -Ofast -Wall
-LDLIBS =
+ACMEOPT ?= -f cbm
+bitnax_CFLAGS = $(CFLAGS) -Ofast -Wall
 CC ?= cc
 
 V ?= 0
@@ -18,7 +17,7 @@ all: bitnax
 
 bitnax: $(SOURCE) $(HEADER)
 	@echo "Buidling bitnax..."
-	$(VR)$(CC) $(CFLAGS) -o $@ $(SOURCE)
+	$(VR)$(CC) $(bitnax_CFLAGS) -o $@ $(SOURCE)
 
 sfx.h: sfx.asm
 	$(VR)echo '#ifndef SFX_H' > $@

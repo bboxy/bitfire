@@ -1,5 +1,4 @@
-CFLAGS = -Ofast -Wall
-LDLIBS =
+d64write_CFLAGS = $(CFLAGS) -Ofast -Wall
 CC ?= cc
 
 V ?= 0
@@ -16,7 +15,7 @@ all: d64write
 
 d64write: $(SOURCE) $(HEADER)
 	@echo "Buidling d64write..."
-	$(VR)$(CC) $(CFLAGS) -o $@ $(SOURCE)
+	$(VR)$(CC) $(d64write_CFLAGS) -o $@ $(SOURCE)
 
 clean:
 	$(VR)rm d64write

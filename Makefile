@@ -1,5 +1,4 @@
-ACME ?= acme
-MAKE_OPTS = --no-print-directory --quiet
+MAKE_OPTS ?= --no-print-directory --quiet
 
 LDLIBS =
 CC ?= cc
