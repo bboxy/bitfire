@@ -113,6 +113,9 @@ _FF			= $ff
 			lda #%00000001				;PB disable latching, PA enable latching (content for $1c01 is then latched)
 			sta $1c0b
 
+			lda #$00				;clear lower part of counter
+			sta $1c08
+
 			lda #$7f				;disable all interrupts
 			sta $180e
 			sta $1c0e
@@ -198,7 +201,7 @@ _FF			= $ff
 .temp			= .zp_start + $5a
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
-;.free			= .zp_start + $68
+.spin_val		= .zp_start + $68
 ;.free			= .zp_start + $69
 .is_loaded_track	= .zp_start + $6a
 .is_loaded_sector	= .zp_start + $6c
@@ -594,9 +597,6 @@ _FF			= $ff
 			;----------------------------------------------------------------------------------------------------
 .idle
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
-;!if CONFIG_DECOMP = 1 {
-;			dec <.first_block			;-> $ff
-;}
 			lda $1c00				;turn off LED
 			and #.LED_OFF
 			sta $1c00
@@ -604,55 +604,53 @@ _FF			= $ff
 			and #.MOTOR_OFF
 			tay
 }
-
 			;----------------------------------------------------------------------------------------------------
 			;
 			; RECEIVE/WAIT FOR A BYTE FROM HOST
 			;
 			;----------------------------------------------------------------------------------------------------
-
-			;remove as next step, incl. check
 .get_byte
-!if CONFIG_MOTOR_ALWAYS_ON = 1 {
-.lock
-			lda #$80				;execpt a whole new byte and start with a free bus XXX TODO can maybe omitted if motor spins down, as it puts lins down already
-			sta $1800
-
-			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
-			bne *-3
-} else {
-			lda #$80				;execpt a whole new byte and start with a free bus
-			sta $1800				;clear lines
-			sta $1c05				;this will spin down the motor after ~ 4s
+!if CONFIG_MOTOR_ALWAYS_ON = 0 {
+			lda #$80				;expect a whole new byte and start with a free bus
+			;sta $1c09				;this will spin down the motor after ~ 4s
 			sta <.timer
+			sta $1800				;clear lines
 
 			ldx $1800
 			bne *-3
 -
-			ldx $1800				;check for a new filename-bit on bus
+			cpx $1800				;check for a new filename-bit on bus
 			bne +
 
-			ldx $1c05				;7 cycles
-			bne -
+			bit $1c09				;7 cycles
+			bpl -
 
-			ldx $1800				;check for a new filename-bit on bus
-			bne +
+			;XXX ommit
+			;cpx $1800				;check for a new filename-bit on bus
+			;bne +
 
-			sta $1c05				;reset timer 4 cycles
+			sta $1c09				;reset timer 7 cycles
 
-			ldx $1800				;check for a new filename-bit on bus
+			cpx $1800				;check for a new filename-bit on bus
 			bne +
 
 			dec <.timer				;count down rounds
 			bne -					;8 cycles
 
-			ldx $1800				;check for a new filename-bit on bus
-			bne +
+			;XXX ommit
+			;cpx $1800				;check for a new filename-bit on bus
+			;bne +
 .lock
 			sty $1c00				;spin down finally
-			beq .wait_bit1				;7 cycles
-			bmi .get_byte				;enter lock mode
+			beq .wait_bit1				;enter lock mode
+			lda #$80				;expect a whole new byte and start with a free bus
+} else {
+.lock
+			lda #$80				;expect a whole new byte and start with a free bus
+			sta $1800				;clear lines
 }
+			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
+			bne *-3
 .wait_bit1
 			cpx $1800
 			beq .wait_bit1				;change in $1800
@@ -665,6 +663,7 @@ _FF			= $ff
 			cpx $1800
 			beq .wait_bit2
 			ldx $1800
+			bmi .lock
 			cpx #$01
 			ror
 
