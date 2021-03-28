@@ -40,36 +40,37 @@ static BLOCK *ghost_root = NULL;
 static BLOCK *dead_array = NULL;
 static int dead_array_size = 0;
 
-static BLOCK *allocate(int bits, int index, int offset, int length, BLOCK *chain) {
-    BLOCK *ptr;
-
+static BLOCK *allocate(void) {
     if (ghost_root) {
-        ptr = ghost_root;
+        BLOCK *ptr = ghost_root;
         ghost_root = ptr->chain;
-    } else {
-        if (!dead_array_size) {
-            dead_array = (BLOCK *)calloc(QTY_BLOCKS, sizeof(BLOCK));
-            if (!dead_array) {
-                fprintf(stderr, "Error: Insufficient memory\n");
-                exit(1);
-            }
-            dead_array_size = QTY_BLOCKS;
-        }
-        ptr = &dead_array[--dead_array_size];
+        return ptr;
     }
-    ptr->bits = bits;
-    ptr->index = index;
-    ptr->offset = offset;
-    ptr->length = length;
-    ptr->chain = chain;
-    return ptr;
+    if (!dead_array_size) {
+        dead_array = (BLOCK *)calloc(QTY_BLOCKS, sizeof(BLOCK));
+        if (!dead_array) {
+            fprintf(stderr, "Error: Insufficient memory\n");
+            exit(1);
+        }
+        dead_array_size = QTY_BLOCKS;
+    }
+    return &dead_array[--dead_array_size];
 }
 
 static inline void freeblock(BLOCK *ptr) {
     if (ptr->references) ptr->references--;
     else {
-        if (ptr->chain) freeblock(ptr->chain);
-        ptr->chain = ghost_root;
+        BLOCK *p = ptr;
+        for (;;) {
+            BLOCK *p2 = p->chain;
+            if (!p2) break;
+            if (p2->references) {
+                p2->references--;
+                break;
+            }
+            p = p2;
+        }
+        p->chain = ghost_root;
         ghost_root = ptr;
     }
 }
@@ -78,10 +79,8 @@ static inline int offset_ceiling(int index, int offset_limit) {
     return index > offset_limit ? offset_limit : index < INITIAL_OFFSET ? INITIAL_OFFSET : index;
 }
 
-//XXX TODO build in cost model, so splittet matches get also their costs
-//functions for encode_literal/rep/match
 BLOCK* optimize(const unsigned char *input_data, int input_size, int skip, int offset_limit) {
-    BLOCK **optimal;
+    BLOCK *optimal;
     int* best_length;
     int best_length_size;
     int index;
@@ -93,7 +92,7 @@ BLOCK* optimize(const unsigned char *input_data, int input_size, int skip, int o
             BLOCK *chain;
             int index;
         } last_literal;
-        BLOCK *last_match;
+        BLOCK last_match;
         int match_length;
     } *arr;
     BLOCK dummy;
@@ -102,7 +101,7 @@ BLOCK* optimize(const unsigned char *input_data, int input_size, int skip, int o
 
     /* allocate all main data structures at once */
     arr = (struct arr_s *)calloc(max_offset+1, sizeof *arr);
-    optimal = (BLOCK **)calloc(input_size+1, sizeof(BLOCK *));
+    optimal = (BLOCK *)calloc(input_size+1, sizeof *optimal);
     best_length = (int *)malloc((input_size+1)*sizeof(int));
     if (!arr || !optimal || !best_length) {
          fprintf(stderr, "Error: Insufficient memory\n");
@@ -111,39 +110,83 @@ BLOCK* optimize(const unsigned char *input_data, int input_size, int skip, int o
     best_length[2] = 2;
 
     /* start with fake block */
-    arr[INITIAL_OFFSET].last_match = allocate(-1, skip-1, INITIAL_OFFSET, 0, NULL);
+    arr[INITIAL_OFFSET].last_match.bits = -1;
+    arr[INITIAL_OFFSET].last_match.index = skip-1;
+    arr[INITIAL_OFFSET].last_match.offset = INITIAL_OFFSET;
+    arr[INITIAL_OFFSET].last_match.length = 0;
+    arr[INITIAL_OFFSET].last_match.chain = NULL;
 
-    printf("[");
+    putchar('[');
+
+    for (offset = 1; offset <= max_offset; offset++) {
+        struct arr_s *arr2 = arr + offset;
+        arr2->last_literal.index = -INT_MAX;
+        arr2->last_literal.chain = &dummy;
+    }
 
     /* process remaining bytes */
     for (index = skip; index < input_size; index++) {
-        BLOCK *opt = &dummy;
+        BLOCK opt, optchain;
+        opt.bits = INT_MAX;
         best_length_size = 2;
         max_offset = offset_ceiling(index, offset_limit);
         for (offset = 1; offset <= max_offset; offset++) {
             struct arr_s *arr2 = arr + offset;
             if (index >= offset && input_data[index] == input_data[index - offset] && index != skip) {
                 /* copy from last offset */
-                if (arr2->last_literal.chain) {
-                    int length2 = arr2->last_literal.index - arr2->last_literal.chain->index;
-                    int bits2 = arr2->last_literal.chain->bits + costof_literal(length2);
-                    int length = index - arr2->last_literal.index;
-                    int bits = costof_rep(length) + bits2;
-                    arr2->last_literal.chain->references++;
-                    if (arr2->last_match) freeblock(arr2->last_match);
-                    arr2->last_match = allocate(bits, index, offset, length, allocate(bits2, arr2->last_literal.index, 0, length2, arr2->last_literal.chain));
-                    if (opt->bits > bits) {
-                        arr2->last_match->references++;
-                        freeblock(opt);
-                        opt = arr2->last_match;
+                if (arr2->last_literal.index != -INT_MAX) {
+                    if (arr2->last_literal.index >= 0) {
+                        arr2->last_literal.index = ~arr2->last_literal.index;
+                        if (arr2->last_match.chain) arr2->last_match.chain->references++;
+                        if (arr2->last_literal.chain->references) {
+                            arr2->last_literal.chain->references--;
+                            arr2->last_literal.chain = allocate();
+                        } else {
+                            freeblock(arr2->last_literal.chain->chain);
+                        }
+                        arr2->last_literal.chain->chain = arr2->last_match.chain;
+                        arr2->last_literal.chain->bits = arr2->last_match.bits;
+                        arr2->last_literal.chain->index = arr2->last_match.index;
+                        arr2->last_literal.chain->offset = arr2->last_match.offset;
+                        arr2->last_literal.chain->length = arr2->last_match.length;
+                        arr2->last_literal.chain->references = 1;
+                    } else arr2->last_literal.chain->references++;
+                    arr2->last_match.offset = offset;
+                    if (arr2->last_match.chain) {
+                        if (arr2->last_match.chain->references) {
+                            arr2->last_match.chain->references--;
+                            arr2->last_match.chain = allocate();
+                        } else {
+                            freeblock(arr2->last_match.chain->chain);
+                        }
+                    } else arr2->last_match.chain = allocate();
+                    arr2->last_match.chain->chain = arr2->last_literal.chain;
+                    arr2->last_match.chain->offset = 0;
+                    arr2->last_match.chain->index = ~arr2->last_literal.index;
+                    arr2->last_match.chain->length = arr2->last_match.chain->index - arr2->last_literal.chain->index;
+                    arr2->last_match.chain->bits = arr2->last_literal.chain->bits + costof_literal(arr2->last_match.chain->length);
+                    arr2->last_match.index = index;
+                    arr2->last_match.length = index - arr2->last_match.chain->index;
+                    arr2->last_match.bits = costof_rep(arr2->last_match.length) + arr2->last_match.chain->bits;
+                    if (opt.bits > arr2->last_match.bits) {
+                        opt.bits = arr2->last_match.bits;
+                        opt.index = index;
+                        opt.offset = offset;
+                        opt.length = arr2->last_match.length;
+                        if (arr2->last_match.chain->chain) arr2->last_match.chain->references++;
+                        optchain.chain = arr2->last_match.chain->chain;
+                        optchain.bits = arr2->last_match.chain->bits;
+                        optchain.index = arr2->last_match.chain->index;
+                        optchain.offset = 0;
+                        optchain.length = arr2->last_match.chain->length;
                     }
                 }
                 /* copy from new offset */
                 if (++arr2->match_length > 1) {
                     if (best_length_size < arr2->match_length) {
-                        int bits = optimal[index - best_length[best_length_size]]->bits + costof_run(best_length[best_length_size]-1);
+                        int bits = optimal[index - best_length[best_length_size]].bits + costof_run(best_length[best_length_size]-1);
                         do {
-                            int bits2 = optimal[index-best_length_size-1]->bits + costof_run(best_length_size);
+                            int bits2 = optimal[index - best_length_size - 1].bits + costof_run(best_length_size);
                             best_length_size++;
                             if (bits2 <= bits) {
                                 best_length[best_length_size] = best_length_size;
@@ -154,47 +197,86 @@ BLOCK* optimize(const unsigned char *input_data, int input_size, int skip, int o
                         } while (best_length_size < arr2->match_length);
                     }
                     int length = best_length[arr2->match_length];
-                    int bits = optimal[index - length]->bits + costof_match(offset, length);
-                    if (!arr2->last_match || arr2->last_match->index != index || arr2->last_match->bits > bits) {
-                        optimal[index - length]->references++;
-                        if (arr2->last_match) freeblock(arr2->last_match);
-                        arr2->last_match = allocate(bits, index, offset, length, optimal[index - length]);
-                        if (opt->bits > bits) {
-                            arr2->last_match->references++;
-                            freeblock(opt);
-                            opt = arr2->last_match;
+                    int bits = optimal[index - length].bits + costof_match(offset, length);
+                    if (arr2->last_match.index != index || arr2->last_match.bits > bits) {
+                        if (arr2->last_literal.index >= 0) {
+                            arr2->last_literal.index = ~arr2->last_literal.index;
+                            if (arr2->last_match.chain) arr2->last_match.chain->references++;
+                            if (arr2->last_literal.chain->references) {
+                                arr2->last_literal.chain->references--;
+                                arr2->last_literal.chain = allocate();
+                            } else {
+                                freeblock(arr2->last_literal.chain->chain);
+                            }
+                            arr2->last_literal.chain->chain = arr2->last_match.chain;
+                            arr2->last_literal.chain->bits = arr2->last_match.bits;
+                            arr2->last_literal.chain->index = arr2->last_match.index;
+                            arr2->last_literal.chain->offset = arr2->last_match.offset;
+                            arr2->last_literal.chain->length = arr2->last_match.length;
+                        }
+                        arr2->last_match.bits = bits;
+                        arr2->last_match.index = index;
+                        arr2->last_match.offset = offset;
+                        arr2->last_match.length = length;
+                        optimal[index - length].references++;
+                        if (arr2->last_match.chain) freeblock(arr2->last_match.chain);
+                        arr2->last_match.chain = &optimal[index - length];
+                        if (opt.bits > bits) {
+                            opt.bits = bits;
+                            opt.index = index;
+                            opt.offset = offset;
+                            opt.length = length;
+                            if (arr2->last_match.chain->chain) arr2->last_match.chain->references++;
+                            optchain.chain = arr2->last_match.chain->chain;
+                            optchain.bits = arr2->last_match.chain->bits;
+                            optchain.index = arr2->last_match.chain->index;
+                            optchain.offset = arr2->last_match.chain->offset;
+                            optchain.length = arr2->last_match.chain->length;
                         }
                     }
                 }
             } else {
                 /* copy literals */
                 arr2->match_length = 0;
-                if (arr2->last_match) {
-                    if (arr2->last_literal.chain != arr2->last_match) {
-                        //if (arr2->last_literal.chain) freeblock(arr2->last_literal.chain);
-                        arr2->last_match->references++;
-                        arr2->last_literal.chain = arr2->last_match;
-                    }
+                if (arr2->last_match.bits) {
                     arr2->last_literal.index = index;
-                    int bits = arr2->last_match->bits + costof_literal(index - arr2->last_match->index);
-                    if (opt->bits > bits) {
-                        arr2->last_match->references++;
-                        freeblock(opt);
-                        opt = allocate(bits, index, 0, index - arr2->last_match->index, arr2->last_match);
+                    int bits = arr2->last_match.bits + costof_literal(index - arr2->last_match.index);
+                    if (opt.bits > bits) {
+                        opt.bits = bits;
+                        opt.index = index;
+                        opt.offset = 0;
+                        opt.length = index - arr2->last_match.index;
+                        if (arr2->last_match.chain) arr2->last_match.chain->references++;
+                        optchain.chain = arr2->last_match.chain;
+                        optchain.bits = arr2->last_match.bits;
+                        optchain.index = arr2->last_match.index;
+                        optchain.offset = arr2->last_match.offset;
+                        optchain.length = arr2->last_match.length;
                     }
                 }
             }
         }
-        optimal[index] = opt;
+        if (opt.bits != INT_MAX) {
+            optimal[index].bits = opt.bits;
+            optimal[index].index = opt.index;
+            optimal[index].offset = opt.offset;
+            optimal[index].length = opt.length;
+            optimal[index].chain = allocate();
+            optimal[index].chain->chain = optchain.chain;
+            optimal[index].chain->bits = optchain.bits;
+            optimal[index].chain->index = optchain.index;
+            optimal[index].chain->offset = optchain.offset;
+            optimal[index].chain->length = optchain.length;
+        }
 
         if (index*MAX_SCALE/input_size > dots) {
-            printf(".");
+            putchar('.');
             fflush(stdout);
             dots++;
         }
     }
 
-    printf("]\n");
+    puts("]");
 
-    return optimal[input_size-1];
+    return &optimal[input_size-1];
 }

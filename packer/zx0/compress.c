@@ -140,7 +140,7 @@ unsigned char *compress(BLOCK *optimal, const unsigned char *input_data, int inp
     int inplace_output_index = 0;
     int inplace_input_index = 0;
     int overwrite;
-    int expected = 0;
+    //int expected = 0;
     int actual = 0;
 
     /* calculate and allocate output buffer */
@@ -150,7 +150,7 @@ unsigned char *compress(BLOCK *optimal, const unsigned char *input_data, int inp
     } else {
        *output_size = (optimal->bits + 7);
     }
-    expected = *output_size;
+    //expected = *output_size;
     *output_size >>= 3;
     output_data = (unsigned char *)malloc(*output_size);
     if (!output_data) {
@@ -178,7 +178,7 @@ unsigned char *compress(BLOCK *optimal, const unsigned char *input_data, int inp
     inplace_output_index = output_index;
     inplace_input_index = input_index;
 
-    printf("expected: %d\n", expected / 8);
+    //printf("expected: %d\n", expected / 8);
 
     for (optimal = next->chain; optimal; optimal = optimal->chain) {
         if (!optimal->offset) {
@@ -216,7 +216,7 @@ unsigned char *compress(BLOCK *optimal, const unsigned char *input_data, int inp
         }
     }
 
-    printf("actual: %d\n", expected);
+    //printf("actual: %d\n", expected);
 
     /* no endmarker in case of inplace depacking */
     if (!inplace) {
