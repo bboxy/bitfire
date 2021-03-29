@@ -116,6 +116,61 @@ Yes, i prefer to place the whole thing at $0200-$3ff, there's no point in wastin
 
 Framework calls and most macros start with link_*, original bitfire functions with bitfire_*
 
+Functions via loader_acme.inc
+-----------------------------
+
+When includng the loader/loader_acme.inc, the following calls can be made:
+
+link_load_raw			;loads file# given by A as raw file
+link_load_comp			;loads file# given by A and decompress it on the fly while loading
+link_load_next_raw		;loads next file as raw file, no file# needed
+link_load_next_comp		;loads next file and decompress it on the fly while loading, no file# needed
+link_load_next_raw_decomp	;loads next file and decompress it after loading, decompression can also happen under i/o
+link_load_next_double		;loads one file wth on the fly decompression and a second one raw and decompresses it afterwards under i/o. In fact we can load a huge file under i/o this way, by simply splitting it up
+link_decomp			;decompress last file being loaded (or file the pointers point to, see macros)
+link_decomp_under_io		;decompress last file being loaded under i/o
+link_frame_count		;the frame-counter that is bumbed each frame
+link_player			;a base irq within the resident part that can be used while loading, so no previous handler is overwritten, and music continues playing.
+link_music_addr			;address of the music call that can be changed if a new song is loaded and located at a different location.
+link_music_play			;the music play routine that should be called once per frame, to keep music playing and frame-counter counting.
+link_music_play_side1		;variables that can be set for that purpose by music.inc
+link_music_play_side2		;see above
+link_music_fade_side1		;see above
+link_music_fade_side2		;see above
+link_music_init_side1		;see above
+link_music_init_side2		;see above
+link_chip_types			;the installer checks for CIA and SID types, results of those checks can be read here
+link_sid_type			;alias for SID type
+link_cia1_type			;alias for CIA1 Type
+link_cia2_type			;alias for CIA2 type
+
+Functions via macros
+--------------------
+
+The link_* functions represent the same functins as above, but they include a jmp-target that is jumped to after loading. Why? The advantage of this is, that any code in the memory can be overwritten, except the resident part of the loader dunring the loading-operation, and after laoding the code can be entered by teh given address:
+
+link_load_next_raw_jmp .addr
+link_load_next_comp_jmp .addr
+link_decomp_jmp .addr
+link_load_next_double_jmp .addr
+link_load_next_raw_decomp_jmp .addr
+link_decomp_under_io_jmp .addr
+
+Example:
++link_load_next_comp_jmp $2000	;will load next file and decompress it on the fly and afterwards jump to $2000 to execute the loaded part
+
+link_player_irq			;links the raster-irq to the base-irq
+reset_drive			;resets the drive, so the laoder can be reuploaded later again and teh drive is free for own stuff like drive-code
+request_disk .num		;command the floppy to check for given side#, will return as soon as the new diskside is detected
+setup_sync .frames		;setup frame counter to wait for $0000-$7fff frames
+sync				;wait for sync to happen or expire
+bus_lock			;lock the bus, after hat arbitrary writes to $dd00 are possible, for e.g. with a comüplex FPP, no loading or interaction with the drive is possible in that time
+bus_unlock .bank		;unlock the bus again and and reenable the drive, an actual bank needs to be given, as $dd00 is set up again
+set_depack_pointers .addr	;change the decompression target-address of a loaded file, so it can be loaded and decompressed to a different location than given during compression
+start_music_nmi			;start an NMI that will call the music-player once per frame
+stop_music_nmi			;stop the NMI (for e.g. to hand over to a raster-irq)
+restart_music_nmi		;restart the NMI again, cheaper way when the timers are still set up
+
 Examples
 --------
 
@@ -240,7 +295,7 @@ When the loader and depacker is idle, you can use the whole zeropage and leaving
 Dirart
 ------
 
-These are the positions on screen where the dirart is expected, it looks simply like a normal dir-listing, in doubt, there is a exampledir.bin and a .png to visualize that.
+The dirart is expected like a normal dir-layout would look like on a screen, see the exampledir.bin and exampledir.png, so all you need to do is draw things on a screen (or multiple screens if you need a larger dir-layout) and save the screen. Content must be aligned top/left.
 
 Synching to music
 -----------------
