@@ -27,7 +27,6 @@
 !convtab pet
 !cpu 6510
 
-!zone installer {
 .dc_src		= $fc
 .dc_dst		= $fe
 .mydrive	= $fb
@@ -40,10 +39,16 @@
 		* = CONFIG_INSTALLER_ADDR
 		!src "loader_acme.inc"
 .init_inst
+!if (CONFIG_AUTODETECT = 1) {
+		!src "detect.asm"
+}
 		lda #$37
+		sta <CONFIG_LAX_ADDR
+!if (CONFIG_AUTODETECT = 0) {
 		sta $01
 		lda #$00
 		sta $d015
+}
 		lda $ba
 		sta .mydrive
 
@@ -53,12 +58,11 @@
 		jsr .open_w_15
 		bmi .not_present
 		jsr .unlisten
-		ldx $ba
+		;ldx $ba
 		cpx .mydrive
 		beq .not_present
 		jsr .install_responder
 .not_present
-		ldx $ba
 		inx
 		cpx #$0c
 		bne -
@@ -146,42 +150,43 @@
 }
 }
 
-;.l1		lda $d012
-;.l2		cmp $d012
-;		beq .l2
-;		bmi .l1
-;		cmp #$20
-;		bcs .nontsc
+.l1		lda $d012
+.l2		cmp $d012
+		beq .l2
+		bmi .l1
+		cmp #$20
+		bcs .nontsc
 
-;		lda #$b9		;lda $xxxx,y
-;		sta bitfire_ntsc_fix1
-;		lda #$19		;ora $xxxx,y
-;		sta bitfire_ntsc_fix2
-;		sta bitfire_ntsc_fix3
-;		lda #$39		;and $xxxx,y
-;		sta bitfire_ntsc_fix4
-;
-;		lda #-$37
-;		sta bitfire_ntsc_fix1 + 1
-;		sta bitfire_ntsc_fix2 + 1
-;		sta bitfire_ntsc_fix3 + 1
-;		sta bitfire_ntsc_fix4 + 1
-;
-;		lda #$dc
-;		sta bitfire_ntsc_fix1 + 2
-;		sta bitfire_ntsc_fix2 + 2
-;		sta bitfire_ntsc_fix3 + 2
-;		sta bitfire_ntsc_fix4 + 2
-;.nontsc
+		lda #$0d
+		sta bitfire_ntsc0
+		lda #$1d		;ora $xxxx,x
+		sta bitfire_ntsc1
+		lda #$3d		;and $xxxx,x
+		sta bitfire_ntsc2
+		lda #$7d		;adc $xxxx,x
+		sta bitfire_ntsc3
+
+		lda #$00
+		sta bitfire_ntsc0 + 1
+		lda #-$37
+		sta bitfire_ntsc1 + 1
+		sta bitfire_ntsc3 + 1
+		lda #-$3f
+		sta bitfire_ntsc2 + 1
+
+		lda #$dd
+		sta bitfire_ntsc0 + 2
+		lda #$dc
+		sta bitfire_ntsc1 + 2
+		sta bitfire_ntsc2 + 2
+		sta bitfire_ntsc3 + 2
+
+		;adopt branch to point to bmi and waste another 2 cycles, bmi will always fall through, as two lsr happened before
+		lda #bitfire_ntsc5 - bitfire_ntsc4 - 2
+		sta bitfire_ntsc4 + 1
+.nontsc
 		lda #$3f			;drop atn to signal end of transfer
 		sta $dd02
-
-!if (CONFIG_AUTODETECT = 1) {
-		!src "detect.asm"
-}
-		lda #$7f
-		sta $dd0d
-		lda $dd0d
 
 		;wait until floppy is ready
 		;wait for drive to initialize XXX TODO maybe wait for special signal on $dd00?
@@ -196,8 +201,6 @@
 ;		bmi *-3
 ;		dex
 ;		bpl -
-		lda #$37
-		sta <CONFIG_LAX_ADDR
 -
 		lda $dd00
 		bpl -
@@ -223,31 +226,22 @@
 		ldx #$00
 .bs_loop
 
-		jsr .open_w_15
+		stx .mw_code + 3
 
-		lda #'m'
+		jsr .open_w_15
+		ldy #$00
+-
+		lda .mw_code,y
 		jsr .iecout
-		lda #'-'
-		jsr .iecout
-		lda #'w'
-		jsr .iecout
-		txa
-		clc
-		adc #<.bootstrap_run
-		php
-		jsr .iecout
-		plp
-		lda #>.bootstrap_run
-		adc #$00
-		jsr .iecout
-		ldy #$20
-		tya
-		jsr .iecout
+		iny
+		cpy #$06
+		bne -
 -
 		lda .bootstrap_start,x
 		jsr .iecout
 		inx
-		dey
+		txa
+		and #$1f
 		bne -
 
 		jsr .unlisten
@@ -257,54 +251,40 @@
 
 		;now execute bootstrap
 		jsr .open_w_15
-
-		ldx #$00
+		ldy #$00
 -
-		lda .me_code,x
+		lda .me_code,y
 		jsr .iecout
-		inx
-		cpx #$05
+		iny
+		cpy #$05
 		bne -
 		jmp .unlisten
 
-.me_code
-		!text "m-e"
-		!word .bootstrap_run
-
-!src "drivecode.asm"
-
-!if (CONFIG_RESIDENT_AUTOINST != 0) {
-.res_start
-!bin "resident",,2
-}
-
 .install_responder
 		jsr .open_w_15
-
-		ldx #0
-.datalo		lda .atnlo,x
+		ldy #$00
+.datalo		lda .atnlo,y
 		jsr .iecout
-		inx
-		cpx #.atnlo_end - .atnlo
+		iny
+		cpy #.atnlo_end - .atnlo
 		bne .datalo
 		jsr .unlisten
 
 		jsr .open_w_15
-		ldx #0
-.datahi		lda .atnhi,x
+		ldy #$00
+.datahi		lda .atnhi,y
 		jsr .iecout
-		inx
-		cpx #.atnhi_end - .atnhi
+		iny
+		cpy #.atnhi_end - .atnhi
 		bne .datahi
 		jsr .unlisten
 
 		jsr .open_w_15
-
-		ldx #0
-.exec		lda .responder,x
+		ldy #$00
+.exec		lda .responder,y
 		jsr .iecout
-		inx
-		cpx #.responder_end - .responder
+		iny
+		cpy #.responder_end - .responder
 		bne .exec
 		jmp .unlisten
 
@@ -312,6 +292,14 @@
 .responder_code	= $0205
 .atnlo_code	= $0400
 .atnhi_code	= .atnlo_code + $80
+
+.mw_code
+		!text "m-w"
+		!word .bootstrap_run
+		!byte $20
+.me_code
+		!text "m-e"
+		!word .bootstrap_run
 
 .responder
 		!text "m-e"
@@ -364,4 +352,9 @@
 }
 .atnhi_end
 
+!if (CONFIG_RESIDENT_AUTOINST != 0) {
+.res_start
+!bin "resident",,2
 }
+
+!src "drivecode.asm"

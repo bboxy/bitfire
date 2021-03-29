@@ -25,6 +25,8 @@
 
 .detect_sid
 		sei
+		lda #$35
+		sta $01
 		lda #$00
 		sta $d015
 		lda #$ff
@@ -48,9 +50,6 @@
 		;lda $d011
 		;bpl *-3
 
-		sei
-		lda #$35
-		sta $01
 		lda #<.detect_2
 		sta $fffa
 		lda #>.detect_2
@@ -88,3 +87,7 @@
 
 		lda #$37
 		sta $01
+
+		lda #$7f
+		sta $dd0d
+		lda $dd0d

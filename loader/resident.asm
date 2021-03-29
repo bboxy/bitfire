@@ -218,10 +218,11 @@ bitfire_loadraw_
 			ldx #$60
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
 			bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
+bitfire_ntsc5
 			bmi .ld_gentry
 .ld_gloop
 			ldx #$3f
-			ora $dd00 - $3f,x
+bitfire_ntsc0		ora $dd00 - $3f,x
 			stx $dd02
 			lsr				;%xxxxx111
 			lsr				;%xxxxxx11 1
@@ -229,13 +230,13 @@ bitfire_loadraw_
 			beq .ld_en_exit
 +
 			ldx #$37
-			ora $dd00
+bitfire_ntsc1		ora $dd00
 			stx $dd02
 			ror				;c = 1
 			ror				;c = 1 a = %11xxxxxx
 			ldx #$3f
 			sax .ld_nibble + 1
-			and $dd00
+bitfire_ntsc2		and $dd00
 			stx $dd02
 .ld_nibble
 			ora #$00
@@ -245,13 +246,13 @@ bitfire_loadraw_
 
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
-			adc $dd00			;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
+bitfire_ntsc3		adc $dd00			;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
 							;%xx111xxx
 .ld_gend
 			stx $dd02			;carry is cleared now, we can exit here and do our rts
 			lsr				;%xxx111xx
 			lsr				;%xxxx111x
-			bne .ld_gloop			;BRA, a is anything between 0e and 3e
+bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }
 ;XXX TODO in fact the branch can also take 4 cycles if needed, ora $dd00 - $3f,x wastes one cycle anyway

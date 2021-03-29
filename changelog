@@ -102,3 +102,4 @@ v1.0
 - new dir structure
 - zx0 speed update by soci/singular
 - wait 4s until motor spin down
+- NTSC works again

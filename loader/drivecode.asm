@@ -626,8 +626,8 @@ _FF			= $ff
 			bpl -
 
 			;XXX ommit
-			;cpx $1800				;check for a new filename-bit on bus
-			;bne +
+			cpx $1800				;check for a new filename-bit on bus
+			bne +
 
 			sta $1c09				;reset timer 7 cycles
 
@@ -638,8 +638,8 @@ _FF			= $ff
 			bne -					;8 cycles
 
 			;XXX ommit
-			;cpx $1800				;check for a new filename-bit on bus
-			;bne +
+			cpx $1800				;check for a new filename-bit on bus
+			bne +
 .lock
 			sty $1c00				;spin down finally
 			beq .wait_bit1				;enter lock mode
