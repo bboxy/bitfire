@@ -33,10 +33,8 @@
 .loop
 		lda #$00
 		jsr link_load_comp
-		lda #$01
 		jsr link_load_next_comp
 		lda #$02
 		jsr link_load_raw
-		lda #$03
 		jsr link_load_next_raw
 		jmp .loop
