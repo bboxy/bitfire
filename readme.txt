@@ -120,24 +120,24 @@ Examples
 --------
 
 lda #$00
-jsr bitfire_loadraw_
+jsr link_load_raw
 
 Will load first file from disk.
 
 lda #$02
-jsr bitfire_loadraw_
+jsr link_load_raw
 jsr link_load_next_raw
 
 Loads file number 3 and then file number 4. If all files are loaded sequentially from disk, it is enough to use those link_load_next* calls. File number will be reset to 0 upon disk change and init. If a file is loaded by file number beforehand, the next file will be based on that file number.
 
 lda #$01
-jsr bitfire_loadcomp_
+jsr link_load_comp
 
 Will load and on the fly depack second file from disk.
 
 lda #$02
-jsr bitfire_loadraw_
-jsr bitfire_decomp_
+jsr link_load_raw
+jsr link_decomp
 
 Will load third file from disk and depack it afterwards.
 
@@ -151,7 +151,7 @@ jsr bitfire_send_byte_
 Will reset the drive after the demo.
 
 lda #BITFIRE_LOAD_NEXT
-jsr bitfire_loadraw_
+jsr link_load_raw
 
 This will load the next file even without a framework present, as this function is implemented within the floppy code. This might be useful if you do not want to remember a filenumber but just load through disc file by file.
 
@@ -250,7 +250,7 @@ To make the parts of a demo happen always at the same time, there are a few poss
 The framework gives a frame-counter and macros to cover loading with a timer that elapses some time after loading has finished, don't choose values too tight if doing so:
 
 +setup_sync $180		;setup timer to $180 frames
-jsr bitfire_loadnext_compd_	;load
+jsr link_load_next_comp		;load
 +sync				;wait for timer to elapse -> so this happens $180 frames after the setup
 
 Other possibilities are to use syncpoints in SIDs and sync to those syncpoints. There's a syncpoint.inc included to have a single file to edit with all framecounts, so that the timings are not scattered all over your project.
