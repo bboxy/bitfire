@@ -28,7 +28,7 @@
 
 CHECKSUM = 0
 REQDISC = 1
-BUSLOCK = 1
+BUSLOCK = 0
 
 TIME_RAW = 0
 TIME_LOADCOMP = 1
@@ -551,34 +551,24 @@ hex
 		!text "0123456789abcdef"
 sizes
 !if TIME_RAW == 1 {
-!word $c179-$b569
-!word $bf80-$6561
-!word $bd00-$a93e
-!word $4900-$3e1a
-!word $6600-$3db1
-!word $4396-$3162
-!word $62d5-$5dec
-!word $2d00-$2aff
-!word $4500-$35f8
-!word $6358-$548e
-!word $6200-$3774
-!word $7300-$68bb
-!word $67a1-$56c6
-!word $bef7-$bb61
-!word $8000-$78da
-!word $af00-$a06c
-!word $666b-$3b53
-!word $a800-$94af
-!word $c179-$b569
-!word $bf80-$6561
-!word $bd00-$a93e
-!word $4900-$3e1a
-!word $6600-$3db1
-!word $4396-$3162
-!word $62d5-$5dec
-!word $2d00-$2aff
-!word $4500-$35f8
-!word $6358-$548e
+!word $c179-$b635
+!word $bf80-$6a67
+!word $bd00-$aa4a
+!word $4900-$3eed
+!word $6600-$3ee7
+!word $4396-$322a
+!word $62d5-$5e47
+!word $2d00-$2b1f
+!word $4500-$36e9
+!word $6358-$54d2
+!word $6200-$3ab4
+!word $7300-$6954
+!word $67a1-$5822
+!word $bef7-$bb95
+!word $8000-$7950
+!word $af00-$a15a
+!word $666b-$3d20
+!word $a800-$95d4
 } else {
 !word $c179-$a000
 !word $bf80-$2800
@@ -612,34 +602,24 @@ sizes
 
 chksums
 !if TIME_RAW == 1 {
-!byte $c6
-!byte $b8
-!byte $4c
-!byte $54
-!byte $d1
-!byte $86
-!byte $db
+!byte $84
+!byte $a0
+!byte $eb
 !byte $03
-!byte $d8
-!byte $d4
-!byte $58
-!byte $9b
-!byte $9b
-!byte $ed
-!byte $35
-!byte $f8
-!byte $c5
-!byte $dd
-!byte $c6
+!byte $bd
+!byte $e7
+!byte $bf
+!byte $ad
+!byte $1c
+!byte $48
 !byte $b8
-!byte $4c
-!byte $54
-!byte $d1
-!byte $86
-!byte $db
-!byte $03
-!byte $d8
-!byte $d4
+!byte $04
+!byte $29
+!byte $8d
+!byte $9a
+!byte $8a
+!byte $22
+!byte $ba
 } else {
 !byte $f2
 !byte $d3
@@ -673,34 +653,24 @@ chksums
 
 loads
 !if TIME_RAW == 1 {
-!word $b569
-!word $6561
-!word $a93e
-!word $3e1a
-!word $3db1
-!word $3162
-!word $5dec
-!word $2aff
-!word $35f8
-!word $548e
-!word $3774
-!word $68bb
-!word $56c6
-!word $bb61
-!word $78da
-!word $a06c
-!word $3b53
-!word $94af
-!word $b569
-!word $6561
-!word $a93e
-!word $3e1a
-!word $3db1
-!word $3162
-!word $5dec
-!word $2aff
-!word $35f8
-!word $548e
+!word $b635
+!word $6a67
+!word $aa4a
+!word $3eed
+!word $3ee7
+!word $322a
+!word $5e47
+!word $2b1f
+!word $36e9
+!word $54d2
+!word $3ab4
+!word $6954
+!word $5822
+!word $bb95
+!word $7950
+!word $a15a
+!word $3d20
+!word $95d4
 } else {
 !word $a000
 !word $2800
