@@ -860,37 +860,39 @@ int main(int argc, char *argv[]) {
 
     c = 0;
     if (argc <= 1) {
-        printf("Usage: d64write (-c|-d) diskimage.d64 -h header -i id -s standard_format.prg -b bitfire_format.prg --boot bootloader.prg --side 1 -a 12 dirart.prg --interleave 5\n");
+        printf("Usage: d64write (-c|-d) diskimage.d64 -h header -i id -s standard_format.prg -b bitfire_format.prg --boot bootloader.prg --side 1 -a 12 dirart.prg\n");
         printf("A multiple of files can be given as argument using -s or -b multiple times.\n");
-        printf("-c <d64-image>          Select imgae to write to and create/format it.\n");
-        printf("-d <d64-image>          Select an existing image. Files will be added.\n");
-        printf("-b <file>               Writes a file in bitfire format without a visible dir entry.\n");
-        printf("-s <file> [line]        Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
-        printf("--side <num>            Determines which side this disk image will be when it comes about turning the disc.\n");
-        printf("--boot <file>           Writes a standard file into the dirtrack. The dirart is linked to that file.\n");
-        printf("-a <num> <dirart.prg>   A dirart can be provided, it extracts the first 16 chars of <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
-        printf("--interleave <num>      Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
-        printf("--40                    Enable 40 track support.\n");
-        printf("--free <num>            Set blocks free to num.\n");
-        printf("-v			Verbose output.\n");
+        printf("-c, --create <d64-image>		Select imgae to write to and create/format it.\n");
+        printf("-d, --d64 <d64-image>			Select an existing image. Files will be added.\n");
+        printf("-h, --header <name>			Sets the header of the diskimage to <name>.\n");
+        printf("-i, --id <name>				Sets the disk-id of the diskimage to <name>.\n");
+        printf("-b, --bitfire <file>			Writes a file in bitfire format without a visible dir entry.\n");
+        printf("-s, --standard <file> [line]		Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
+        printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
+        printf("-B, --boot <file>			Writes a standard file into the dirtrack. The dirart is linked to that file.\n");
+        printf("-a, --art <num> <dirart.prg>		A dirart can be provided, it extracts <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
+        printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
+        printf("-F, --40				Enable 40 track support.\n");
+        printf("-f, --free <num>			Set blocks free to num.\n");
+        printf("-v, --verbose				Verbose output.\n");
         exit (0);
     }
 
     //parse out and check options
     while(++c < argc) {
-        if(!strcmp(argv[c], "-h")) {
+        if(!strcmp(argv[c], "-h") || !strcmp(argv[c], "--header")) {
             if (argc -c > 1) d64_header = argv[++c];
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "-i")) {
+        else if(!strcmp(argv[c], "-i") || !strcmp(argv[c], "--id")) {
             if (argc - c > 1) d64_id = argv[++c];
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "--free")) {
+        else if(!strcmp(argv[c], "--free") || !strcmp(argv[c], "-f")) {
             if (argc - c > 1) free = strtoul(argv[++c], NULL, 10);
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
@@ -899,7 +901,7 @@ int main(int argc, char *argv[]) {
                 fatal_message("value for %s must be in the range from 0 to 9180\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "--interleave")) {
+        else if(!strcmp(argv[c], "--interleave") || !strcmp(argv[c], "-I")) {
             if (argc - c > 1) interleave = strtoul(argv[++c], NULL, 10);
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
@@ -908,7 +910,7 @@ int main(int argc, char *argv[]) {
                 fatal_message("value for %s must be in the range from 1 to 16\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "--side")) {
+        else if(!strcmp(argv[c], "--side") || !strcmp(argv[c], "-S")) {
             if (argc -c > 1) side = strtoul(argv[++c], NULL, 10);
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
@@ -917,7 +919,7 @@ int main(int argc, char *argv[]) {
                 fatal_message("value for %s must be in the range from 1 to 15\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "-c")) {
+        else if(!strcmp(argv[c], "-c") || !strcmp(argv[c], "--create")) {
             if (d64_path) {
                 fatal_message("image name already given ('%s')\n", d64_path);
             }
@@ -927,7 +929,7 @@ int main(int argc, char *argv[]) {
             }
             format = 1;
         }
-        else if(!strcmp(argv[c], "-d")) {
+        else if(!strcmp(argv[c], "-d") || !strcmp(argv[c], "--d64")) {
             if (d64_path) {
                 fatal_message("image name already given ('%s')\n", d64_path);
             }
@@ -936,29 +938,29 @@ int main(int argc, char *argv[]) {
                 fatal_message("missing path for option '%s'\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "-s")) {
+        else if(!strcmp(argv[c], "-s") || !strcmp(argv[c], "--standard")) {
             c++;
             if (argc -c > 1) {
                 link_to_num = strtoul(argv[++c], NULL, 10);
 		if (!errno) c++;
             }
         }
-        else if(!strcmp(argv[c], "-b")) {
+        else if(!strcmp(argv[c], "-b") || !strcmp(argv[c], "--bitfire")) {
             c++;
         }
-        else if(!strcmp(argv[c], "--boot")) {
+        else if(!strcmp(argv[c], "--boot") || !strcmp(argv[c], "-B")) {
             if (argc -c > 1) boot_file = argv[++c];
             else {
                 fatal_message("missing path for option '%s'\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "--40")) {
+        else if(!strcmp(argv[c], "--40") || !strcmp(argv[c], "-F")) {
             d64.supported_tracks = 40;
         }
-        else if(!strcmp(argv[c], "-v")) {
+        else if(!strcmp(argv[c], "-v") || !strcmp(argv[c], "--verbose")) {
             verbose = 1;
         }
-        else if(!strcmp(argv[c], "-a")) {
+        else if(!strcmp(argv[c], "-a") || !strcmp(argv[c], "--art")) {
             if (argc -c > 1) lines = strtoul(argv[++c], NULL, 10);
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
@@ -1001,7 +1003,7 @@ int main(int argc, char *argv[]) {
     c = 0;
     d64.sectpos = 0;
     while(++c < argc) {
-        if(argc -c > 1 && !strcmp(argv[c], "-b")) {
+        if(argc -c > 1 && (!strcmp(argv[c], "-b") || !strcmp(argv[c], "--bitfire"))) {
             if (!format) {
                 fatal_message("bitfire files will only be written to a fresh disc, to avoid loss of standard files, use the -c option!\n");
             }
@@ -1020,7 +1022,7 @@ int main(int argc, char *argv[]) {
     //finally add the standard files
     c = 0;
     while(++c < argc) {
-        if(argc -c > 1 && !strcmp(argv[c], "-s")) {
+        if(argc -c > 1 && (!strcmp(argv[c], "-s") || !strcmp(argv[c], "--standard"))) {
             filename = argv[++c];
             if (argc -c > 1) {
                 link_to_num = strtoul(argv[++c], NULL, 10);
