@@ -23,12 +23,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int debug_level;
-#ifndef D64_H
-#define D64_H
-
-#include "includes.h"
-
 #define FILETYPE_DEL	0x00
 #define FILETYPE_SEQ	0x01
 #define FILETYPE_PRG	0x02
@@ -177,7 +171,7 @@ typedef struct dirent64 {
     unsigned char d_desectpos;
     /* size information */
     unsigned d_blocks;
-    size_t d_size;
+    unsigned d_size;
 
     unsigned char d_type;    /* DEL, SEQ, PRG, USR, REL, DIR */
     unsigned char d_locked;    //Bit 6
@@ -202,8 +196,8 @@ typedef struct d64 {
     unsigned char desector;
     unsigned char desectpos;
     unsigned free;
-    size_t sectpos;
-    size_t sectsize;
+    unsigned sectpos;
+    unsigned sectsize;
     unsigned char sectbuf[256];
     unsigned char bam[256];
 
@@ -211,9 +205,6 @@ typedef struct d64 {
     dirent64** dirlist;
     int dirsize;
     int dirpos;
-    int dirpointer;
     unsigned char checksum;
     unsigned char supported_tracks;
 } d64;
-
-#endif /* D64_H */

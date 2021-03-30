@@ -23,24 +23,23 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int debug_level;
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
-#include "includes.h"
+#ifdef _MSC_VER
+#else
+	#include <libgen.h>
+#endif
 #include "d64.h"
 #include "debug.h"
-#include "debug_funcs.h"
 
 static void ascii2petscii_char(char* c) {
     if(*c>0x60 && *c<=0x7a) *c^=0x20;
     else if (*c>0x40 && *c<=0x5a) *c^=0x80;
 }
-
-/*
-static void petscii2ascii_char(char* c) {
-    if((unsigned char)*c>0xc0 && (unsigned char)*c<=0xda) *c^=0x80;
-    else if (*c>0x40 && *c<=0x5a) *c^=0x20;
-}
-*/
 
 static void ascii2petscii(char* c) {
     while(*c) {
@@ -48,15 +47,6 @@ static void ascii2petscii(char* c) {
         c++;
     }
 }
-
-/*
-static void petscii2ascii(char* c) {
-    while(*c) {
-        petscii2ascii_char(c);
-        c++;
-    }
-}
-*/
 
 static int d64_set_pos(d64* d64, unsigned char track, unsigned char sector) {
     unsigned int offset;
@@ -136,7 +126,7 @@ static int d64_get_bam_entry(d64* d64, unsigned char track, unsigned char sector
     int offset;
     /* find position within BAM */
     offset = track * 4;
-    /* extend bam dolphin dos style if we wriet more than 36 tracks */
+    /* extend bam dolphin dos style if we write more than 36 tracks */
     if (track > 35) offset += 0x1c;
     byte = d64->bam[offset + (sector >> 3) + 1];
     if(byte & ((unsigned char)1) << (sector & 0x7)) return BAM_FREE;
@@ -167,6 +157,16 @@ static int d64_set_bam_entry(d64* d64, unsigned char track, unsigned char sector
         if(d64_get_bam_entry(d64, track, i) == BAM_FREE) free++;
     }
     /* set new value */
+    //XXX TODO manipulate blocks free via bam, do an extra function for that -> while > 255 -> fill up with 255, free -= 255; else write rest
+    d64->bam[offset] = free;
+    return 1;
+}
+
+static int d64_set_free_track_blocks(d64* d64, unsigned char track, int free) {
+    int offset;
+    if(track < D64_MIN_TRACK || track > d64->supported_tracks) return 0;
+    offset = track * 4;
+    if (track > 35) offset += 0x1c;
     d64->bam[offset] = free;
     return 1;
 }
@@ -177,6 +177,24 @@ static int d64_get_free_track_blocks(d64* d64, unsigned char track) {
     offset = track * 4;
     if (track > 35) offset += 0x1c;
     return d64->bam[offset];
+}
+
+void d64_set_free(d64 *d64, int free) {
+    int track;
+    d64->free = 0;
+    for(track = D64_MIN_TRACK; track <= d64->supported_tracks; track ++) {
+        if(track != D64_DIR_TRACK) {
+            if (free > 255) {
+                d64->free += d64_set_free_track_blocks(d64, track, 255);
+                free -= 255;
+            } else if (free > 0) {
+                d64->free += d64_set_free_track_blocks(d64, track, free);
+                free = 0;
+            } else {
+                d64->free += d64_set_free_track_blocks(d64, track, 0);
+            }
+        }
+    }
 }
 
 void d64_get_free(d64 *d64) {
@@ -343,7 +361,7 @@ static int d64_readdir(d64* d64, dirent64* d) {
         }
     }
 
-    debug_message("sectpos='%d' sectsize='%d'\n", (int)d64->sectpos, (int)d64->sectsize);
+    debug_message("sectpos='%d' sectsize='%d'\n", d64->sectpos, d64->sectsize);
 //    debug_print_hex(&d64->sectbuf[d64->sectpos], 32, "DIR:", 32);
 
     /* populate direntry with data */
@@ -711,7 +729,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
                 printf("\n");
             break;
             case FILETYPE_BITFIRE:
-                printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03lx  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, d64->sectpos, path);
+                printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, d64->sectpos, path);
             break;
         }
     }
@@ -744,7 +762,6 @@ void screen2petscii(char* data, int size) {
     }
 }
 
-//XXX TODO locked und Filetype
 void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector, int lines) {
     char art[41] = { 0 };
     char header[17] = { 0 };
@@ -834,6 +851,7 @@ int main(int argc, char *argv[]) {
     int format = 0;
     int verbose = 0;
     int link_to = 0;
+    int free = -1;
 
     int link_to_num = 0;
 
@@ -845,7 +863,7 @@ int main(int argc, char *argv[]) {
         printf("Usage: d64write (-c|-d) diskimage.d64 -h header -i id -s standard_format.prg -b bitfire_format.prg --boot bootloader.prg --side 1 -a 12 dirart.prg --interleave 5\n");
         printf("A multiple of files can be given as argument using -s or -b multiple times.\n");
         printf("-c <d64-image>          Select imgae to write to and create/format it.\n");
-        printf("-d <d64-image>          Select image. Files will be added.\n");
+        printf("-d <d64-image>          Select an existing image. Files will be added.\n");
         printf("-b <file>               Writes a file in bitfire format without a visible dir entry.\n");
         printf("-s <file> [line]        Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
         printf("--side <num>            Determines which side this disk image will be when it comes about turning the disc.\n");
@@ -853,6 +871,7 @@ int main(int argc, char *argv[]) {
         printf("-a <num> <dirart.prg>   A dirart can be provided, it extracts the first 16 chars of <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
         printf("--interleave <num>      Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("--40                    Enable 40 track support.\n");
+        printf("--free <num>            Set blocks free to num.\n");
         printf("-v			Verbose output.\n");
         exit (0);
     }
@@ -871,13 +890,22 @@ int main(int argc, char *argv[]) {
                 fatal_message("missing value for option '%s'\n", argv[c]);
             }
         }
+        else if(!strcmp(argv[c], "--free")) {
+            if (argc - c > 1) free = strtoul(argv[++c], NULL, 10);
+            else {
+                fatal_message("missing value for option '%s'\n", argv[c]);
+            }
+            if (free < 0) {
+                fatal_message("value for %s must be in the range from 0 to 9180\n", argv[c]);
+            }
+        }
         else if(!strcmp(argv[c], "--interleave")) {
             if (argc - c > 1) interleave = strtoul(argv[++c], NULL, 10);
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
             }
             if (interleave < 1 || interleave > 16) {
-                fatal_message("value for interleave must be in the range from 1 to 16\n");
+                fatal_message("value for %s must be in the range from 1 to 16\n", argv[c]);
             }
         }
         else if(!strcmp(argv[c], "--side")) {
@@ -885,8 +913,8 @@ int main(int argc, char *argv[]) {
             else {
                 fatal_message("missing value for option '%s'\n", argv[c]);
             }
-            if (side < 1 || side > 16) {
-                fatal_message("value for side must be in the range from 1 to 16\n");
+            if (side < 1 || side > 15) {
+                fatal_message("value for %s must be in the range from 1 to 15\n", argv[c]);
             }
         }
         else if(!strcmp(argv[c], "-c")) {
@@ -1013,6 +1041,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (verbose) d64_display_bam(&d64);
+    if (free >= 0) d64_set_free(&d64, free);
+
     d64_write_bam(&d64);
 
     fclose(d64.file);
