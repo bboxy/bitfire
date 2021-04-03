@@ -27,10 +27,11 @@
 
 .depacker	= $02
 .smc_offsetd 	= .depacker - (.depacker_start - .zx0_code_start)
-ZX0_SRC_HI1	= .lz_src1     - .smc_offsetd + 2
-ZX0_SRC_HI2	= .lz_src2     - .smc_offsetd + 2
-ZX0_SRC_HI3	= .lz_src3     - .smc_offsetd + 2
-ZX0_SRC_LO	= .lz_src_lo   - .smc_offsetd + 2
+;ZX0_SRC_HI1	= .lz_src1     - .smc_offsetd + 2
+;ZX0_SRC_HI2	= .lz_src2     - .smc_offsetd + 2
+;ZX0_SRC_HI3	= .lz_src3     - .smc_offsetd + 2
+;ZX0_SRC_LO	= .lz_src_lo   - .smc_offsetd + 2
+ZX0_SRC		= .lz_src - .smc_offsetd + 2
 ZX0_DST		= .lz_dst      - .smc_offsetd + 2
 ZX0_SFX_ADDR	= .lz_sfx_addr - .smc_offsetd + 2
 ZX0_DATA_END 	= .lz_data_end      - .zx0_code_start + 2
@@ -78,8 +79,6 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 .depacker_start
 !pseudopc .depacker {
 .depack
-.lz_src_lo = * + 1
-		ldx #$00
 		;ldy #$00			;is already 0
 		;------------------
 		;LITERAL
@@ -90,20 +89,15 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		bcs .lz_new_offset		;after each match check for another match or literal?
 .literal
 		jsr .get_length
-		and #$ff
-		sta <.lz_y + 1
+		tax
 		beq .lz_l_page
 ;		dec <.lz_len_hi			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it sets carry and resets Y, what is unnecessary, but happens so seldom it doesn't hurt
 .cp_literal
-.lz_src1 = * + 1
-		lda $1000,x			;looks expensive, but is cheaper than loop
-		inx
-		bne +
-		jsr .lz_next_page
-+
+.lz_src = * + 1
+		lda .data,y			;looks expensive, but is cheaper than loop
 		sta (.lz_dst),y
 		iny
-.lz_y 		cpy #$00
+		dex
 		bne .cp_literal
 
 		dey				;this way we force increment of lz_dst + 1 if y = 0
@@ -112,6 +106,13 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		sta <.lz_dst + 0		;XXX TODO final add of y, coudl be combined with next add? -> postpone until match that will happen necessarily later on?
 		bcc +
 		inc <.lz_dst + 1
++
+		tya
+		sec
+		adc <.lz_src + 0
+		sta <.lz_src + 0
+		bcc +
+		inc <.lz_src + 1
 +
 		ldy <.lz_len_hi
 		bne .lz_l_page			;happens very seldom
@@ -192,13 +193,13 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		lsr
 		sta <.lz_offset_hi		;hibyte of offset
 
-.lz_src2 = * + 1
-		lda $1000,x			;fetch another byte directly
+		lda (.lz_src),y			;fetch another byte directly
 		ror
 		sta <.lz_offset_lo
-		inx
+
+		inc <.lz_src + 0
 		bne +
-		jsr .lz_next_page
+		inc <.lz_src + 1
 +
 						;XXX TODO would be nice to have inverted data sent, but would mean MSB also receives inverted bits? sucks. As soon as we refill bits we fall into loop that checks overflow on LSB, should check for bcc however :-( then things would work
 						;would work on offset MSB, but need to clear lz_len_hi after that
@@ -217,15 +218,15 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		bcs .lz_match_
 .lz_bits	!byte $40
 .lz_refill_bits
-.lz_src3 = * + 1
-		ldy $1000,x
-		sty <.lz_bits
-		rol <.lz_bits
-		ldy #$00
-		inx
+		tax
+		lda (.lz_src),y
+		rol
+		sta <.lz_bits
+		inc <.lz_src + 0
 		bne +
-		jsr .lz_next_page
+		inc <.lz_src + 1
 +
+		txa
 		bcs .end_bit_16
 
 		;fetch up to 8 bits first, if first byte overflows, stash away byte and fetch more bits as MSB
@@ -246,11 +247,6 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		sta <.lz_len_hi			;save MSB
 		pla				;restore LSB
 .end_bit_16
-		rts
-.lz_next_page
-		inc <.lz_src1 + 1
-		inc <.lz_src2 + 1
-		inc <.lz_src3 + 1
 		rts
 .lz_eof
 		;------------------

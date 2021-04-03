@@ -357,10 +357,12 @@ int main(int argc, char *argv[]) {
         sfx_code[ZX0_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
 
         /* setup compressed data src */
-        sfx_code[ZX0_SRC_LO  + 0] = (0x10000 - output_size) & 0xff;
-        sfx_code[ZX0_SRC_HI1 + 1] = ((0x10000 - output_size) >> 8) & 0xff;
-        sfx_code[ZX0_SRC_HI2 + 1] = ((0x10000 - output_size) >> 8) & 0xff;
-        sfx_code[ZX0_SRC_HI3 + 1] = ((0x10000 - output_size) >> 8) & 0xff;
+        sfx_code[ZX0_SRC + 0] = (0x10000 - output_size) & 0xff;
+        sfx_code[ZX0_SRC + 1] = ((0x10000 - output_size) >> 8) & 0xff;
+        //sfx_code[ZX0_SRC_LO  + 0] = (0x10000 - output_size) & 0xff;
+        //sfx_code[ZX0_SRC_HI1 + 1] = ((0x10000 - output_size) >> 8) & 0xff;
+        //sfx_code[ZX0_SRC_HI2 + 1] = ((0x10000 - output_size) >> 8) & 0xff;
+        //sfx_code[ZX0_SRC_HI3 + 1] = ((0x10000 - output_size) >> 8) & 0xff;
 
         /* setup compressed data end */
         sfx_code[ZX0_DATA_END + 0] = (0x0801 + sizeof(decruncher) - 2 + output_size - 0x100) & 0xff;
