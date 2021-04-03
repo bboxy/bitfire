@@ -28,10 +28,10 @@
 
 CHECKSUM = 0
 REQDISC = 1
-BUSLOCK = 0
+BUSLOCK = 1
 
-TIME_RAW = 0
-TIME_LOADCOMP = 1
+TIME_RAW = 1
+TIME_LOADCOMP = 0
 TIME_DECOMP = 0
 
 TIME_STRICT = 0
@@ -374,6 +374,12 @@ endh = * + 1
 		lda #$05
 		sta $d828+00*40,x
 
+		jsr clear
+		jsr clear
+		jsr clear
+		jsr clear
+		jsr clear
+		jsr clear
 		jmp clear
 
 no
