@@ -47,8 +47,47 @@ const unsigned char gcr[16] = {
 	0b00010101	//00
 };
 
-//orig mapping
-const unsigned char results4hi_orig[16] = {
+const unsigned char results11010hi_orig[16] = {
+	0x10,
+	0x10,
+	0x30,
+	0x30,
+	0x50 - 0x40,
+	0x50 - 0x40,
+	0x70 - 0x40,
+	0x70 - 0x40,
+	0x80,
+	0x90,
+	0xb0,
+	0xb0,
+	0xc0 - 0x40,
+	0xd0 - 0x40,
+	0xf0 - 0x40,
+	0xf0 - 0x40
+};
+
+//same as below, but with bit 2 added, bit 2 is unique and only occuring on one of the two partitions, so no need to compensate for eor #$7f
+const unsigned char results00101hi_orig[16] = {
+	0x00,
+	0x10,
+	0x00,
+	0x10,
+	0x00 + 0x40,
+	0x10 + 0x40,
+	0x00 + 0x40,
+	0x10 + 0x40,
+	0x10,
+	0x10,
+	0x00,
+	0x10,
+	0x10 + 0x40,
+	0x10 + 0x40,
+	0x00 + 0x40,
+	0x10 + 0x40
+};
+
+//values are eored with 0x10, as both partitions underly the eor #$7f and on both partitions bit 0 can be set in resulting value, so we need to compensate for that
+const unsigned char results11110hi_orig[16] = {
 	0x10,
 	0x10,
 	0x30,
@@ -67,8 +106,8 @@ const unsigned char results4hi_orig[16] = {
 	0xf0
 };
 
-const unsigned char results1hi_orig[16] = {
-	0x00,
+const unsigned char results00001hi_orig[16] = {
+	0x00,			//0,1,0,1 0,1,0,1 1,1,0,1 1,1,0,1
 	0x10,
 	0x00,
 	0x10,
@@ -86,7 +125,7 @@ const unsigned char results1hi_orig[16] = {
 	0x10
 };
 
-const unsigned char results5hi[16] = {
+const unsigned char results11111hi[16] = {
 	0x00,
 	0x10,
 	0x20,
@@ -105,7 +144,7 @@ const unsigned char results5hi[16] = {
 	0xf0
 };
 
-const unsigned char results5lo[16] = {
+const unsigned char results11111lo[16] = {
 	0x0,
 	0x1,
 	0x2,
@@ -124,51 +163,11 @@ const unsigned char results5lo[16] = {
 	0xf
 };
 
-const unsigned char results0hi[16] = {
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00,
-	0x00
-};
-
-const unsigned char results0lo[16] = {
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0,
-	0x0
-};
-
 void create_table(const unsigned char* gcr, const unsigned char* res_hi, const unsigned char* res_lo, int* table, char* order, int eor, int mask) {
 	int i, j, c;
 	unsigned char pos;
 	unsigned char res;
 	unsigned char bit;
-	int encode_lo = 0;
-	int encode_hi = 0;
 	unsigned char res_;
 
 	for (i = 0; i <= max_num; i++) {
@@ -178,13 +177,11 @@ void create_table(const unsigned char* gcr, const unsigned char* res_hi, const u
 			for (c = 0; c < 8; c++) {
 				//high
 				if (order[c] >= 'A' && order[c] <= 'E') {
-					encode_hi = 1;
 					bit = order[c] - 'A';
 					if (gcr[i] & (1 << (bit))) pos |= (1 << (7 - c));
 				}
 				//low
 				else if (order[c] >= 'a' && order[c] <= 'e') {
-					encode_lo = 1;
 					bit = order[c] - 'a';
 					if (gcr[j] & (1 << (bit))) pos |= (1 << (7 - c));
 				}
@@ -192,13 +189,14 @@ void create_table(const unsigned char* gcr, const unsigned char* res_hi, const u
 				else {
 				}
 			}
-			res_ = (res_hi[i] | res_lo[j]);
+			res_ = 0;
+                        if (res_lo) res_ |= res_lo[j];
+                        if (res_hi) res_ |= res_hi[i];
 			res = 0;
 			for (c = 0; c < 8; c++) {
 				res |= ((res_ & (1 << (7 - c))) != 0) << ((result_order[c] - '0'));
 			}
-			if (encode_lo) res ^= (eor & 0x0f);
-			if (encode_hi) res ^= (eor & 0xf0);
+			res ^= eor;
 			res &= mask;
 			table[pos] = res;
 		}
@@ -290,32 +288,32 @@ int main () {
 		table[i] = -1;
 	};
 
-	//           gcr  resulting values hi and low  table         bits       eor   mask
-	create_table(gcr, results5hi,      results0lo, tabAAAAA000, "EDCBA...", 0x7f, 0xf0);	//ones
-	create_table(gcr, results0hi,      results5lo, tab0bb00bbb, ".ba..edc", 0x7f, 0x0f);	//twos
-	create_table(gcr, results5hi,      results0lo, tab00AAAAA0, "..EDCBA.", 0x7f, 0xf0);	//threes
-	create_table(gcr, results0hi,      results5lo, tabbbbbb000, "edcba...", 0x7f, 0x0f);	//fours
-	create_table(gcr, results4hi_orig, results0lo, tab0000AAAA, "....EDCB", 0x7f, 0xf0);	//fives
-	create_table(gcr, results1hi_orig, results5lo, tab0Abbbbb0, ".Aedcba.", 0x7f, 0x1f);	//sixths
-	create_table(gcr, results5hi,      results5lo, tabAAA000AA, "CBA...ED", 0x7f, 0xf0);	//sevens
-	create_table(gcr, results5hi,      results5lo, tab000bbbbb, "CBAedcba", 0x7f, 0x0f);	//eigths
+	//           gcr  resulting values hi  and low         table         bits       eor   mask
+	create_table(gcr, results11111hi,      NULL          , tabAAAAA000, "EDCBA...", 0x7f, 0xf0);	//ones
+	create_table(gcr, NULL          ,      results11111lo, tab0bb00bbb, ".ba..edc", 0x7f, 0x0f);	//twos
+	create_table(gcr, results11111hi,      NULL          , tab00AAAAA0, "..EDCBA.", 0x7f, 0xf0);	//threes
+	create_table(gcr, NULL          ,      results11111lo, tabbbbbb000, "edcba...", 0x7f, 0x0f);	//fours
+	create_table(gcr, results11110hi_orig, NULL          , tab0000AAAA, "....EDCB", 0x7f, 0xf0);	//fives
+	create_table(gcr, results00001hi_orig, results11111lo, tab0Abbbbb0, ".Aedcba.", 0x7f, 0x1f);	//sixths
+	create_table(gcr, results11010hi_orig, results11111lo, tabAAA000AA, "..B...ED", 0x7f, 0xb0);	//sevens
+	create_table(gcr, results00101hi_orig, results11111lo, tab000bbbbb, "CBAedcba", 0x7f, 0x5f);	//eigths
 
-	//printf("tabAAAAA000\n");
-	//print_table(tabAAAAA000, 0, 255);
-	//printf("tab0bb00bbb\n");
-	//print_table(tab0bb00bbb, 0, 255);
-	//printf("tab00AAAAA0\n");
-	//print_table(tab00AAAAA0, 0, 255);
-	//printf("tabbbbbb000\n");
-	//print_table(tabbbbbb000, 0, 255);
-	//printf("tab0000AAAA\n");
-	//print_table(tab0000AAAA, 0, 255);
-	//printf("tab0Abbbbb0\n");
-	//print_table(tab0Abbbbb0, 0, 255);
-	//printf("tabAAA000AA\n");
-	//print_table(tabAAA000AA, 0, 255);
-	//printf("tab000bbbbb\n");
-	//print_table(tab000bbbbb, 0, 255);
+	printf("tabAAAAA000\n");
+	print_table(tabAAAAA000, 0, 255);
+	printf("tab0bb00bbb\n");
+	print_table(tab0bb00bbb, 0, 255);
+	printf("tab00AAAAA0\n");
+	print_table(tab00AAAAA0, 0, 255);
+	printf("tabbbbbb000\n");
+	print_table(tabbbbbb000, 0, 255);
+	printf("tab0000AAAA\n");
+	print_table(tab0000AAAA, 0, 255);
+	printf("tab0Abbbbb0\n");
+	print_table(tab0Abbbbb0, 0, 255);
+	printf("tabAAA000AA\n");
+	print_table(tabAAA000AA, 0, 255);
+	printf("tab000bbbbb\n");
+	print_table(tab000bbbbb, 0, 255);
 
 	for (i = 0; i < 256; i++) table[i] = -1;
 	merge_table(table, tab0bb00bbb, 0x00, 0, 0, 0);
@@ -325,8 +323,8 @@ int main () {
 	for (offset_1 = 0; offset_1 < 256; offset_1++) {
 		for (offset_4 = 0; offset_4 < 256; offset_4++) {
 			for (offset_8 = 0; offset_8 < 256; offset_8++) {
-				for (i = 0; i < 256; i++) table[i] = tabAAA000AA[i];
-				col = 0;//merge_table(table, tab0bb00bbb, 0x00, 1, 0, 0);
+				for (i = 0; i < 256; i++) table[i] = tab0bb00bbb[i];
+				col = 0; //merge_table(table, tab0bb00bbb, 0x00, 1, 0, 0);
 				if (!col) col = merge_table(table, tab000bbbbb, offset_8, 1, 0, 0);	//88888
 				if (!col) col = merge_table(table, tabbbbbb000, offset_4, 1, 0, 0);	//44444
 				if (!col) col = merge_table(table, tabAAAAA000, offset_1, 1, 0, 0);	//11111
@@ -341,8 +339,8 @@ int main () {
 
 	for (i = 0; i < 256; i++) table[i] = -1;
 	merge_table(table, tab000bbbbb, 0x00, 0, 0, 0);	//88888
-	merge_table(table, tabAAA000AA, 0x00, 0, 0, 0);	//77777
-	//merge_table(table, tab0bb00bbb, 0x00, 0, 0, 0); //22222
+	//merge_table(table, tabAAA000AA, 0x00, 0, 0, 0);	//77777
+	merge_table(table, tab0bb00bbb, 0x00, 0, 0, 0); //22222
 	merge_table(table, tabbbbbb000, 0x04, 0, 0, 0);	//44444
 	merge_table(table, tabAAAAA000, 0x00, 0, 0, 0);	//11111
 	for (i = 0; i < 256; i++) if (table[i] < 0) table[i] = i;
@@ -355,6 +353,7 @@ int main () {
 	merge_table(table, tab0000AAAA, 0x00, 0, 0, 0);
 	merge_table(table, tab00AAAAA0, 0x00, 0, 0, 0);
 	merge_table(table, tab0Abbbbb0, 0x01, 0, 0, 0);
+	merge_table(table, tabAAA000AA, 0x00, 0, 0, 0);	//77777
 	printf("zeropage\n");
 	print_table(table, 0, 255);
 	return 0;
