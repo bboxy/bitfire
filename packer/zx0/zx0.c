@@ -158,7 +158,7 @@ int main(int argc, char *argv[]) {
                         "  -f                         Force overwrite of output file\n"
                         "  -o [filename]              Set output filename\n"
                         "  -q                         Quick non-optimal compression\n"
-                        "  --from [num]               Create a c64 compatible sfx-executable\n"
+                        "  --sfx [num]                Create a c64 compatible sfx-executable\n"
                         "  --no-inplace               Disable inplace-decompression\n"
                         "  --binfile                  Input file is a raw binary without load-address\n"
                         "  --from [$num]              Compress file from [num] on\n"
