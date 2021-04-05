@@ -83,7 +83,7 @@ idle, and add macros for that (bus_lock, bus_unlock $bank)
 - fix spin up handling of read dummy sectors (might have been skipped under
 some circumstances)
 
-v1.0
+v1.0-alpha
 - rewrite of many parts
 - reduced dir-entries to 4 byte, only two dir-sectors are needed max
 - add on the fly gcr-decoding and checksumming
@@ -99,8 +99,12 @@ v1.0
 - an ATN-responder is uploaded to all remaining drives, so they can stay turned on
 - loader is started from current drive ($ba)
 - added and adopted zx0 by Einar Saukas as new standard packer/depacker, tiny files, fast depack \o/
+
+v1.0
 - new dir structure
 - zx0 speed update by soci/singular
 - wait 4s until motor spin down
 - NTSC works again
 - amount of free blocks in d64 can be manipulated with d64write --free, play at your own risk, as it corrupts the BAM somewhat
+- fixed barrier bug
+- minor speedup
