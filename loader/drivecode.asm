@@ -1154,13 +1154,16 @@ ___			= $7a
 			bpl .min_loop
 
 			ldx <.dir_entry_num
-
-			tay					;set flags according to A, first block not yet loaded as it is still on wanted list, so set barrier to 0 to make barrier check fail in any case, as we do not have a load-address yet on c64 side
+								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
+			tay
 			beq +
+			lda .dir_load_addr + 0,x		;fetch load address lowbyte
+			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
+			adc <.first_block_size			;else add first block size as offset, might change carry
+			tya
+			sbc #$00				;subtract one in case of overflow
 			clc
 			adc .dir_load_addr + 1,x		;add load address highbyte
-			;clc					;can never overrun, or we would load over $ffff and wrap around, what would crash the c64 anyway, a can also never be 0 here, as index = 0 is skipped above
-			sbc #$00				;subtract one, to give loader time to be >=$100 ahead (first partly filled sector + full sector) can not underrun, except we load over $ffff
 +
 			sta <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
