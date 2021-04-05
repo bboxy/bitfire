@@ -1,6 +1,6 @@
 ;options for resident part
 CONFIG_RESIDENT_ADDR		= $0200
-CONFIG_ZP_ADDR			= $f0
+CONFIG_ZP_ADDR			= $f0		;maximum 9 bytes needed
 CONFIG_LAX_ADDR			= $00		;Usually save to have the value $37 here, but can be also set elsewhere, but must stay persistent during loading
 
 ;options for installer

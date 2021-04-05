@@ -1155,11 +1155,11 @@ ___			= $7a
 
 			ldx <.dir_entry_num
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
-			tay
-			beq +
+			tay					;remmeber lowest index
+			beq +					;zero, so still not loaded
 			lda .dir_load_addr + 0,x		;fetch load address lowbyte
-			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
-			adc <.first_block_size			;else add first block size as offset, might change carry
+			sec
+			adc <.first_block_size			;add first block size as offset, might change carry
 			tya
 			sbc #$00				;subtract one in case of overflow
 			clc
@@ -1183,22 +1183,6 @@ ___			= $7a
 			adc <.block_num				;add block num
 
 			jmp .scramble_preamble
-;.scramble_preamble
-;			sty <.preamble_data + 0			;ack/status to set load addr, signal block ready
-;			sta <.preamble_data + 1 + CONFIG_DECOMP	;block address high
-;			ldx #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
-;			stx .pre_len + 1			;set preamble size
-;
-;			;XXX TODO could skip store if it would be loaded again just in the next step, but values are stored just the otehr way round yet :-(
-;-
-;			lda <.preamble_data,x			;smaller this way, as lda $zp,x can be used now
-;			and #$0f
-;			tay
-;			eor .ser2bin,y
-;			eor <.preamble_data,x
-;			sta <.preamble_data,x
-;			dex
-;			bpl -
 
 			;----------------------------------------------------------------------------------------------------
 			;
