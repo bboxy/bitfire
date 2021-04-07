@@ -397,6 +397,90 @@ ___			= $7a
 
 			;----------------------------------------------------------------------------------------------------
 			;
+			; SEND PREAMBLE AND DATA
+			;
+			;----------------------------------------------------------------------------------------------------
+.pre_send
+			ldx #$0a				;masking value for later sax $1800
+.preloop
+			lda <.preamble_data,y
+			;adds 3 cycles to send, but preamble is bytewise fetched via jsr calls on resident side, so no timing issues
+			bcc .preamble_entry
+.start_send
+.send_sector_data
+			sty .branch + 1
+			ldy #$00				;clear counter
+			;inx					;Y = 0 / $b (also fine for sax, as well as $a)
+			bcc .pre_send				;start with preamble first
+			lda <.send_end				;setup for data loop
+			sta .pre_len + 1
+.sendloop							;send the data block
+;.send_start = * + 1
+			pla					;just pull form stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
+.preamble_entry
+			bit $1800
+			bmi *-3
+			sax $1800				;76540213	-> dddd0d1d
+			asl					;6540213. 7
+			ora #$10				;654X213. 7	-> dddX2d3d
+			bit $1800
+			bpl *-3
+			sta $1800
+			ror					;7654X213 x
+			asr #%11110000				;.7654... x	-> ddd54d.d
+			bit $1800
+			bmi *-3
+			sta $1800
+			lsr					;..7654..
+			asr #%00110000				;...76...	-> ddd76d.d
+.pre_len		cpy #$ff
+			iny
+			bit $1800
+			bpl *-3
+			sta $1800
+.branch			bcc .sendloop
+			;XXX carry is set here, always, might be useful somewhen
+.sendloop_end
+			ldy #.sendloop - .branch - 2		;do we need to send data as well, or all done?
+			cpy .branch + 1
+			bne .send_sector_data			;not yet done, send data, y = fitting value for branch
+			lda #.BUSY
+			bit $1800
+			bmi *-3
+			sta $1800
+!if >*-1 != >.sendloop {
+	!error "sendloop not in one page! Overlapping bytes: ", * & 255
+}
+			;----------------------------------------------------------------------------------------------------
+			;
+			; BLOCK OF TRACK LOADED AND SENT
+			;
+			;----------------------------------------------------------------------------------------------------
+
+			dec <.blocks_on_list			;last block on wishlist?
+			beq .track_finished
+			jmp .cont_track
+.track_finished
+			;set stepping speed to $0c, if we loop once, set it to $18
+			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
+			lda #18
+			ldx #$98;8c
+			top
+-
+			ldx #$98
+			;sec					;set by send_block and also set if beq
+			isc <.to_track
+			beq -					;skip dirtrack however
+
+			stx .stepping_speed + 1
+
+			;XXX TODO make this check easier? only done hre?
+			lda <.end_of_file			;EOF
+			bmi .idle
+			jmp .load_track
+
+			;----------------------------------------------------------------------------------------------------
+			;
 			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
 			;
 			;----------------------------------------------------------------------------------------------------
@@ -1182,96 +1266,8 @@ ___			= $7a
 			clc
 			adc <.block_num				;add block num
 
+			;clc					;should never overrun, or we would wrap @ $ffff?
 			jmp .scramble_preamble
-
-			;----------------------------------------------------------------------------------------------------
-			;
-			; SEND PREAMBLE AND DATA
-			;
-			;----------------------------------------------------------------------------------------------------
-.start_send
-								;X = $ff on entry
-			ldy #.preloop - .branch - 2		;setup branch to point to preloop first
-.send_sector_data
-			sty .branch + 1
-			ldy #$00				;clear counter
-			inx					;Y = 0 / $b (also fine for sax, as well as $a)
-			beq .pre_send				;start with preamble first
-			lda <.send_end				;setup for data loop
-			sta .pre_len + 1
-.sendloop							;send the data block
-;.send_start = * + 1
-			pla					;just pull form stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
-.preamble_entry
-			bit $1800
-			bmi *-3
-			sax $1800				;76540213	-> dddd0d1d
-			asl					;6540213. 7
-			ora #$10				;654X213. 7	-> dddX2d3d
-			bit $1800
-			bpl *-3
-			sta $1800
-			ror					;7654X213 x
-			asr #%11110000				;.7654... x	-> ddd54d.d
-			bit $1800
-			bmi *-3
-			sta $1800
-			lsr					;..7654..
-			asr #%00110000				;...76...	-> ddd76d.d
-.pre_len		cpy #$ff
-			iny
-			bit $1800
-			bpl *-3
-			sta $1800
-.branch			bcc .sendloop
-			;XXX carry is set here, always, might be useful somewhen
-.sendloop_end
-			ldy #.sendloop - .branch - 2		;do we need to send data as well, or all done?
-			cpy .branch + 1
-			bne .send_sector_data			;not yet done, send data, y = fitting value for branch
-			lda #.BUSY
-			bit $1800
-			bmi *-3
-			sta $1800
-!if >*-1 != >.sendloop {
-	!error "sendloop not in one page! Overlapping bytes: ", * & 255
-}
-			;----------------------------------------------------------------------------------------------------
-			;
-			; BLOCK OF TRACK LOADED AND SENT
-			;
-			;----------------------------------------------------------------------------------------------------
-
-			dec <.blocks_on_list			;last block on wishlist?
-			beq .track_finished
-			jmp .cont_track
-.pre_send
-			ldx #$0a				;masking value for later sax $1800
-.preloop
-			lda <.preamble_data,y
-			;adds 3 cycles to send, but preamble is bytewise fetched via jsr calls on resident side, so no timing issues
-			jmp .preamble_entry
-.track_finished
-			;set stepping speed to $0c, if we loop once, set it to $18
-			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
-			lda #18
-			ldx #$98;8c
-			top
--
-			ldx #$98
-			;sec					;set by send_block and also set if beq
-			isc <.to_track
-			beq -					;skip dirtrack however
-
-			stx .stepping_speed + 1
-
-			;XXX TODO make this check easier? only done hre?
-			lda <.end_of_file			;EOF
-			bmi +
-			jmp .load_track
-+
-			jmp .idle
-
 
 .debug_decode_sector
 			;for debug, decode sector and turn it upside down for easy hexdiff
