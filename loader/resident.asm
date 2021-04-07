@@ -145,11 +145,11 @@ bitfire_send_byte_
 			sta .filenum
 			txa
 .ld_loop
-			and #$1f
-			bcc +
-			eor #$20
+			and #$2f
+			bcs +
+			eor #$10
 +
-			eor #$30
+			eor #$20
 			sta $dd02
 			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
 			pla

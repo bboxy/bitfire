@@ -547,37 +547,40 @@ ___			= $7a
 			ldx $1800
 			bne *-3					;wait for lines to be clear
 -
-			ldx $1800				;check for a new filename-bit on bus
+			cpx $1800				;check for a new filename-bit on bus
 			bne +
 
 			bit $1c09				;7 cycles
 			bpl -
 
 			;XXX ommit
-			ldx $1800				;check for a new filename-bit on bus
+			cpx $1800				;check for a new filename-bit on bus
 			bne +
 
 			sta $1c09				;reset timer 7 cycles
 
-			ldx $1800				;check for a new filename-bit on bus
+			;XXX ommit
+			cpx $1800				;check for a new filename-bit on bus
 			bne +
 
 			dec <.timer				;count down rounds
 			bne -					;8 cycles
 
-			;XXX ommit
-			ldx $1800				;check for a new filename-bit on bus
+			cpx $1800				;check for a new filename-bit on bus
 			bne +
+.spinval
+			lda #$00
+			sta $1c00
+			lda #$80
+			bne .wait_bit1
+
 .lock
-.spinval		lda #$00
+			lda .spinval + 1
 			sta $1c00				;spin down finally
 
 			lda #$80				;expect a whole new byte and start with a free bus
 
-			ldx $1800
-			bpl +					;no buslock, enter loop
-
-			ldx $1800
+			ldx $1800				;wait for buslock to end
 			bmi *-3
 
 			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
@@ -594,21 +597,15 @@ ___			= $7a
 			bne *-3
 }
 .wait_bit1
-			ldx $1800
+			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
+								;if we enter here, we get wrong filenames already
+			cpx $1800
+			beq .wait_bit1
 +
-			bmi .lock				;atn is high? violation
-			cpx #$04
-			bcc .wait_bit1				;change in $1800
-			cpx #$05
-			ror
-.wait_bit2
 			ldx $1800
 			bmi .lock
-			cpx #$02
-			bcs .wait_bit2
-			cpx #$01
+			cpx #$04
 			ror
-
 			bcc .wait_bit1				;more bits to fetch?
 			sty $1800				;set busy bit
 
@@ -1373,22 +1370,23 @@ ___			= $7a
 			lda <.preamble_data,x			;smaller this way, as lda $zp,x can be used now
 			and #$0f
 			tay
-			jmp +
+			bcc +
+			nop
 
                         !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
                         !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
 +
 			eor .ser2bin,y
 			eor <.preamble_data,x
-			jmp +
-			nop
+			sta <.preamble_data,x
+			bcc +
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 +
-			sta <.preamble_data,x
 			dex
 			bpl -
+			ldy #.preloop - .branch - 2		;setup branch to point to preloop first
 			jmp .start_send
 			nop
 
