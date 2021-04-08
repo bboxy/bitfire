@@ -374,12 +374,12 @@ endh = * + 1
 		lda #$05
 		sta $d828+00*40,x
 
-		jsr clear
-		jsr clear
-		jsr clear
-		jsr clear
-		jsr clear
-		jsr clear
+		;jsr clear
+		;jsr clear
+		;jsr clear
+		;jsr clear
+		;jsr clear
+		;jsr clear
 		jmp clear
 
 no

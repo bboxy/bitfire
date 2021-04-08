@@ -150,6 +150,7 @@
 }
 }
 
+!if CONFIG_LOADER = 1 {
 .l1		lda $d012
 .l2		cmp $d012
 		beq .l2
@@ -185,6 +186,7 @@
 		lda #bitfire_ntsc5 - bitfire_ntsc4 - 2
 		sta bitfire_ntsc4 + 1
 .nontsc
+}
 		lda #$3f			;drop atn to signal end of transfer
 		sta $dd02
 

@@ -29,6 +29,7 @@
 !src "../config.inc"
 !src "constants.inc"
 
+.CHECK_EVEN		= 1
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -139,11 +140,10 @@ link_decomp_under_io
 			;XXX ATTENTION /!\ never ever get back to the idea of swapping the two bits on sending a filename for the sake of saving cycls or bytes, it only works this way round when doing bus_lock, as checks on driveside define the bitpositions where the clock is low and hi, that is more sane
 
 bitfire_send_byte_
-			ldx #$ff
 			sec
 			ror
 			sta .filenum
-			txa
+			lda #$ff			;XXX TODO lda #$2f is enough
 .ld_loop
 			and #$2f
 			bcs +
@@ -153,7 +153,7 @@ bitfire_send_byte_
 			sta $dd02
 			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
 			pla
-			lsr <(.filenum - $ff), x	;fetch next bit from filenumber and waste cycles
+			lsr .filenum			;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 .ld_pend
 			rts
@@ -265,7 +265,6 @@ bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
 
 !if CONFIG_DECOMP = 1 {
 bitfire_decomp_
-			ldy #$00
 	!if CONFIG_LOADER = 1 {
 			lda #(.lz_start_over - .lz_skip_poll) - 2
 			ldx #$60
@@ -301,6 +300,7 @@ bitfire_loadcomp_
 			dex
 			bpl -
 
+			ldy #$00
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
 							;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
@@ -347,7 +347,37 @@ bitfire_loadcomp_
 			tax
 			plp
 			rts
+	}
 
+.lz_check_poll
+!if .CHECK_EVEN = 1 {
+			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
+.lz_skip_poll		bne .lz_start_over		;we could check against src >= dst XXX TODO
+			lda <.lz_dst + 1
+			sbc <.lz_src + 1
+	!if CONFIG_LOADER = 1 {
+			beq .lz_next_page_
+	} else {
+			bne .lz_start_over
+			rts
+	}
+} else {
+			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
+			lda <.lz_dst + 1
+			sbc <.lz_src + 1
+.lz_skip_poll		bcc .lz_start_over		;we could check against src >= dst XXX TODO
+	!if CONFIG_LOADER = 1 {
+			;;dey
+			;;sty <.lz_src + 1
+			;jmp .lz_next_page_
+			;;jmp .ld_load_raw		;might work as well to load remaining literals
+			bcs .lz_next_page_
+	} else {
+			rts
+	}
+}
+
+	!if CONFIG_LOADER = 1 {
 .lz_poll
 			bit $dd00
 			bvs .lz_start_over
@@ -435,32 +465,18 @@ bitfire_loadcomp_
 			inc <.lz_dst + 1
 
 			lda <.lz_len_hi			;check for more loop runs
-			bne .lz_m_page			;do more page runs
-
-			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
-.lz_skip_poll		bne .lz_start_over		;we could check against src >= dst XXX TODO
-			lda <.lz_dst + 1
-			sbc <.lz_src + 1
-			bne .lz_start_over
-	!if CONFIG_LOADER = 1 {
-			;dey
-			;sty <.lz_src + 1
-			jmp .lz_next_page_
-			;jmp .ld_load_raw		;might work as well to load remaining literals
-	} else {
-			rts
-	}
+			beq .lz_check_poll		;do more page runs?
 
 			;------------------
 			;SELDOM STUFF
 			;------------------
-.lz_clc
-			clc
-			bcc .lz_clc_back
 .lz_m_page
 			dec <.lz_len_hi
 			inc .lz_msrcr + 1		;XXX TODO only needed if more pages follow
 			bne .lz_cp_match
+.lz_clc
+			clc
+			bcc .lz_clc_back
 .lz_l_page
 			dec <.lz_len_hi
 			sec				;only needs to be set for consecutive rounds of literals, happens very seldom

@@ -596,9 +596,8 @@ ___			= $7a
 			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
 			bne *-3
 }
-.wait_bit1
 			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
-								;if we enter here, we get wrong filenames already
+.wait_bit1
 			cpx $1800
 			beq .wait_bit1
 +
@@ -1234,6 +1233,9 @@ ___			= $7a
 			dex					;next entry
 			bpl .min_loop
 
+			;barrier, if new, last block-addr = new barrier? nope can even be higher :-(
+			;else we could remember values and just copy them instead of doing new calc :-(
+
 			ldx <.dir_entry_num
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
 			tay					;remmeber lowest index
@@ -1242,7 +1244,8 @@ ___			= $7a
 			sec
 			adc <.first_block_size			;add first block size as offset, might change carry
 			tya
-			sbc #$00				;subtract one in case of overflow
+			sbc #$01				;subtract one extra in case of overflow
+			;XXX TODO underflow? -> set to 0
 			clc
 			adc .dir_load_addr + 1,x		;add load address highbyte
 +
