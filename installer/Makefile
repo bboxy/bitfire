@@ -1,3 +1,4 @@
+RELEASE ?= 0
 ACME ?= acme
 ACME_OPTS ?= -f cbm -DRELEASE=$(RELEASE)
 
@@ -5,7 +6,7 @@ ACME_OPTS ?= -f cbm -DRELEASE=$(RELEASE)
 
 all: installer
 
-installer: installer.asm ../bitfire/installer ../bitfire/loader_*.inc
+installer: installer.asm ../loader/installer ../loader/loader_*.inc
 	$(ACME) $(ACME_OPTS) -o $@ $<
 
 clean:
