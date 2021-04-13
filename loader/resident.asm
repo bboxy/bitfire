@@ -154,7 +154,7 @@ bitfire_send_byte_
 			sta $dd02
 			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
 			pla
-			lsr .filenum			;fetch next bit from filenumber and waste cycles
+			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 			stx $dd02
 .ld_pend
@@ -287,6 +287,7 @@ bitfire_loadcomp_
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with y = 0
 	}
 							;copy over end_pos and lz_dst from stream
+			ldy #$00			;nneds to be set in any case, also plain decomp enters here
 			ldx #$01
 -
 			lda (.lz_src),y			;copy over first two bytes
@@ -302,16 +303,13 @@ bitfire_loadcomp_
 			dex
 			bpl -
 
-			ldy #$00
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
 							;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
 			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 
 			lda #$40
-			sta <.lz_bits
-
-			bne .lz_start_over		;start with a literal
+			bne .lz_entry			;start with a literal
 
 			;XXX TODO 2 bytes left here until gap
 
@@ -353,6 +351,9 @@ bitfire_loadcomp_
 			rts
 	}
 
+.lz_entry
+			sta <.lz_bits
+			bne .lz_start_over		;start with a literal
 .lz_check_poll
 !if .CHECK_EVEN = 1 {
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
