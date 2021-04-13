@@ -603,7 +603,15 @@ ___			= $7a
 +
 			ldx $1800
 			bmi .lock
-			cpx #$04
+			cpx #$05
+			ror
+.wait_bit2
+			cpx $1800
+			beq .wait_bit2
+
+			ldx $1800
+			bmi .lock
+			cpx #$01
 			ror
 			bcc .wait_bit1				;more bits to fetch?
 			sty $1800				;set busy bit
