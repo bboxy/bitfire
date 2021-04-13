@@ -19,7 +19,7 @@ CONFIG_DECOMP			= 1		;Include decompressor and on the fly decompression
 ;Include the loader
 CONFIG_LOADER			= 1		;Include the loader or maybe decide for a standalone depacker + framework for onefilers
 
-CONFIG_NMI_GAPS			= 0		;Leaves gaps @ $0200 and $0300 (if resident part is at default location) for NMI handlers, needed for stable NMIs with THCM's digistuff.
+CONFIG_NMI_GAPS			= 1		;Leaves gaps @ $0200 and $0300 (if resident part is at default location) for NMI handlers, needed for stable NMIs with THCM's digistuff.
 
 CONFIG_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resident part for later use, so upcoming parts do not need an own detection anymore but can read out that values again
 

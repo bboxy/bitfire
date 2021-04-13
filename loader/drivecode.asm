@@ -603,15 +603,7 @@ ___			= $7a
 +
 			ldx $1800
 			bmi .lock
-			cpx #$05
-			ror
-.wait_bit2
-			cpx $1800
-			beq .wait_bit2
-
-			ldx $1800
-			bmi .lock
-			cpx #$01
+			cpx #$04
 			ror
 			bcc .wait_bit1				;more bits to fetch?
 			sty $1800				;set busy bit
@@ -1254,7 +1246,7 @@ ___			= $7a
 			adc <.first_block_size			;add first block size as offset, if it overflows, this will influence barrier later on
 			tya
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
-			sec
+			sec					;try with 1 XXX TODO
 			sbc #$02				;subtract one, as we need to be at least $100 bytes ahead, and we need to subtract another $0100 as we need to get over an equal comparision
 			bcs +					;can maybe ommitted, index is at least 1, and we do not load into zp?
 			lda #$00

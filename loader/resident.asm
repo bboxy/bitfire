@@ -143,18 +143,20 @@ bitfire_send_byte_
 			sec
 			ror
 			sta .filenum
-			lda #$ff			;XXX TODO lda #$2f is enough
+			ldx #$3f			;XXX TODO lda #$2f is enough
+			txa
 .ld_loop
-			and #$1f
+			and #$2f
 			bcs +
-			eor #$20
-+
 			eor #$10
++
+			eor #$20
 			sta $dd02
 			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
 			pla
 			lsr .filenum			;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
+			stx $dd02
 .ld_pend
 			rts
 
@@ -307,9 +309,7 @@ bitfire_loadcomp_
 			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 
 			lda #$40
-			sta <.lz_bits
-
-			bne .lz_start_over		;start with a literal
+			bne .lz_entry			;start with a literal
 
 			;XXX TODO 2 bytes left here until gap
 
@@ -378,6 +378,9 @@ bitfire_loadcomp_
 			rts
 	}
 }
+
+.lz_entry
+			sta <.lz_bits
 
 	!if CONFIG_LOADER = 1 {
 .lz_poll
