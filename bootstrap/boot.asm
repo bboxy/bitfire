@@ -1,9 +1,8 @@
-!src "../bitfire/loader_acme.inc"
-!src "../link_macros_acme.inc"
-;!src "../music.inc"
+!src "../loader/loader_acme.inc"
+!src "../macros/link_macros_acme.inc"
+!src "../config.inc"
 
 		* = $0100
-
 
 !if SIDE = 1 {
 		;load music
@@ -41,7 +40,7 @@
 		lda #$35
 		sta $01
 
-	!if BITFIRE_FRAMEWORK_MUSIC_NMI = 1 {
+	!if CONFIG_FRAMEWORK_MUSIC_NMI = 1 {
 		+start_music_nmi
 
 		;better cease all other IRQs
@@ -89,10 +88,5 @@
                 jsr link_load_next_comp
 }
 
-!if SIDE = 1 {
-		+wait_frame_count $40
-} else {
-		+wait_frame_count $40 ;180
-}
 		;start part at the same point in time
 		jmp link_exit

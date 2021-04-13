@@ -1,5 +1,7 @@
+link_exit ?= 0
+release ?= 0
 ACME ?= acme
-ACME_OPTS ?= -v1 -f cbm -DRELEASE=$(RELEASE) -Dlink_exit=$(link_exit)
+ACME_OPTS ?= -v1 -f cbm -Drelease=$(release) -Dlink_exit=$(link_exit)
 
 .PHONY: all
 
