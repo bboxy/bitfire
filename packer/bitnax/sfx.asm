@@ -3,14 +3,14 @@
 .decruncher 		= $0020
 .lz_sector      	= ($10000 - (.bitnax_packed_size)) & $ff00
 
-.bitnax_decrunch_offset	= .bitnax_decruncher_start - .bitnax_code_start - .decruncher + 2
+.bitnax_decrunch_offset	= .bitnax_decruncher_start - .bitnax_code_start - .decruncher
 BITNAX_SIZE_HI		= .bitnax_size_hi - .bitnax_code_start + 2
 BITNAX_SIZE_LO 		= .bitnax_size_lo - .bitnax_code_start + 2
-BITNAX_DATA_ADDR	= .bitnax_data_addr - .bitnax_code_start + 2
-BITNAX_DEST_ADDR 	= .bitnax_dest_addr + .bitnax_decrunch_offset
-BITNAX_SECTOR_PTR_1	= .bitnax_sector_ptr_1 + .bitnax_decrunch_offset
-BITNAX_SECTOR_PTR_2	= .bitnax_sector_ptr_2 + .bitnax_decrunch_offset
-BITNAX_SECTOR_PTR_3	= .bitnax_sector_ptr_3 + .bitnax_decrunch_offset
+BITNAX_DATA_ADDR	= .bitnax_data_addr - .bitnax_code_start
+BITNAX_DEST_ADDR 	= .bitnax_dest_addr + .bitnax_decrunch_offset + 1 + 2
+BITNAX_SECTOR_PTR_1	= .bitnax_sector_ptr_1 + .bitnax_decrunch_offset + 2 + 2
+BITNAX_SECTOR_PTR_2	= .bitnax_sector_ptr_2 + .bitnax_decrunch_offset + 2 + 2
+BITNAX_SECTOR_PTR_3	= .bitnax_sector_ptr_3 + .bitnax_decrunch_offset + 2 + 2
 .bitnax_decruncher_size	= .bitnax_decruncher_end - .bitnax_decruncher_start
 .bitnax_packed_size	= .data_end - .data_start
 		* = $0801
@@ -86,14 +86,14 @@ go
 		sta <.lz_copy_cnt + 1	;Store LSB of run-length
                 ldy #$00
 .lz_lcopy
+.bitnax_sector_ptr_2
 .lz_sector_ptr2	= * + 1			;Copy the literal data.
-.bitnax_sector_ptr_2 = * + 2
 		lda+2 .lz_sector,x
 		inx
 		bne *+5
 		jsr .lz_fetch_sector
+.bitnax_dest_addr
 .lz_dst = * + 1
-.bitnax_dest_addr = * + 1
 		sta $3800,y
 		iny
 .lz_copy_cnt	cpy #$00
@@ -162,8 +162,8 @@ go
 .lz_moff_far	sta <.lz_hi		;Save the bits we just read as the
 					;high-byte
 
+.bitnax_sector_ptr_3
 .lz_sector_ptr3	= * + 1
-.bitnax_sector_ptr_3 = * + 2
 		lda+2 .lz_sector,x	;For large offsets we can load the
 		inx			;low-byte straight from the stream
 		bne *+5			;without going throught the shift
@@ -217,7 +217,7 @@ go
 		jmp .lz_type_check
 .lz_bits 	!byte $00
 
-.bitnax_sector_ptr_1 = * + 2
+.bitnax_sector_ptr_1
 .lz_sector_ptr1	= * + 1
 .lz_refill_bits	ldy+2 .lz_sector,x
 		sty <.lz_bits

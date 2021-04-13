@@ -33,4 +33,4 @@ sfx.h: sfx.asm
 	$(VR)rm $(basename $@).lst sfx
 
 clean:
-	$(VR)rm zx0 dzx0 sfx.h
+	$(VR)-rm zx0 dzx0 sfx.h

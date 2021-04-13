@@ -20,15 +20,12 @@ bitnax: $(SOURCE) $(HEADER)
 	$(VR)$(CC) $(bitnax_CFLAGS) -o $@ $(SOURCE)
 
 sfx.h: sfx.asm
-	$(VR)echo '#ifndef SFX_H' > $@
-	$(VR)echo '#define SFX_H' >> $@
-	$(VR)$(ACME) $(ACMEOPT) --vicelabels $(basename $@).lst -o $(basename $@) $<
-	$(VR)grep 'BITNAX' $(basename $@).lst | sed -E 's/al C:([0-9a-f]+)[[:space:]]\.(.*)/#define \2 0x\1/' >> $@
+	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
+	$(VR)grep 'BITNAX' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/\s*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
 	$(VR)echo 'static const char decruncher[] = {' >> $@
 	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/\n/g' -e 's/.\{50\}/&\n/g' | sed 's/^/&    /g' >> $@
 	$(VR)echo '};' >> $@
-	$(VR)echo '#endif /* SFX_H */' >> $@
-	$(VR)rm $(basename $@).lst sfx
+	#$(VR)rm $(basename $@).lst sfx
 
 clean:
-	$(VR)rm bitnax sfx.h
+	$(VR)-rm bitnax sfx.h
