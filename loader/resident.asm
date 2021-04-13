@@ -29,7 +29,7 @@
 !src "../config.inc"
 !src "constants.inc"
 
-.CHECK_EVEN		= 0
+.CHECK_EVEN		= 1
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
