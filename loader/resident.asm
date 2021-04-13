@@ -309,7 +309,9 @@ bitfire_loadcomp_
 			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 
 			lda #$40
-			bne .lz_entry			;start with a literal
+			sta <.lz_bits
+
+			bne .lz_start_over		;start with a literal
 
 			;XXX TODO 2 bytes left here until gap
 
@@ -378,9 +380,6 @@ bitfire_loadcomp_
 			rts
 	}
 }
-
-.lz_entry
-			sta <.lz_bits
 
 	!if CONFIG_LOADER = 1 {
 .lz_poll
