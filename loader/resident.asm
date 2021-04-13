@@ -359,10 +359,10 @@ bitfire_loadcomp_
 .lz_skip_poll		bne .lz_start_over		;we could check against src >= dst XXX TODO
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
+			bne .lz_start_over
 	!if CONFIG_LOADER = 1 {
 			beq .lz_next_page_		;finish loading or just run into .lz_poll -> start_over
 	} else {
-			bne .lz_start_over
 			rts
 	}
 } else {
