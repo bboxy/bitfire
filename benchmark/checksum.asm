@@ -28,7 +28,8 @@
 
 CHECKSUM = 0
 REQDISC = 1
-BUSLOCK = 0
+BUSLOCK = 1
+WAIT_SPIN_DOWN = 1
 
 TIME_RAW = 0
 TIME_LOADCOMP = 1
@@ -45,6 +46,8 @@ min		= $14
 cnt		= $16
 dst		= $18
 
+screen		= $2000
+
 !src "../loader/loader_acme.inc"
 !src "../macros/link_macros_acme.inc"
 
@@ -58,13 +61,17 @@ dst		= $18
 }
 		sta $d020
 		sta $d021
+
+		lda #$84
+		sta $d018
+
 		ldx #$00
 -
 		lda #$20
-		sta $0428,x
-		sta $0500,x
-		sta $0600,x
-		sta $0700,x
+		sta screen + $0000,x
+		sta screen + $0100,x
+		sta screen + $0200,x
+		sta screen + $0300,x
 		dex
 		bne -
 		lda #$00
@@ -73,7 +80,7 @@ dst		= $18
 
 		lda #$20
 		sta dst
-		lda #$04
+		lda #>screen
 		sta dst+1
 
 		jmp benchmark
@@ -94,26 +101,26 @@ display
 		txa
 		ora #$80
 		dex
-		sta $0400+1*40,x
+		sta screen + $28,x
 		bpl -
 
 		ldx #$0e
 -
 		lda text1,x
-		sta $0450,x
+		sta screen + $50,x
 		lda text2,x
-		sta $0478,x
+		sta screen + $78,x
 		lda text3,x
-		sta $04a0,x
+		sta screen + $a0,x
 		lda text4,x
-		sta $04f0,x
+		sta screen + $f0,x
 		dex
 		bpl -
 
 		ldx #21
 -
 		lda text7,x
-		sta $0518,x
+		sta screen + $118,x
 		dex
 		bpl -
 
@@ -374,12 +381,15 @@ endh = * + 1
 		lda #$05
 		sta $d828+00*40,x
 
-		;jsr clear
-		;jsr clear
-		;jsr clear
-		;jsr clear
-		;jsr clear
-		;jsr clear
+!if WAIT_SPIN_DOWN = 1 {
+		jsr clear
+		jsr clear
+		jsr clear
+		jsr clear
+		jsr clear
+		jsr clear
+		jsr clear
+}
 		jmp clear
 
 no
@@ -399,7 +409,7 @@ req_disc
 		rts
 
 clear
-		lda #$10
+		lda #$28
 		sta cln+2
 --
 		ldy #$00
@@ -464,7 +474,7 @@ print_count
 
 		lda dst+1
 		and #$03
-		ora #$04
+		ora #>screen
 		sta dst+1
 
 		lda dst
@@ -475,9 +485,9 @@ print_count
 		inc dst+1
 
 		lda dst+1
-		cmp #$08
+		cmp #>(screen + $0400)
 		bne +
-		lda #$04
+		lda #>screen
 		sta dst+1
 		lda #$20
 		sta dst
@@ -492,7 +502,7 @@ hex_runs
 		and #$0f
 		tay
 		lda hex,y
-		sta $04f8
+		sta screen + $f8
 		txa
 		lsr
 		lsr
@@ -500,12 +510,12 @@ hex_runs
 		lsr
 		tay
 		lda hex,y
-		sta $04f7
+		sta screen + $f7
 		lax runs
 		and #$0f
 		tay
 		lda hex,y
-		sta $04fa
+		sta screen + $fa
 		txa
 		lsr
 		lsr
@@ -513,7 +523,7 @@ hex_runs
 		lsr
 		tay
 		lda hex,y
-		sta $04f9
+		sta screen + $f9
 .barerts
 		rts
 

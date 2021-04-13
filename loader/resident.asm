@@ -29,7 +29,7 @@
 !src "../config.inc"
 !src "constants.inc"
 
-.CHECK_EVEN		= 1
+.CHECK_EVEN		= 0
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -311,6 +311,8 @@ bitfire_loadcomp_
 
 			bne .lz_start_over		;start with a literal
 
+			;XXX TODO 2 bytes left here until gap
+
 	!if CONFIG_NMI_GAPS = 1 {
 
 			;!ifdef .lz_gap2 {
@@ -356,7 +358,7 @@ bitfire_loadcomp_
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
 	!if CONFIG_LOADER = 1 {
-			beq .lz_next_page_
+			beq .lz_next_page_		;finish loading or just run into .lz_poll -> start_over
 	} else {
 			bne .lz_start_over
 			rts
@@ -465,7 +467,7 @@ bitfire_loadcomp_
 			inc <.lz_dst + 1
 
 			lda <.lz_len_hi			;check for more loop runs
-			beq .lz_check_poll		;do more page runs?
+			beq .lz_check_poll		;do more page runs? Yes? Fall through
 
 			;------------------
 			;SELDOM STUFF

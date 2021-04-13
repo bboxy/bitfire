@@ -1240,14 +1240,15 @@ ___			= $7a
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
 			tay					;remmeber lowest index
 			beq +					;zero, so still not loaded
+								;first block will never reach this code, as barrier will be zero as long as first block is barrier
 			lda .dir_load_addr + 0,x		;fetch load address lowbyte
 			sec
-			adc <.first_block_size			;add first block size as offset, might change carry
+			adc <.first_block_size			;add first block size as offset, if it overflows, this will influence barrier later on
 			tya
-			sbc #$01				;subtract one extra in case of overflow
+			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
+			sec
+			sbc #$02				;subtract one, as we need to be at least $100 bytes ahead
 			;XXX TODO underflow? -> set to 0
-			clc
-			adc .dir_load_addr + 1,x		;add load address highbyte
 +
 			sta <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
 }

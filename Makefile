@@ -36,9 +36,9 @@ benchmark: FORCE zx0 bitnax d64write loader
 clean:
 	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
 	@$(MAKE) $(MAKE_OPTS) -C packer/bitnax/ clean
-	#@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
-	#@$(MAKE) $(MAKE_OPTS) -C loader/ clean
-	#@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
+	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
+	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
+	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
 #	@$(MAKE) $(MAKE_OPTS) -C link/ clean
 
 FORCE:
