@@ -4,6 +4,10 @@
 ;loader labels
 !src "../loader/loader_acme.inc"
 
+!ifndef link_exit {
+link_exit	= $0100
+}
+
 		* = bitfire_install_
 		!bin "../loader/installer",,2
 
@@ -23,4 +27,4 @@
 		jsr link_load_next_raw
 
 		;XXX TODO here it would also be possible to laod a custom link_resident part per side, but would require includes per side and resident part
-		jmp $4000
+		jmp link_exit
