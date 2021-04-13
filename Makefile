@@ -27,7 +27,7 @@ loader: FORCE
 benchmark-lz: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ benchmark-lz
 
-benchmark: FORCE zx0 bitnax d64write loader
+benchmark: FORCE zx0 d64write loader
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ benchmark
 
 #link: FORCE zx0 bitnax d64write loader

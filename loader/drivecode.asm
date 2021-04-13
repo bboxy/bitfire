@@ -1247,8 +1247,9 @@ ___			= $7a
 			tya
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
 			sec
-			sbc #$02				;subtract one, as we need to be at least $100 bytes ahead
-			;XXX TODO underflow? -> set to 0
+			sbc #$02				;subtract one, as we need to be at least $100 bytes ahead, and we need to subtract another $0100 as we need to get over an equal comparision
+			bcs +					;can maybe ommitted, index is at least 1, and we do not load into zp?
+			lda #$00
 +
 			sta <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
