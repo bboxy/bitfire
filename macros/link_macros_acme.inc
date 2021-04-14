@@ -85,8 +85,8 @@
 			lda #.num + $f0
 			jsr bitfire_send_byte_
 			+wait_floppy_busy
-			lda #$3f
-			sta $dd02
+			;lda #$3f
+			;sta $dd02
 			+wait_floppy_idle
 		}
 

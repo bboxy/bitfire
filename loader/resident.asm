@@ -143,7 +143,7 @@ bitfire_send_byte_
 			sec
 			ror
 			sta .filenum
-			ldx #$3f			;XXX TODO lda #$2f is enough
+			ldx #$3f
 			txa
 .ld_loop
 			and #$2f
@@ -152,7 +152,7 @@ bitfire_send_byte_
 +
 			eor #$20
 			sta $dd02
-			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
+			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again, XXX TODO maybe still remove
 			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
@@ -268,7 +268,8 @@ bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
 !if CONFIG_DECOMP = 1 {
 bitfire_decomp_
 	!if CONFIG_LOADER = 1 {
-			lda #(.lz_start_over - .lz_skip_poll) - 2
+			;lda #(.lz_start_over - .lz_skip_poll) - 2
+			lda #$2c
 			ldx #$60
 			bne .loadcomp_entry
 	!if CONFIG_FRAMEWORK = 1 {
@@ -278,10 +279,11 @@ link_load_comp
 	}
 bitfire_loadcomp_
 			jsr bitfire_send_byte_		;returns now with x = $ff
-			lda #(.lz_poll - .lz_skip_poll) - 2
+			;lda #(.lz_poll - .lz_skip_poll) - 2
+			lda #$20
 			ldx #$08
 .loadcomp_entry
-			sta .lz_skip_poll + 1
+			sta .lz_skip_poll
 			stx .lz_skip_fetch
 
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with y = 0
@@ -348,8 +350,10 @@ bitfire_loadcomp_
 			pla
 			tax
 			plp
-			rts
+	} else {
+.lz_next_page_
 	}
+			rts
 
 .lz_entry
 			sta <.lz_bits
@@ -357,36 +361,27 @@ bitfire_loadcomp_
 .lz_check_poll
 !if .CHECK_EVEN = 1 {
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
-.lz_skip_poll		bne .lz_start_over		;we could check against src >= dst XXX TODO
+			bne .lz_poll			;we could check against src >= dst XXX TODO
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
-			bne .lz_start_over
-	!if CONFIG_LOADER = 1 {
 			beq .lz_next_page_		;finish loading or just run into .lz_poll -> start_over
-	} else {
-			rts
-	}
 } else {
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
-.lz_skip_poll		bcc .lz_start_over		;we could check against src >= dst XXX TODO
-	!if CONFIG_LOADER = 1 {
 			;;dey
 			;;sty <.lz_src + 1
 			;jmp .lz_next_page_
 			;;jmp .ld_load_raw		;might work as well to load remaining literals
 			bcs .lz_next_page_
-	} else {
-			rts
-	}
 }
 
+			;/!\ ATTENTION it is a bad idea to just run into the polling block code to save code, when depacking under io, this causes trouble!
 	!if CONFIG_LOADER = 1 {
 .lz_poll
 			bit $dd00
 			bvs .lz_start_over
-			jsr .ld_poll			;yes, fetch another block
+.lz_skip_poll		jsr .ld_poll			;yes, fetch another block
 	}
 			;------------------
 			;LITERAL
