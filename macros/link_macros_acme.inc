@@ -1,52 +1,52 @@
 		;load next file as a raw file (do not decomp on the fly) and jump to .addr
-		!macro link_load_next_raw_jmp .addr {
-			lda #>(.addr-1)
+		!macro link_load_next_raw_jmp .arg {
+			lda #>(.arg-1)
 			pha
-			lda #<(.addr-1)
+			lda #<(.arg-1)
 			pha
 			jmp link_load_next_raw
 		}
 
-		;load next file and decomp on the fly, then jump to .addr
-		!macro link_load_next_comp_jmp .addr {
-			lda #>(.addr-1)
+		;load next file and decomp on the fly, then jump to .arg
+		!macro link_load_next_comp_jmp .arg {
+			lda #>(.arg-1)
 			pha
-			lda #<(.addr-1)
+			lda #<(.arg-1)
 			pha
 			jmp link_load_next_comp
 		}
 
-		;decomp previously loaded file and jump to .addr
-		!macro link_decomp_jmp .addr {
-			lda #>(.addr-1)
+		;decomp previously loaded file and jump to .arg
+		!macro link_decomp_jmp .arg {
+			lda #>(.arg-1)
 			pha
-			lda #<(.addr-1)
+			lda #<(.arg-1)
 			pha
 			jmp link_decomp
 		}
 
 		;load next file and decompress on the fly, then load next file raw, disable IO and decompress it, then enable IO again -> a full file that was split into two parts is loaded, with a portion going under IO
-		!macro link_load_next_double_jmp .addr {
-			lda #>(.addr-1)
+		!macro link_load_next_double_jmp .arg {
+			lda #>(.arg-1)
 			pha
-			lda #<(.addr-1)
+			lda #<(.arg-1)
 			pha
 			jmp link_load_next_double
 		}
 
 		;load file raw and decomp
-		!macro link_load_next_raw_decomp_jmp .addr {
-			lda #>(.addr-1)
+		!macro link_load_next_raw_decomp_jmp .arg {
+			lda #>(.arg-1)
 			pha
-			lda #<(.addr-1)
+			lda #<(.arg-1)
 			pha
 			jmp link_load_next_raw_decomp
 		}
 
-		!macro link_decomp_under_io_jmp .addr {
-			lda #>(.addr-1)
+		!macro link_decomp_under_io_jmp .arg {
+			lda #>(.arg-1)
 			pha
-			lda #<(.addr-1)
+			lda #<(.arg-1)
 			pha
 			jmp link_decomp_under_io
 		}
@@ -81,8 +81,8 @@
 		}
 
 		;request next disk side and reset filenum_counter
-		!macro request_disk .num {
-			lda #.num + $f0
+		!macro request_disk .arg {
+			lda #.arg + $f0
 			jsr bitfire_send_byte_
 			+wait_floppy_busy
 			;lda #$3f
@@ -91,19 +91,19 @@
 		}
 
 		;wait for given frame counter value
-		!macro link_wait_syncpoint .part {
+		!macro link_wait_syncpoint .arg {
 -
 			lda link_syncpoint
-			cmp #.part
+			cmp #.arg
 			bcc -
 		}
 
-		!macro setup_sync .frames {
+		!macro setup_sync .arg {
 			lda #$00
 			sta link_frame_count + 0	;avoid that the counter wraps worstcase, as we can't write atomic
-			lda #<($8000 - .frames)
+			lda #<($8000 - .arg)
 			sta link_frame_count + 0	;now setup counter
-			lda #>($8000 - .frames)
+			lda #>($8000 - .arg)
 			sta link_frame_count + 1
 		}
 
@@ -119,10 +119,10 @@
 			sta $dd02
 		}
 
-		!macro bus_unlock .bank {
+		!macro bus_unlock .arg {
 			;XXX TODO ATTENTION /!\ better don't touch ever again
 			;this looks ugly, sorry for this, but it is yet the only way it works on THCM's sx64, the trailing stx $dd00/sta $dd00 is needed :-(
-			ldx #(.bank & 3)
+			ldx #(.arg & 3)
 			stx $dd00
 			lda $dd00
 			lda #$1f			;release ATN
@@ -140,10 +140,10 @@
 			bne -
 		}
 
-		!macro set_depack_pointers .addr {
-			lda #<.addr
+		!macro set_depack_pointers .arg {
+			lda #<.arg
 			sta bitfire_load_addr_lo
-			lda #>.addr
+			lda #>.arg
 			sta bitfire_load_addr_hi
 		}
 

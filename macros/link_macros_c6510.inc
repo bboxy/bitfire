@@ -44,7 +44,7 @@
 		{
                         lda #(n-1)>>8
                         pha
-                        lda #(n-1)&256
+                        lda #(n-1)&255
                         pha
                         jmp link_load_next_raw_decomp
                 }
