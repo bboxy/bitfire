@@ -118,7 +118,6 @@ link_music_addr = * + 1
 
 			;those calls could be a macro, but they are handy to be jumped to so loading happens while having all mem free, and code is entered afterwards
 	!if CONFIG_DECOMP = 1 {
-link_decomp		= bitfire_decomp_
 ;			;expect $01 to be $35
 		!if CONFIG_LOADER = 1 {
 link_load_next_double
@@ -156,7 +155,7 @@ bitfire_send_byte_
 			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
-			stx $dd02
+			stx $dd02			;restore $dd02
 .ld_pend
 			rts
 
@@ -267,6 +266,7 @@ bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
 
 !if CONFIG_DECOMP = 1 {
 bitfire_decomp_
+link_decomp
 	!if CONFIG_LOADER = 1 {
 			;lda #(.lz_start_over - .lz_skip_poll) - 2
 			lda #$2c
@@ -367,7 +367,7 @@ bitfire_loadcomp_
 	!if CONFIG_LOADER = 1 {
 			bit $dd00
 			bvs .lz_start_over
-.lz_skip_poll		jsr .ld_poll			;yes, fetch another block
+.lz_skip_poll		jsr .ld_poll			;yes, fetch another block, call is disabled for plain decomp
 	}
 			;------------------
 			;LITERAL

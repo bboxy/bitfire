@@ -1241,19 +1241,29 @@ ___			= $7a
 			tay					;remmeber lowest index
 			beq +					;zero, so still not loaded
 								;first block will never reach this code, as barrier will be zero as long as first block is barrier
-			lda .dir_load_addr + 0,x		;fetch load address lowbyte
-			sec
-			adc <.first_block_size			;add first block size as offset, if it overflows, this will influence barrier later on
-			tya
+			;on first occasion we have load-address + $0100 here, we subtract 2 and have load-address - $0100
 			clc
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
-			sec					;try with 1 XXX TODO
-			sbc #$02				;subtract one, as we need to be at least $100 bytes ahead, and we need to subtract another $0100 as we need to get over an equal comparision
-			bcs +					;can maybe ommitted, index is at least 1, and we do not load into zp?
-			lda #$00
+			tay
+			dey					;subtract one, as we need to be at least $100 bytes ahead, and we need to subtract another $0100 as we need to get over an equal comparision
+
+
+			;example:
+			;$b561 is load adress, so $b500 is index + load-addr
+			;$b561 is initial lz_src on c64 side, incremented by $0100, so c64 is $61 + $0100 ahead, minimum lz_src position is $b600 or more
+			;first block loaded is partly filled
+
+
+			;sbc #$01
+;			bcs +					;can maybe ommitted if we only subtract 1, index is at least 1
+;			lda #$00
 +
-			sta <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
+			sty <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
+
+			;depacker advances in $100 steps from load-adress on, so we need at least load $0100 bytes, means first block + additional block. We then can free barrier for load-addr highbyte?
+
+
 			lda .dir_load_addr + 0,x		;fetch load address lowbyte
 			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
 
