@@ -70,14 +70,16 @@
 
 		!macro wait_floppy_busy {
 			;wait until floppy is busy
+.l
 			bit $dd00
-			bmi *-3
+			bmi .l
 		}
 
 		!macro wait_floppy_idle {
 			;wait until floppy is idle again
+.l
 			bit $dd00
-			bpl *-3
+			bpl .l
 		}
 
 		;request next disk side and reset filenum_counter
@@ -92,10 +94,10 @@
 
 		;wait for given frame counter value
 		!macro link_wait_syncpoint .arg {
--
+.l
 			lda link_syncpoint
 			cmp #.arg
-			bcc -
+			bcc .l
 		}
 
 		!macro setup_sync .arg {
@@ -108,9 +110,9 @@
 		}
 
 		!macro sync {
-.wait
+.l
 			lda link_frame_count + 1	;Counter expired when $8000 is reached
-			bpl .wait
+			bpl .l
 		}
 
 		!macro bus_lock {
@@ -135,9 +137,9 @@
 			lda $dd00
 			;give some time for things to settle, no idea how much time is needed, leaving this out makes sx64 also fail
 			ldx #$07
--
+.l
 			dex
-			bne -
+			bne .l
 		}
 
 		!macro set_depack_pointers .arg {
@@ -164,8 +166,9 @@
 			sta $dd0d
 
 			lda #$ff
+.l
 			cmp $d012
-			bne *-3
+			bne .l
 
 			lda #$11
 			sta $dd0e
