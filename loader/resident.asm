@@ -272,11 +272,11 @@ bitfire_decomp_
 			lda #$2c
 			ldx #$60
 			bne .loadcomp_entry
-	!if CONFIG_FRAMEWORK = 1 {
+		!if CONFIG_FRAMEWORK = 1 {
 link_load_next_comp
 			lda #BITFIRE_LOAD_NEXT
 link_load_comp
-	}
+		}
 bitfire_loadcomp_
 			jsr bitfire_send_byte_		;returns now with x = $ff
 			;lda #(.lz_poll - .lz_skip_poll) - 2
@@ -292,16 +292,8 @@ bitfire_loadcomp_
 			ldy #$00			;nneds to be set in any case, also plain decomp enters here
 			ldx #$01
 -
-			lda (.lz_src),y			;copy over first two bytes
-			sta <.lz_dst,x
-			inc <.lz_src + 0
-			bne +
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page
-	} else {
-			inc <.lz_src + 1
-	}
-+
+			jsr .lz_get_byte
+			sta <.lz_dst, x
 			dex
 			bpl -
 
@@ -311,14 +303,14 @@ bitfire_loadcomp_
 			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 
 			lda #$40
-			bne .lz_entry			;start with a literal
+			sta <.lz_bits
+			bne .lz_start_over		;start with a literal
 
-			;XXX TODO 2 bytes left here until gap
+			;XXX TODO 4 bytes left here until gap
 
 	!if CONFIG_NMI_GAPS = 1 {
-
 			;!ifdef .lz_gap2 {
-			;	!warn .lz_gap2 - *, " bytes left until gap2"
+				!warn .lz_gap2 - *, " bytes left until gap2"
 			;}
 !align 255,2
 .lz_gap2
@@ -330,6 +322,10 @@ bitfire_loadcomp_
 			nop
 	}
 
+.lz_get_byte
+			lda (.lz_src),y
+			inc <.lz_src + 0
+			bne +
 	!if CONFIG_LOADER = 1 {
 .lz_next_page
 			inc <.lz_src + 1
@@ -342,7 +338,7 @@ bitfire_loadcomp_
 			jsr .ld_pblock			;fetch another block
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 			lda <.lz_src + 1		;get current depack position
-			cmp .barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
+			cmp <.barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
 							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking
@@ -353,32 +349,24 @@ bitfire_loadcomp_
 	} else {
 .lz_next_page_
 	}
++
 			rts
 
-.lz_entry
-			sta <.lz_bits
-			bne .lz_start_over		;start with a literal
 .lz_check_poll
-!if .CHECK_EVEN = 1 {
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
+!if .CHECK_EVEN = 1 {
 			bne .lz_poll			;we could check against src >= dst XXX TODO
+}
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
+!if .CHECK_EVEN = 1 {
 			beq .lz_next_page_		;finish loading or just run into .lz_poll -> start_over
 } else {
-			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
-			lda <.lz_dst + 1
-			sbc <.lz_src + 1
-			;;dey
-			;;sty <.lz_src + 1
-			;jmp .lz_next_page_
-			;;jmp .ld_load_raw		;might work as well to load remaining literals
 			bcs .lz_next_page_
 }
 
-			;/!\ ATTENTION it is a bad idea to just run into the polling block code to save code, when depacking under io, this causes trouble!
-	!if CONFIG_LOADER = 1 {
 .lz_poll
+	!if CONFIG_LOADER = 1 {
 			bit $dd00
 			bvs .lz_start_over
 .lz_skip_poll		jsr .ld_poll			;yes, fetch another block
