@@ -290,12 +290,10 @@ bitfire_loadcomp_
 	}
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;nneds to be set in any case, also plain decomp enters here
-			ldx #$01
--
 			jsr .lz_get_byte
-			sta <.lz_dst, x
-			dex
-			bpl -
+			sta <.lz_dst + 1
+			jsr .lz_get_byte
+			sta <.lz_dst + 0
 
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
@@ -310,7 +308,7 @@ bitfire_loadcomp_
 
 	!if CONFIG_NMI_GAPS = 1 {
 			;!ifdef .lz_gap2 {
-				!warn .lz_gap2 - *, " bytes left until gap2"
+			;	!warn .lz_gap2 - *, " bytes left until gap2"
 			;}
 !align 255,2
 .lz_gap2

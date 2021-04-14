@@ -10,19 +10,22 @@ else
 VR:=@
 endif
 
-all: zx0 d64write loader
+all: zx0 d64write loader macros
 
 zx0: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/
+	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 bitnax: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C packer/bitnax/
+	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 d64write: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C d64write/
+	@$(MAKE) $(MAKE_OPTS) -C $@
 
 loader: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C loader/
+	@$(MAKE) $(MAKE_OPTS) -C $@
+
+macros: FORCE
+	@$(MAKE) $(MAKE_OPTS) -C $@
 
 benchmark-lz: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ benchmark-lz
@@ -39,6 +42,7 @@ clean:
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
+	@$(MAKE) $(MAKE_OPTS) -C macros/ clean
 #	@$(MAKE) $(MAKE_OPTS) -C link/ clean
 
 FORCE:
