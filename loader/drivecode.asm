@@ -1238,27 +1238,36 @@ ___			= $7a
 
 			ldx <.dir_entry_num
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
-			tay					;remmeber lowest index
+			tay
 			beq +					;zero, so still not loaded
+			dey
+			beq +
+			dey
+
+			lda .dir_load_addr + 0,x
+			sec
+			adc <.first_block_size
+			tya
 								;first block will never reach this code, as barrier will be zero as long as first block is barrier
 			;on first occasion we have load-address + $0100 here, we subtract 2 and have load-address - $0100
-			clc
+			;clc
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
-			tay
-			dey					;subtract one, as we need to be at least $100 bytes ahead, and we need to subtract another $0100 as we need to get over an equal comparision
-
-
-			;example:
-			;$b561 is load adress, so $b500 is index + load-addr
-			;$b561 is initial lz_src on c64 side, incremented by $0100, so c64 is $61 + $0100 ahead, minimum lz_src position is $b600 or more
-			;first block loaded is partly filled
-
-
-			;sbc #$01
-;			bcs +					;can maybe ommitted if we only subtract 1, index is at least 1
-;			lda #$00
 +
-			sty <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
+			sta <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
+
+;			$b561					= $20 bytes		index 1					barrier = 0
+;			$b581					= $100 bytes		index 2					barrier = b6
+;			$b681					= $100 bytes		index 3					barrier = b7
+;			$b781					= $100 bytes		index 4					barrier = b8
+;			$b881					= $100 bytes
+;			$b981					= $100 bytes
+
+;			$b561					= $c0 bytes		index 1					barrier = 0
+;			$b621					= $100 bytes		index 2					barrier = b6
+;			$b721					= $100 bytes		index 3					barrier = b7
+;			$b821					= $100 bytes		index 4					barrier = b8
+;			$b921					= $100 bytes
+;			$ba21					= $100 bytes
 }
 
 			;depacker advances in $100 steps from load-adress on, so we need at least load $0100 bytes, means first block + additional block. We then can free barrier for load-addr highbyte?

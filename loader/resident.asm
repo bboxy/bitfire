@@ -187,7 +187,7 @@ bitfire_loadraw_
 							;$04 would be a nop zp
 			php				;preserve flag
 
-	!if CONFIG_DECOMP = 1 {			;decompressor only needs to be setup if there
+	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
 			jsr .ld_get_byte		;fetch barrier
 			sta .barrier
 	}
@@ -278,7 +278,7 @@ link_load_next_comp
 link_load_comp
 		}
 bitfire_loadcomp_
-			jsr bitfire_send_byte_		;returns now with x = $ff
+			jsr bitfire_send_byte_		;returns now with x = $3f
 			;lda #(.lz_poll - .lz_skip_poll) - 2
 			lda #$20
 			ldx #$08
@@ -297,10 +297,9 @@ bitfire_loadcomp_
 
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
-							;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
 			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 
-			lda #$40
+			lda #$40			;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
 			sta <.lz_bits
 			bne .lz_start_over		;start with a literal
 

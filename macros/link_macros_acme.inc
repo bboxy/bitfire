@@ -123,7 +123,7 @@
 
 		!macro bus_unlock .arg {
 			;XXX TODO ATTENTION /!\ better don't touch ever again
-			;this looks ugly, sorry for this, but it is yet the only way it works on THCM's sx64, the trailing stx $dd00/sta $dd00 is needed :-(
+			;this looks ugly, sorry for this, but it is yet the only way it works on THCM's sx64, the trailing stx $dd00/sta $dd00 is needed, either it is hardware vodoo or timing taht is fixed by it :-(
 			ldx #(.arg & 3)
 			stx $dd00
 			lda $dd00
