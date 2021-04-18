@@ -39,6 +39,7 @@
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
 .BOGUS_READS		= 0;2
+.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd
 .DELAY_SPIN_DOWN	= 1
 .SANCHECK_BVS_LOOP	= 1
 .SANCHECK_FULL_SYNC	= 1
@@ -465,15 +466,21 @@ ___			= $7a
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #18
-			ldx #$98;8c
+!if .SHRYDAR_STEPPING = 1 {
+			ldx #$8c
 			top
 -
 			ldx #$98
+} else {
+-
+}
 			;sec					;set by send_block and also set if beq
 			isc <.to_track
 			beq -					;skip dirtrack however
 
+!if .SHRYDAR_STEPPING = 1 {
 			stx .stepping_speed + 1
+}
 
 			;XXX TODO make this check easier? only done hre?
 			lda <.end_of_file			;EOF
@@ -853,9 +860,10 @@ ___			= $7a
 			;----------------------------------------------------------------------------------------------------
 
 .set_bitrate
+!if .SHRYDAR_STEPPING = 1 {
 			ldx #$98
 			stx .stepping_speed + 1
-
+}
 			tay
 !if .SANCHECK_TRACK = 1 {
 			ldx #$0f
