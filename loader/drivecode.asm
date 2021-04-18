@@ -202,7 +202,7 @@
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
-.send_end		= .zp_start + $7a
+;.send_end		= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
 
 .DT			= 18					;dir_track
@@ -400,23 +400,25 @@ ___			= $7a
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
-.pre_send
-			ldx #$0a				;masking value for later sax $1800
 .preloop
-			lda <.preamble_data,y
-			;adds 3 cycles to send, but preamble is bytewise fetched via jsr calls on resident side, so no timing issues
-			bcc .preamble_entry
-.start_send
+			lda <.preamble_data,y			;16 bit :-(
+			ldx #$0f				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
+			sbx #$00
+			and #$f0
+			eor .ser2bin,x				;swap bits 3 and 0
+			ldx #$0a				;masking value for later sax $1800
+			bne .preamble_entry
+.start_send							;entered with c = 0
+			lda #.preloop - .branch - 2		;setup branch to point to preloop first
+			ldy #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
 .send_sector_data
-			sty .branch + 1
-			ldy #$00				;clear counter
-			;inx					;Y = 0 / $b (also fine for sax, as well as $a)
-			bcc .pre_send				;start with preamble first
-			lda <.send_end				;setup for data loop
-			sta .pre_len + 1
+			sta .branch + 1				;do not save code here (could do so by bcc .pre_send and reuse sty/sta, but timing get's very tight then when shifting over from preamble to data
+			bcc .preloop				;first entry? -> start with preamble
+			ldy <.preamble_data + 0
+			dey
 .sendloop							;send the data block
 ;.send_start = * + 1
-			pla					;just pull form stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
+			pla					;just pull from stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
 .preamble_entry
 			bit $1800
 			bmi *-3
@@ -433,17 +435,17 @@ ___			= $7a
 			sta $1800
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d.d
-.pre_len		cpy #$ff
-			iny
+			dey
+			cpy #$ff
 			bit $1800
 			bpl *-3
 			sta $1800
 .branch			bcc .sendloop
 			;XXX carry is set here, always, might be useful somewhen
 .sendloop_end
-			ldy #.sendloop - .branch - 2		;do we need to send data as well, or all done?
-			cpy .branch + 1
-			bne .send_sector_data			;not yet done, send data, y = fitting value for branch
+			lda #.sendloop - .branch - 2		;do we need to send data as well, or all done?
+			cmp .branch + 1
+			bne .send_sector_data			;not yet done, send data, y = fitting value for branch, c = 1, always
 			lda #.BUSY
 			bit $1800
 			bmi *-3
@@ -1195,7 +1197,7 @@ ___			= $7a
 			dex					;a bit anoying, but SP is SP--/++SP on push/pull
 			txs					;set up position in stack, from where we transfer data
 			;sta .send_start
-			sty <.send_end
+			;sty <.send_end
 
 			;full block:
 			;send_start = 0					-> $ff ^ $ff
@@ -1220,7 +1222,7 @@ ___			= $7a
 			;----------------------------------------------------------------------------------------------------
 .preamble							;y = blocksize
 			iny					;set up num of bytes to be transferred
-			sty <.preamble_data + 3 + CONFIG_DECOMP
+			sty <.preamble_data + 0
 
 !if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
 			lda <.index				;max index to match against
@@ -1242,37 +1244,31 @@ ___			= $7a
 			beq +					;zero, so still not loaded
 			dey
 			beq +
-			dey
+			dey					;decrement first, will be incremeanted again on c =  1 later on
 
 			lda .dir_load_addr + 0,x
-			sec
+			sec					;filesize/first_block_size is stored with -1, add here again
 			adc <.first_block_size
+;			bcs +
+;			dey
+;+
 			tya
-								;first block will never reach this code, as barrier will be zero as long as first block is barrier
-			;on first occasion we have load-address + $0100 here, we subtract 2 and have load-address - $0100
+			;sbc #$00
 			;clc
+
+
+;			      first block ends in new page
+;			                    |-barrier
+;			      000000|1111111 2222222|3333333
+;depackpos/barrier	| $1000 | $1100 | $1200 | $1300 |
+;                       000000|1111111 2222222|3333333
+;			              |-barrier
+;			first block ends in same page
+
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
 +
-			sta <.preamble_data + 1			;barrier, zero until set for first time, maybe rearrange and put to end?
-
-;			$b561					= $20 bytes		index 1					barrier = 0
-;			$b581					= $100 bytes		index 2					barrier = b6
-;			$b681					= $100 bytes		index 3					barrier = b7
-;			$b781					= $100 bytes		index 4					barrier = b8
-;			$b881					= $100 bytes
-;			$b981					= $100 bytes
-
-;			$b561					= $c0 bytes		index 1					barrier = 0
-;			$b621					= $100 bytes		index 2					barrier = b6
-;			$b721					= $100 bytes		index 3					barrier = b7
-;			$b821					= $100 bytes		index 4					barrier = b8
-;			$b921					= $100 bytes
-;			$ba21					= $100 bytes
+			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
-
-			;depacker advances in $100 steps from load-adress on, so we need at least load $0100 bytes, means first block + additional block. We then can free barrier for load-addr highbyte?
-
-
 			lda .dir_load_addr + 0,x		;fetch load address lowbyte
 			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
 
@@ -1281,7 +1277,7 @@ ___			= $7a
 			ldy #$80
 			adc <.first_block_size			;else add first block size as offset, might change carry
 +
-			sta <.preamble_data + 2 + CONFIG_DECOMP	;block address low
+			sta <.preamble_data + 1			;block address low
 
 			lda .dir_load_addr + 1,x		;add load address highbyte
 			sbc #$00				;subtract one in case of overflow
@@ -1289,7 +1285,9 @@ ___			= $7a
 			adc <.block_num				;add block num
 
 			;clc					;should never overrun, or we would wrap @ $ffff?
-			jmp .scramble_preamble
+			sty <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
+			sta <.preamble_data + 2			;block address high
+			jmp .start_send
 
 .debug_decode_sector
 			;for debug, decode sector and turn it upside down for easy hexdiff
@@ -1369,54 +1367,60 @@ ___			= $7a
 			!byte $07 xor .EOR_VAL
 			!byte $0f xor .EOR_VAL
 
-;                        !byte $50, $91, $92, $93, $0d, $95, $96, $97, $40, $99, $9a, $9b, $05, $9d, $9e, $9f
-;                        !byte $a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $80, $0e, $0f, $07, $00, $0a, $0b, $03
-;                        !byte $10, $b1, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08, $bf
-;                        !byte $c0, $c1, $c2, $c3, $c4, $c5, $c6, $c7, $e0, $1e, $1f, $17, $06, $1a, $1b, $13
-;                        !byte $d0, $d1, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, $df
-;                        !byte $e0, $e1, $e2, $e3, $e4, $e5, $e6, $e7, $a0, $0e, $0f, $07, $02, $0a, $0b, $03
-;                        !byte $90, $f1, $0d, $05, $08, $00, $09, $01, $f8, $06, $0c, $04, $fc, $02, $08, $ff
+                        !byte $50, $91, $92, $93, $0d, $95, $96, $97, $40, $99, $9a, $9b, $05, $9d, $9e, $9f
+                        !byte $a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $80, $0e, $0f, $07, $00, $0a, $0b, $03
+                        !byte $10, $b1, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08, $bf
+                        !byte $c0, $c1, $c2, $c3, $c4, $c5, $c6, $c7, $e0, $1e, $1f, $17, $06, $1a, $1b, $13
+                        !byte $d0, $d1, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, $df
+                        !byte $e0, $e1, $e2, $e3, $e4, $e5, $e6, $e7, $a0, $0e, $0f, $07, $02, $0a, $0b, $03
+                        !byte $90, $f1, $0d, $05, $08, $00, $09, $01, $f8, $06, $0c, $04, $fc, $02, $08, $ff
 
-			!byte $50
-.scramble_preamble
-			sty <.preamble_data + 0			;ack/status to set load addr, signal block ready
-			dop
-			!byte $0d
-			sta <.preamble_data + 1 + CONFIG_DECOMP	;block address high
-			dop
-			!byte $40
-			ldx #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
-			dop
-			!byte $05
-			stx .pre_len + 1			;set preamble size
-
-			;XXX TODO could skip store if it would be loaded again just in the next step, but values are stored just the otehr way round yet :-(
--
-			lda <.preamble_data,x			;smaller this way, as lda $zp,x can be used now
-			and #$0f
-			tay
-			bcc +
-			nop
-
-                        !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
-                        !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
-+
-			eor .ser2bin,y
-			eor <.preamble_data,x
-			sta <.preamble_data,x
-			bcc +
-
-                        !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
-                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
-+
-			dex
-			bpl -
-			ldy #.preloop - .branch - 2		;setup branch to point to preloop first
-			jmp .start_send
-			nop
-
-                        !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
-                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
+;			!byte $50
+;.scramble_preamble
+;			sty <.preamble_data + 0			;ack/status to set load addr, signal block ready
+;			dop
+;			!byte $0d
+;			sta <.preamble_data + 1 + CONFIG_DECOMP	;block address high
+;			dop
+;			!byte $40
+;			ldx #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
+;			dop
+;			!byte $05
+;			stx .pre_len + 1			;set preamble size
+;			ldy #.preloop - .branch - 2		;setup branch to point to preloop first
+;			jmp .start_send
+;			nop
+;			nop
+;			nop
+;
+;                        !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
+;                        !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
+;
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;
+;                        !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
+;                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
+;
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;			nop
+;
+;                        !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
+;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
 
 ;                        !byte $50, ___, ___, ___, $0d, ___, ___, ___, $40, ___, ___, ___, $05, ___, ___, ___		;20 bytes with 3 dops
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, $0e, $0f, $07, $00, $0a, $0b, $03

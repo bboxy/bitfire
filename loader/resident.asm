@@ -312,7 +312,7 @@ bitfire_loadcomp_
 !align 255,2
 .lz_gap2
 !if .lz_gap2 - .lz_gap1 > $0100 {
-		!error "code on first page too big, second gap does not fit! "
+		!error "code on first page too big, second gap does not fit!"
 }
 			nop
 			nop
@@ -349,6 +349,7 @@ bitfire_loadcomp_
 +
 			rts
 
+							;XXX TODO should be enabled/disabled, depending if inplace depacking or not?
 .lz_check_poll
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
 !if .CHECK_EVEN = 1 {
@@ -562,16 +563,6 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
-
-;		lda #$1f
-;		bit <.lz_bits	-> if bew, refill bits, else double asl
-;		bmi +
-;		bvc <.literal_big_len
-;		bvs <.literal_len_1
-;+
-;		bvc <.match_big_len
-;		bvs <.match_len_1
-
 
 ;do a jmp ($00xx) to determine branch?
 ;

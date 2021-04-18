@@ -28,8 +28,8 @@
 
 CHECKSUM = 0
 REQDISC = 1
-BUSLOCK = 1
-WAIT_SPIN_DOWN = 1
+BUSLOCK = 0
+WAIT_SPIN_DOWN = 0
 
 TIME_RAW = 0
 TIME_LOADCOMP = 1
@@ -414,7 +414,7 @@ clear
 --
 		ldy #$00
 -
-		tya
+		lda #$ff
 cln
 		sta $1000,y
 		dey
