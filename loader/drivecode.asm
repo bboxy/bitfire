@@ -414,10 +414,9 @@ ___			= $7a
 .send_sector_data
 			sta .branch + 1				;do not save code here (could do so by bcc .pre_send and reuse sty/sta, but timing get's very tight then when shifting over from preamble to data
 			bcc .preloop				;first entry? -> start with preamble
-			ldy <.preamble_data + 0
+			ldy <.preamble_data + 0			;blocksize + 1, could store that val in an extra ZP-addr, waste 1 byte compared to this solution and save 2 cycles on the dey
 			dey
 .sendloop							;send the data block
-;.send_start = * + 1
 			pla					;just pull from stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
 .preamble_entry
 			bit $1800
@@ -436,7 +435,7 @@ ___			= $7a
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d.d
 			dey
-			cpy #$ff
+			cpy #$ff				;XXX TODO could make loop faster here, by looping alread here on bne? needs a bit of code duplication then
 			bit $1800
 			bpl *-3
 			sta $1800
@@ -1222,7 +1221,7 @@ ___			= $7a
 			;----------------------------------------------------------------------------------------------------
 .preamble							;y = blocksize
 			iny					;set up num of bytes to be transferred
-			sty <.preamble_data + 0
+			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
 
 !if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
 			lda <.index				;max index to match against
@@ -1253,7 +1252,7 @@ ___			= $7a
 ;			dey
 ;+
 			tya
-			;sbc #$00
+			;sbc #$01				;same as the dey, beq +, dey above, but this could underflow if we load to $00xx!
 			;clc
 
 
