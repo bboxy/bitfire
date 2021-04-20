@@ -25,30 +25,12 @@
 			jmp link_decomp
 		}
 
-		;load next file and decompress on the fly, then load next file raw, disable IO and decompress it, then enable IO again -> a full file that was split into two parts is loaded, with a portion going under IO
-		!macro link_load_next_double_jmp .arg {
-			lda #>(.arg-1)
-			pha
-			lda #<(.arg-1)
-			pha
-			jmp link_load_next_double
-		}
-
-		;load file raw and decomp
-		!macro link_load_next_raw_decomp_jmp .arg {
-			lda #>(.arg-1)
-			pha
-			lda #<(.arg-1)
-			pha
-			jmp link_load_next_raw_decomp
-		}
-
-		!macro link_decomp_under_io_jmp .arg {
-			lda #>(.arg-1)
-			pha
-			lda #<(.arg-1)
-			pha
-			jmp link_decomp_under_io
+		!macro link_load_next_double {
+			jsr link_load_next_comp
+			jsr link_load_next_raw
+			dec $01
+			jsr link_decomp
+			inc $01
 		}
 
 		;link irq hook back to base irq
