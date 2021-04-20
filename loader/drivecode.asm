@@ -203,7 +203,7 @@
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
-;.send_end		= .zp_start + $7a
+;.free			= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
 
 .DT			= 18					;dir_track
@@ -402,13 +402,13 @@ ___			= $7a
 			;
 			;----------------------------------------------------------------------------------------------------
 .preloop
-			lda <.preamble_data,y			;16 bit :-(
+			lax <.preamble_data,y			;ilda would be 16 bit, lax works with 8 bit \o/
 			ldx #$0f				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
 			sbx #$00
 			and #$f0
 			eor .ser2bin,x				;swap bits 3 and 0
 			ldx #$0a				;masking value for later sax $1800
-			bne .preamble_entry
+			bne .preamble_entry			;could work with dop here, but want to prefer data_entry with less cycles on shift over
 .start_send							;entered with c = 0
 			lda #.preloop - .branch - 2		;setup branch to point to preloop first
 			ldy #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not

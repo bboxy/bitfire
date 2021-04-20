@@ -117,21 +117,23 @@ link_music_addr = * + 1
 			;and advances the frame counter if needed
 
 			;those calls could be a macro, but they are handy to be jumped to so loading happens while having all mem free, and code is entered afterwards
-	!if CONFIG_DECOMP = 1 {
-;			;expect $01 to be $35
-		!if CONFIG_LOADER = 1 {
-link_load_next_double
-			;loads a splitted file, first part up to $d000 second part under IO
-			jsr link_load_next_comp
-link_load_next_raw_decomp
-			jsr link_load_next_raw
-		}
-link_decomp_under_io
-			dec $01				;bank out IO
-			jsr link_decomp			;depack
-			inc $01				;bank in again
-			rts
-	}
+;	!if CONFIG_DECOMP = 1 {
+;;			;expect $01 to be $35
+;		!if CONFIG_LOADER = 1 {
+;
+;			;XXX TODO not used much, throw out
+;link_load_next_double
+;			;loads a splitted file, first part up to $d000 second part under IO
+;			jsr link_load_next_comp
+;link_load_next_raw_decomp
+;			jsr link_load_next_raw
+;		}
+;link_decomp_under_io
+;			dec $01				;bank out IO
+;			jsr link_decomp			;depack
+;			inc $01				;bank in again
+;			rts
+;	}
 }
 
 !if CONFIG_LOADER = 1 {
@@ -349,6 +351,7 @@ bitfire_loadcomp_
 +
 			rts
 
+;			lda $beef,x einbauen		;XXX TODO
 							;XXX TODO should be enabled/disabled, depending if inplace depacking or not?
 .lz_check_poll
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
@@ -391,7 +394,7 @@ bitfire_loadcomp_
 			tya				;carry is still set on first round
 			adc <.lz_dst + 0
 			sta <.lz_dst + 0		;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on? but this could be called mutliple times for several pages? :-(
-			bcc +
+			bcc +				;XXX TODO branch out and reenter
 			inc <.lz_dst + 1
 +
 			tya
@@ -429,12 +432,13 @@ bitfire_loadcomp_
 			;beq .lz_calc_msrc		;just fall through on zero. $ff + sec -> addition is neutralized and carry is set, so no harm, no need to waste 2 cycles and bytes for a check that barely happens
 			tay
 			eor #$ff			;restore A
+			;XXX TODO match len = 2 entry, try to do a cheap version here?
 .lz_match_len2						;entry from new_offset handling
 			adc <.lz_dst + 0
 			sta <.lz_dst + 0
 			tax				;remember for later end check, cheaper this way
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
-			dec <.lz_dst + 1
+			dec <.lz_dst + 1		;subtract one more in this case
 .lz_clc_back
 .lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1) in fact we could use sbx here, but would not respect carry, but a and x are same, but need x later anyway for other purpose
 			sta .lz_msrcr + 0
@@ -443,6 +447,7 @@ bitfire_loadcomp_
 			sta .lz_msrcr + 1
 			;				;XXX TODO would have dst + 0 and + 1 in X and A here, of any use?
 .lz_cp_match
+			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
 			lda $beef,y
 			sta (.lz_dst),y
@@ -566,3 +571,13 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
 ;do a jmp ($00xx) to determine branch?
 ;
+
+
+
+;XXX TODO
+;if a match is between literals and has same costs, ommit, aggregate actions with same costs?
+;-> match must have better costs, not same? but can also have worse costs to achieve better results later on?
+;zsuammenfassen von literal bus literal if danach kein repeat
+
+
+;check cost of match (elias cost + offset cost) if same as length * 8 then replacable, same for rep match
