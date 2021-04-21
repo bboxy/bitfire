@@ -10,7 +10,7 @@ else
 VR:=@
 endif
 
-all: zx0 d64write loader macros
+all: zx0 bitnax d64write loader macros
 
 zx0: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C packer/$@
