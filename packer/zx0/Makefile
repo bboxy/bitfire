@@ -30,7 +30,7 @@ sfx.h: sfx.asm
 	$(VR)echo 'static const char decruncher[] = {' >> $@
 	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/\n/g' -e 's/.\{50\}/&\n/g' | sed 's/^/&    /g' >> $@
 	$(VR)echo '};' >> $@
-	$(VR)rm $(basename $@).lst sfx
+	#$(VR)rm $(basename $@).lst sfx
 
 clean:
 	$(VR)-rm zx0 dzx0 sfx.h
