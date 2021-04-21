@@ -2,6 +2,7 @@
 
 .lz_sector      	= ($10000 - (.bitnax_packed_size)) & $ff00
 
+.decruncher 		= $0020
 .bitnax_decrunch_offset	= .bitnax_decruncher_start - .bitnax_code_start - $20
 BITNAX_SIZE_HI		= .bitnax_size_hi - .bitnax_code_start + 2
 BITNAX_SIZE_LO 		= .bitnax_size_lo - .bitnax_code_start + 2
@@ -13,11 +14,13 @@ BITNAX_SECTOR_PTR_3	= .bitnax_sector_ptr_3 + .bitnax_decrunch_offset + 2 + 2
 .bitnax_decruncher_size	= .bitnax_decruncher_end - .bitnax_decruncher_start
 .bitnax_packed_size	= .data_end - .data_start
 
-.decruncher 		= $0020
 		* = $0801
 .bitnax_code_start
-		!byte $1c,$08,$00,$00,$9e,$32,$30,$37,$38,$3a,$22,$14,$14,$14,$14
-		!byte $14,$14,$14,$14,$14,$42,$49,$54,$4e,$41,$58,$00,$00,$00
+                !byte $0b,$08
+                !word 1602
+                !byte $9e
+                !text "2061"
+                !byte $00,$00,$00
 
 		sei
 		inc $01

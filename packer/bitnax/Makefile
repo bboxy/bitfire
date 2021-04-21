@@ -1,5 +1,5 @@
 ACME ?= acme
-ACMEOPT ?= -f cbm
+ACME_OPTS ?= -f cbm
 bitnax_CFLAGS = $(CFLAGS) -Ofast -Wall
 CC ?= cc
 
