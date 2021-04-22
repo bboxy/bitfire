@@ -26,9 +26,9 @@
 !convtab scr
 !cpu 6510
 
-CHECKSUM = 0
+CHECKSUM = 1
 REQDISC = 1
-BUSLOCK = 0
+BUSLOCK = 1
 WAIT_SPIN_DOWN = 0
 
 TIME_RAW = 0
@@ -99,7 +99,7 @@ display
 		ldx #num_files
 -
 		txa
-		ora #$80
+		;ora #$80
 		dex
 		sta screen + $28,x
 		bpl -
@@ -221,7 +221,7 @@ numb		lda #$00		;file number
 		nop
 		nop
 		nop
-		inc $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
+		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
 		nop
 		nop
 		nop
@@ -336,34 +336,32 @@ checksum
 		lax numb+1
 		asl
 		tay
-		lda #$0f
+		lda #$07
 		sta $d828,x
-		lda loads,y
-		sta src
+		ldx loads,y
 		lda loads+1,y
-		sta src+1
+		sta srch
 
-		lda sizes,y
+		txa
 		clc
-		adc src
+		adc sizes,y
 		sta endl
 		lda sizes+1,y
-		adc src+1
+		adc srch
 		sta endh
 
 		lda #$00
 -
-src = * + 1
-		eor $beef
-		inc src
+srch = * + 2
+		eor $1000,x
+		inx
 		bne +
-		inc src+1
+		inc srch
 +
-		ldx src
 endl = * + 1
 		cpx #$00
 		bne -
-		ldy src+1
+		ldy srch
 endh = * + 1
 		cpy #$00
 		bne -
@@ -371,15 +369,18 @@ endh = * + 1
 		cmp chksums,x
 		bne no
 
-		lda src
-		cmp $06
-		;bne end_w
-		lda src+1
-		cmp $07
-		;bne end_w
+;		lda src
+;		cmp $06
+;		;bne end_w
+;		lda src+1
+;		cmp $07
+;		;bne end_w
 
 		lda #$05
 		sta $d828+00*40,x
+		lda screen + 40,x
+		eor #$80
+		sta screen + 40,x
 
 !if WAIT_SPIN_DOWN = 1 {
 		jsr clear
@@ -395,14 +396,16 @@ endh = * + 1
 no
 		lda #$02
 		sta $d828+00*40,x
+		lda screen + 40,x
+		eor #$80
+		sta screen + 40,x
+
 		jmp reset_drv
 end_w
 		lda #$07
 		sta $d828+00*40,x
 reset_drv
-		lda #$ff
-		jsr bitfire_loadraw_
-		;jsr bitfire_reset_drive_
+		+reset_drive
 		jmp *
 req_disc
 		+request_disk 0
@@ -413,8 +416,8 @@ clear
 		sta cln+2
 --
 		ldy #$00
--
 		lda #$ff
+-
 cln
 		sta $1000,y
 		dey
@@ -422,7 +425,7 @@ cln
 		inc cln+2
 		lda cln+2
 		cmp #$d0
-		bne --
+		bne -
 		rts
 
 print_count

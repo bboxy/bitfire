@@ -8,10 +8,13 @@ ACME_OPTS = -f cbm
 ZX0 = ../packer/zx0/zx0
 ZX0_OPTS = -f
 
+ZX0PLAY = ../packer/zx0/zx0
+ZX0PLAY_OPTS = -f
+
 all: benchmark
 
 benchmark-lz:
-	rm files/*.lz; for i in files/*; do $(ZX0) $(ZX0_OPTS) -o $$i.lz $$i; done
+	rm files/*.lz; for i in files/*; do $(ZX0PLAY) $(ZX0PLAY_OPTS) -o $$i.lz $$i; done
 
 benchmark: checksum.asm Makefile ../loader/installer
 	-rm side*.d64

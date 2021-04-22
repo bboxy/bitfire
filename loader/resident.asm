@@ -263,7 +263,7 @@ bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
 }
 
 ;---------------------------------------------------------------------------------
-;REFILL ROUTINES
+;DEPACKER STUFF
 ;---------------------------------------------------------------------------------
 
 !if CONFIG_DECOMP = 1 {
@@ -361,7 +361,7 @@ bitfire_loadcomp_
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
 !if .CHECK_EVEN = 1 {
-			beq .lz_next_page_		;finish loading or just run into .lz_poll -> start_over
+			beq .lz_next_page_		;finish loading or just run into .lz_poll -> start_over	XXX TODO need to disable barrier check for it to finish
 } else {
 			bcs .lz_next_page_
 }
@@ -425,8 +425,8 @@ bitfire_loadcomp_
 			;------------------
 .lz_repeat
 			jsr .lz_length
-			sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
-			sec				;need sec here if we want to forgo in the beq .lz_calc_msrc
+			sbc #$01
+			sec				;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			;beq .lz_calc_msrc		;just fall through on zero. $ff + sec -> addition is neutralized and carry is set, so no harm, no need to waste 2 cycles and bytes for a check that barely happens
@@ -483,13 +483,13 @@ bitfire_loadcomp_
 .lz_match
 			asl <.lz_bits
 			bcc -
-+
+
 			bne +
 			jsr .lz_refill_bits
 +
-			sbc #$01
-
+			sbc #$01			;XXX TODO can be omitted if just endposition is checked, but 0 does not exist as value?
 			bcc .lz_eof			;underflow. must have been 0
+
 			lsr
 			sta .lz_offset_hi + 1		;hibyte of offset
 

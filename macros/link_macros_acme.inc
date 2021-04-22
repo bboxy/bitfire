@@ -46,7 +46,7 @@
 		}
 
 		!macro reset_drive {
-			lda #BITFIRE_RESET_DRIVE
+			lda #BITFIRE_RESET
 			jsr bitfire_send_byte_
 		}
 
@@ -106,19 +106,27 @@
 		!macro bus_unlock .arg {
 			;XXX TODO ATTENTION /!\ better don't touch ever again
 			;this looks ugly, sorry for this, but it is yet the only way it works on THCM's sx64, the trailing stx $dd00/sta $dd00 is needed, either it is hardware vodoo or timing taht is fixed by it :-(
-			ldx #(.arg & 3)
+			ldx #(.arg & 3) + $c0
 			stx $dd00
-			lda $dd00
+			;pha
+			;pla
+			;lda $dd00
 			lda #$1f			;release ATN
 			sta $dd02
-			stx $dd00
-			lda $dd00
+			;stx $dd00
+			pha
+			pla
+			pha
+			pla
+			;lda $dd00
 			lda #$3f			;release DATA
 			sta $dd02
-			stx $dd00
-			lda $dd00
+			;stx $dd00
+			;pha
+			;pla
+			;lda $dd00
 			;give some time for things to settle, no idea how much time is needed, leaving this out makes sx64 also fail
-			ldx #$07
+			ldx #$10
 .l
 			dex
 			bne .l

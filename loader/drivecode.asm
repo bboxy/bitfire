@@ -401,6 +401,10 @@ ___			= $7a
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
+.start_send							;entered with c = 0
+			lda #.preloop - .branch - 2		;setup branch to point to preloop first
+			ldy #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
+			sta .branch + 1
 .preloop
 			lax <.preamble_data,y			;ilda would be 16 bit, lax works with 8 bit \o/
 			ldx #$0f				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
@@ -409,12 +413,8 @@ ___			= $7a
 			eor .ser2bin,x				;swap bits 3 and 0
 			ldx #$0a				;masking value for later sax $1800
 			bne .preamble_entry			;could work with dop here, but want to prefer data_entry with less cycles on shift over
-.start_send							;entered with c = 0
-			lda #.preloop - .branch - 2		;setup branch to point to preloop first
-			ldy #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
 .send_sector_data
 			sta .branch + 1				;do not save code here (could do so by bcc .pre_send and reuse sty/sta, but timing get's very tight then when shifting over from preamble to data
-			bcc .preloop				;first entry? -> start with preamble
 			ldy <.preamble_data + 0			;blocksize + 1, could store that val in an extra ZP-addr, waste 1 byte compared to this solution and save 2 cycles on the dey
 			dey
 .sendloop							;send the data block
@@ -430,12 +430,12 @@ ___			= $7a
 			sta $1800
 			ror					;7654X213 x
 			asr #%11110000				;.7654... x	-> ddd54d.d
+			dey
 			bit $1800
 			bmi *-3
 			sta $1800
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d.d
-			dey
 			cpy #$ff				;XXX TODO could make loop faster here, by looping alread here on bne? needs a bit of code duplication then
 			bit $1800
 			bpl *-3
@@ -585,24 +585,24 @@ ___			= $7a
 .lock
 			lda .spinval + 1
 			sta $1c00				;spin down finally
-
-			lda #$80				;expect a whole new byte and start with a free bus
-
+-
 			ldx $1800				;wait for buslock to end
 			bmi *-3
 
+			lda #$80				;expect a whole new byte and start with a free bus
+
 			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
-			bne *-3
+			bne -
 } else {
 .lock
 			lda #$80				;expect a whole new byte and start with a free bus
 			sta $1800				;clear lines
-
+-
 			ldx $1800				;XXX TODO maybe can be omitted
 			bmi *-3
 
 			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
-			bne *-3
+			bne -
 }
 			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
 .wait_bit1
@@ -1248,34 +1248,44 @@ ___			= $7a
 			ldx <.dir_entry_num
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
 			tay
-			beq +					;zero, so still not loaded
+			beq .barr_zero				;zero, so still not loaded
 			dey
-			beq +
-			dey					;decrement first, will be incremeanted again on c =  1 later on
 
-			lda .dir_load_addr + 0,x
-			sec					;filesize/first_block_size is stored with -1, add here again
-			adc <.first_block_size
-;			bcs +
+;			lda .dir_load_addr + 0,x
+;			sec					;filesize/first_block_size is stored with -1, add here again
+;			adc <.first_block_size
+;			;bcs +
 ;			dey
 ;+
 			tya
-			;sbc #$01				;same as the dey, beq +, dey above, but this could underflow if we load to $00xx!
-			;clc
-
-
-;			      first block ends in new page
-;			                    |-barrier
-;			      000000|1111111 2222222|3333333
-;depackpos/barrier	| $1000 | $1100 | $1200 | $1300 |
-;                       000000|1111111 2222222|3333333
-;			              |-barrier
-;			first block ends in same page
+			clc
 
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
-+
+.barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
+
+			;loadaddr	blocksize	data till		;lz-readpos okay
+			;65c0		c0		-> 6680			addr not yet set
+			;6680		100		-> 6780			65c0-66c0
+			;6780		100		-> 6880			66c0-67c0
+			;6880		100		-> 6980			67c0-68c0
+
+
+			;loadaddr	blocksize	data till		;lz-readpos okay
+			;6510		20		-> 6530			addr not yet set
+			;6530		100		-> 6630			6510-6610
+			;6630		100		-> 6730			6610-6710
+			;6730		100		-> 6830			6710-6810
+
+;			      first block ends in new page
+;			                  |-barrier
+;			       000|1111111 2222222|3333333
+;depackpos/barrier	| $1000 | $1100 | $1200 | $1300 |
+;                        000|1111111 2222222|3333333
+;			            |-barrier
+;			first block ends in same page
+
 			lda .dir_load_addr + 0,x		;fetch load address lowbyte
 			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
 
