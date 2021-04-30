@@ -85,9 +85,10 @@
 		ora link_chip_types
 		sta link_chip_types
 
-		lda #$37
-		sta $01
-
 		lda #$7f
 		sta $dd0d
 		lda $dd0d
+
+		lda #$37
+		sta $01
+

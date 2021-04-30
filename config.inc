@@ -1,10 +1,12 @@
+!ifndef CONFIG_LOADED {
+
 ;options for resident part
-CONFIG_RESIDENT_ADDR		= $0200
-CONFIG_ZP_ADDR			= $f0		;maximum 9 bytes needed
-CONFIG_LAX_ADDR			= $00		;Usually save to have the value $37 here, but can be also set elsewhere, but must stay persistent during loading
+CONFIG_RESIDENT_ADDR		= $f000
+CONFIG_ZP_ADDR			= $03		;maximum 7 bytes needed
+CONFIG_LAX_ADDR			= $02		;Usually save to have the value $37 here, but can be also set elsewhere, but must stay persistent during loading
 
 ;options for installer
-CONFIG_INSTALLER_ADDR		= $1000
+CONFIG_INSTALLER_ADDR		= $c000
 CONFIG_RESIDENT_AUTOINST	= 1		;Set this to zero if you want to do the install of the resident part on your own, but why would you want to do so anyway? :-D
 
 ;Framework options, certain features can be switched on/off separatedly
@@ -25,3 +27,7 @@ CONFIG_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resid
 
 ;options for drivecode
 CONFIG_MOTOR_ALWAYS_ON		= 0		;If you want to be annoying, let the motor spin during the whole demo :-D
+
+CONFIG_LOADED			= 1
+
+}

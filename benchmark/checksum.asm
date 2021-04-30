@@ -41,20 +41,21 @@ TIME_STRICT = 0
 num_files	= $12
 
 runs		= $10
-max		= $12
-min		= $14
 cnt		= $16
 dst		= $18
+dst_		= $1a
+prnt		= $1c
+prnt_		= $1e
 
 screen		= $2000
 
 !src "../loader/loader_acme.inc"
 !src "../macros/link_macros_acme.inc"
 
-		* = $1000
+		* = $c000
 !bin "../loader/installer",,2
-		* = $0800
-		lda $ba
+
+		* = $cf00
 		lda #$0b
 !if TIME_STRICT == 1 {
 		sta $d011
@@ -74,106 +75,20 @@ screen		= $2000
 		sta screen + $0300,x
 		dex
 		bne -
-		lda #$00
-		sta runs
-		sta runs+1
-
-		lda #$20
-		sta dst
-		lda #>screen
-		sta dst+1
-
-		jmp benchmark
-
-display
-		ldx #$00
-		lda #$0f
--
-		sta $d800,x
-		sta $d900,x
-		sta $da00,x
-		sta $db00,x
-		dex
-		bne -
-
-		ldx #num_files
--
-		txa
-		;ora #$80
-		dex
-		sta screen + $28,x
-		bpl -
-
-		ldx #$0e
--
-		lda text1,x
-		sta screen + $50,x
-		lda text2,x
-		sta screen + $78,x
-		lda text3,x
-		sta screen + $a0,x
-		lda text4,x
-		sta screen + $f0,x
-		dex
-		bpl -
-
-		ldx #21
--
-		lda text7,x
-		sta screen + $118,x
-		dex
-		bpl -
-
-
-		lda #$01
-		sta $d850
-		lda #$05
-		sta $d878
-		lda #$02
-		sta $d8a0
-		rts
-reset
-		lda #$00
-		sta min
-		sta min+1
-		sta cnt
-		sta cnt+1
-		lda #$00
-		sta numb+1
-		lda #$ff
-		sta max
-		sta max+1
-		rts
-
-
-text1
-		!byte $a0
-		!text " loading      "
-text2
-		!byte $a0
-		!text " checksum ok  "
-text3
-		!byte $a0
-		!text " checksum fail"
-text4
-		!text "runs: $0000    "
-text5
-		!text "max: $0000     "
-text6
-		!text "min: $0000     "
-text7
-		!text "caps-lock for checksum"
-
-benchmark
-		jsr reset
-		jsr display
 
 		jsr bitfire_install_
 
 		sei
+		ldx #$ff
+		txs
 
 		lda #$35
 		sta $01
+
+		lda #<nmi
+		sta $fffa
+		lda #>nmi
+		sta $fffb
 
 		lda #$7f
 		sta $dc0d
@@ -193,13 +108,125 @@ benchmark
 !if TIME_STRICT == 0 {
 		cli
 }
+		jmp benchmark
+
+		* = $e000
+
+display
+		lda #<screen
+		sta prnt + 0
+		lda #>screen
+		sta prnt + 1
+
+		ldx #$01
+		ldy #$00
+-
+		txa
+		sta (prnt),y
+		lda prnt + 1
+		pha
+		and #$03
+		ora #$d8
+		sta prnt + 1
+		lda #$0f
+		sta (prnt),y
+		pla
+		sta prnt + 1
+
+		lda prnt + 0
+		clc
+		adc #$28
+		sta prnt + 0
+		bcc +
+		inc prnt + 1
++
+		inx
+		cpx #num_files + 1
+		bne -
+
+		ldx #$0a
+-
+		lda text4,x
+		sta screen + 23 * 40,x
+		lda #$0f
+		sta $d800 + 23 * 40,x
+		dex
+		bpl -
+
+		ldx #21
+-
+		lda text7,x
+		sta screen + 24 * 40,x
+		lda #$0f
+		sta $d800 + 24 * 40,x
+		dex
+		bpl -
+		rts
+reset
+		lda #$00
+		sta cnt
+		sta cnt+1
+		sta numb+1
+		tax
+-
+		sta $1000,x
+		sta $1100,x
+		sta $1200,x
+		dex
+		bne -
+		rts
+
+nmi
+		inc $d020
+		rti
+
+text4
+		!text "runs: $0000"
+text7
+		!text "caps-lock for checksum"
+
+benchmark
+		ldx #$00
+--
+		lda #$aa
+-
+		sta $0003,x
+.prime		sta $0100,x
+		inx
+		bne -
+		inc .prime + 2
+		lda .prime + 2
+		cmp #$28
+		bne --
+
+		lda #$00
+		sta runs
+		sta runs+1
+
+		lda #$20
+		sta dst + 0
+		lda #>screen
+		sta dst + 1
+
+		lda #<($d800)
+		sta prnt_ + 0
+		lda #<($d800 + $20)
+		sta dst_ + 0
+		lda #>($d800)
+		sta prnt_ + 1
+		sta dst_ + 1
+
+		jsr display
+		jsr reset
 
 next
+;		lda #$e0
+;		sta link_blk + 2
 numb		lda #$00		;file number
-		lax numb+1
+		tax
 		pha
 		lda #$01
-		sta $d828,x
+		jsr setcol
 
 !if BUSLOCK == 1 {
 		+bus_lock		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
@@ -234,14 +261,6 @@ numb		lda #$00		;file number
 		nop
 		dey
 		bne -
-;		ldy #$00
-;-
-;		nop
-;		nop
-;		nop
-;		inc $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
-;		dey
-;		bne -
 
 		nop
 		nop
@@ -281,15 +300,16 @@ numb		lda #$00		;file number
 		sta $dc00
 		lda $dc01
 		cmp #$7f
-		bne *+5
+		bne +
 }
 		jsr checksum
-
++
 		inc numb+1
 		lda numb+1
 		cmp #num_files
-		beq *+5
+		beq +
 		jmp next
++
 
 		jsr display
 		jsr print_count
@@ -300,15 +320,18 @@ numb		lda #$00		;file number
 }
 
 !if REQDISC == 1 {
-.side		lda #$f0
-		jsr req_disc
+		+request_disk 0
 }
 		jmp next
 
 irq
-		pha
+		;pha
 		dec $d020
 		dec $d019
+		bit $dc0d
+		bpl +
+		inc $d021
++
 ;.bnk		lda #$00
 ;		sta $dd00
 ;		clc
@@ -327,27 +350,28 @@ irq
 ;		cmp $d012
 ;		bne *-3
 		inc cnt
-		bne *+4
+		bne +
 		inc cnt+1
++
 		inc $d020
-		pla
+		;pla
 		rti
 checksum
-		lax numb+1
+		lda numb+1
+		tax
 		asl
 		tay
 		lda #$07
-		sta $d828,x
-		ldx loads,y
-		lda loads+1,y
-		sta srch
+		jsr setcol
 
-		txa
+		lda loads,y
+		tax
 		clc
 		adc sizes,y
 		sta endl
-		lda sizes+1,y
-		adc srch
+		lda loads+1,y
+		sta srch
+		adc sizes+1,y
 		sta endh
 
 		lda #$00
@@ -369,18 +393,8 @@ endh = * + 1
 		cmp chksums,x
 		bne no
 
-;		lda src
-;		cmp $06
-;		;bne end_w
-;		lda src+1
-;		cmp $07
-;		;bne end_w
-
 		lda #$05
-		sta $d828+00*40,x
-		lda screen + 40,x
-		eor #$80
-		sta screen + 40,x
+		jsr setcol
 
 !if WAIT_SPIN_DOWN = 1 {
 		jsr clear
@@ -395,22 +409,112 @@ endh = * + 1
 
 no
 		lda #$02
-		sta $d828+00*40,x
-		lda screen + 40,x
-		eor #$80
-		sta screen + 40,x
-
-		jmp reset_drv
-end_w
-		lda #$07
-		sta $d828+00*40,x
+		jsr setcol
 reset_drv
 		+reset_drive
 		jmp *
-req_disc
-		+request_disk 0
+
+setcol
+		pha
+		sty .y + 1
+		stx .x + 1
+
+		lda #$00
+		ldy #$d8
+-
+		dex
+		bmi .out
+		clc
+		adc #$28
+		bcc +
+		iny
++
+		bne -
+.out
+		sta prnt
+		sty prnt + 1
+
+		pla
+		ldy #$00
+		sta (prnt),y
+
+		cmp #$05
+		beq rev
+		cmp #$02
+		bne +
+rev
+		lda prnt + 1
+		and #$03
+		ora #>screen
+		sta prnt + 1
+		lda (prnt),y
+		eor #$80
+		sta (prnt),y
+
+		ldy #$05
+		lda #$24
+		sta (prnt),y
+		iny
+		lda numb + 1
+		asl
+		asl
+		tax
+		lda $0f01,x
+		jsr print_
+		lda numb + 1
+		asl
+		asl
+		tax
+		lda $0f02,x
+		jsr print_
+		lda numb + 1
+		asl
+		asl
+		tax
+		lda $0f03,x
+		jsr print_
+
+		lda prnt + 1
+		and #$03
+		ora #$d8
+		sta prnt + 1
+
+		ldy #$05
+-
+		lda #$0f
+		sta (prnt_),y
+		lda #$01
+		sta (prnt),y
+		iny
+		cpy #$0c
+		bne -
+
+		lda prnt + 0
+		sta prnt_ + 0
+		lda prnt + 1
+		sta prnt_ + 1
++
+.x		ldx #$00
+.y		ldy #$00
 		rts
 
+print_
+		pha
+		lsr
+		lsr
+		lsr
+		lsr
+		tax
+		lda hex,x
+		sta (prnt),y
+		iny
+		pla
+		and #$0f
+		tax
+		lda hex,x
+		sta (prnt),y
+		iny
+		rts
 clear
 		lda #$28
 		sta cln+2
@@ -423,8 +527,8 @@ cln
 		dey
 		bne -
 		inc cln+2
-		lda cln+2
-		cmp #$d0
+		ldx cln+2
+		cpx #$d0
 		bne -
 		rts
 
@@ -469,43 +573,52 @@ print_count
 		sta dst+1
 
 		ldy #$04
-		lda #$01
 -
+		lda #$0f
+		sta (dst_),y
+		lda #$01
 		sta (dst),y
 		dey
 		bpl -
 
-		lda dst+1
+		lda dst + 0
+		sta dst_ + 0
+		lda dst + 1
+		sta dst_ + 1
+
+		lda dst + 1
 		and #$03
 		ora #>screen
-		sta dst+1
+		sta dst + 1
 
-		lda dst
-		clc
-		adc #$28
-		sta dst
-		bcc *+4
-		inc dst+1
-
-		lda dst+1
-		cmp #>(screen + $0400)
+		lda dst + 0
+		cmp #$e0
 		bne +
 		lda #>screen
-		sta dst+1
+		sta dst + 1
 		lda #$20
-		sta dst
+		sta dst + 0
+		rts
++
+		clc
+		adc #$28
+		sta dst + 0
+		bcc +
+		inc dst + 1
 +
 		rts
-hex_runs
-		inc runs
-		bne *+4
-		inc runs+1
 
-		lax runs+1
+hex_runs
+		inc runs+1
+		bne +
+		inc runs
++
+		lda runs
+		tax
 		and #$0f
 		tay
 		lda hex,y
-		sta screen + $f8
+		sta screen + 23 * 40 + $8
 		txa
 		lsr
 		lsr
@@ -513,12 +626,13 @@ hex_runs
 		lsr
 		tay
 		lda hex,y
-		sta screen + $f7
-		lax runs
+		sta screen + 23 * 40 + $7
+		lda runs+1
+		tax
 		and #$0f
 		tay
 		lda hex,y
-		sta screen + $fa
+		sta screen + 23 * 40 + $a
 		txa
 		lsr
 		lsr
@@ -526,41 +640,41 @@ hex_runs
 		lsr
 		tay
 		lda hex,y
-		sta screen + $f9
+		sta screen + 23 * 40 + $9
 .barerts
 		rts
 
 .start_timer
                 lda #$00
-                sta $dc0e
+                sta $dd0e
                 lda #$40
-                sta $dc0f
+                sta $dd0f
                 lda #$ff
-                sta $dc04
-                sta $dc05
-                sta $dc06
-                sta $dc07
-                lda #$41
-                sta $dc0f
+                sta $dd04
+                sta $dd05
+                sta $dd06
+                sta $dd07
                 lda #$01
-                sta $dc0e
+                sta $dd0e
+                lda #$41
+                sta $dd0f
                 rts
 .stop_timer
                 lda #$00
-                sta $dc0e
+                sta $dd0e
                 lda #$40
-                sta $dc0f
+                sta $dd0f
 
-                lda $dc04
+                lda $dd04
                 eor #$ff
                 sta $0f03,x
-                lda $dc05
+                lda $dd05
                 eor #$ff
                 sta $0f02,x
-                lda $dc06
+                lda $dd06
                 eor #$ff
                 sta $0f01,x
-                lda $dc07
+                lda $dd07
                 eor #$ff
                 sta $0f00,x
                 rts
@@ -589,12 +703,12 @@ sizes
 !word $666b-$3d20
 !word $a800-$95d4
 } else {
-!word $c179-$a000
-!word $bf80-$2800
-!word $bd00-$7400
-!word $4900-$2f80
-!word $6600-$2800
-!word $4396-$2800
+!word $c179-$a000	;a
+!word $bf80-$2800	;b
+!word $bd00-$7400	;c
+!word $4900-$2f80	;d
+!word $6600-$2800	;e
+!word $4396-$2800	;f
 !word $62d5-$5c00
 !word $2d00-$2800
 !word $4500-$2900
@@ -721,3 +835,8 @@ loads
 !word $4800
 }
 
+
+
+
+;XXX TODO copy away loadercode and benchmark code to compare
+;log barrier and block-adresses

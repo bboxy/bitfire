@@ -68,7 +68,11 @@
 		!macro request_disk .arg {
 			lda #.arg + $f0
 			jsr bitfire_send_byte_
-			+wait_floppy_busy
+			pha
+			pla
+			pha
+			pla
+			;+wait_floppy_busy
 			;lda #$3f
 			;sta $dd02
 			+wait_floppy_idle
@@ -98,38 +102,33 @@
 		}
 
 		!macro bus_lock {
-			;XXX TODO ATTENTION /!\ better don't touch ever again
-			lda #$17			;set ATN
+			lda #$17			;set ATN and DATA to make ATN responder still behave well
 			sta $dd02
 		}
 
 		!macro bus_unlock .arg {
-			;XXX TODO ATTENTION /!\ better don't touch ever again
-			;this looks ugly, sorry for this, but it is yet the only way it works on THCM's sx64, the trailing stx $dd00/sta $dd00 is needed, either it is hardware vodoo or timing taht is fixed by it :-(
 			ldx #(.arg & 3) + $c0
 			stx $dd00
-			;pha
-			;pla
-			;lda $dd00
+
 			lda #$1f			;release ATN
 			sta $dd02
-			;stx $dd00
-			pha
+			stx $dd00
+			pha				;give ATN responder time to catch up
 			pla
 			pha
 			pla
-			;lda $dd00
+			pha
+			pla
+
 			lda #$3f			;release DATA
 			sta $dd02
-			;stx $dd00
-			;pha
-			;pla
-			;lda $dd00
-			;give some time for things to settle, no idea how much time is needed, leaving this out makes sx64 also fail
-			ldx #$10
-.l
-			dex
-			bne .l
+			stx $dd00
+			pha				;give ATN responder time to catch up
+			pla
+			pha
+			pla
+			pha
+			pla
 		}
 
 		!macro set_depack_pointers .arg {

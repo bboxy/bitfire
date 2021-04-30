@@ -38,7 +38,7 @@
 ;config params
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
-.BOGUS_READS		= 0;2
+;.BOGUS_READS		= 0;2
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd
 .DELAY_SPIN_DOWN	= 1
 .SANCHECK_BVS_LOOP	= 1
@@ -351,9 +351,7 @@ ___			= $7a
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .read_sector_back
 .read_header_back	;XXX TODO coyp back to ZP
-			pla					;header_0f_3
-			;cmp #.HEADER_0F
-			;bne +
+			txs					;saves 2 cycles copared to pla
 			pla					;header_0f_2
 !if .SANCHECK_HEADER_0F = 1 {
 			cmp #.HEADER_0F
@@ -386,7 +384,7 @@ ___			= $7a
 			;----------------------------------------------------------------------------------------------------
 
 .gcr_00
-			lda ($00,x)				;8
+			lda ($00,x)				;8, x = 3 -> lda ($03) = lda $f0a0
 			nop					;XXX TODO add a nop here for thcms floppy?
 .gcr_20
 			lda ($00,x)				;8
@@ -430,12 +428,12 @@ ___			= $7a
 			sta $1800
 			ror					;7654X213 x
 			asr #%11110000				;.7654... x	-> ddd54d.d
-			dey
 			bit $1800
 			bmi *-3
 			sta $1800
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d.d
+			dey
 			cpy #$ff				;XXX TODO could make loop faster here, by looping alread here on bne? needs a bit of code duplication then
 			bit $1800
 			bpl *-3
@@ -528,7 +526,7 @@ ___			= $7a
 .idle
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
 			lda $1c00				;turn off LED
-!if .DELAY_SPIN_DOWN = 0 {
+!if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
 			and #.MOTOR_OFF & .LED_OFF
 } else {
 			and #.LED_OFF
@@ -553,62 +551,56 @@ ___			= $7a
 			sta $1800				;clear lines
 
 			ldx $1800
-			bne *-3					;wait for lines to be clear
+			bne *-3
 -
 			cpx $1800				;check for a new filename-bit on bus
-			bne +
+			bne .wait_bit1				;go to wait bit to waste some more cycles, atn responder might take some time
 
 			bit $1c09				;7 cycles
 			bpl -
 
 			;XXX ommit
-			cpx $1800				;check for a new filename-bit on bus
-			bne +
+			;cpx $1800				;check for a new filename-bit on bus
+			;bne .wait_bit1
 
 			sta $1c09				;reset timer 7 cycles
 
-			;XXX ommit
 			cpx $1800				;check for a new filename-bit on bus
-			bne +
+			bne .wait_bit1
 
 			dec <.timer				;count down rounds
 			bne -					;8 cycles
 
 			cpx $1800				;check for a new filename-bit on bus
-			bne +
+			bne .wait_bit1
 .spinval
 			lda #$00
 			sta $1c00
 			lda #$80
 			bne .wait_bit1
-
 .lock
-			lda .spinval + 1
-			sta $1c00				;spin down finally
--
-			ldx $1800				;wait for buslock to end
-			bmi *-3
+;			lda .spinval + 1			;XXX TODO comment out
+;			sta $1c00				;spin down finally
 
 			lda #$80				;expect a whole new byte and start with a free bus
+			ldx $1800				;wait for buslock to end
+			bmi *-3
+			ldx $1800
+			bne *-3
 
-			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
-			bne -
 } else {
 .lock
 			lda #$80				;expect a whole new byte and start with a free bus
 			sta $1800				;clear lines
--
-			ldx $1800				;XXX TODO maybe can be omitted
+			ldx $1800				;wait for buslock to end
 			bmi *-3
-
-			ldx $1800				;sanity check, do only enter loop if $1800 = 0 and $dd02 = $3f, can happen on turndisk, $dd02 is $1f afterwards? (last bit is set in filename)
-			bne -
+			ldx $1800				;wait for buslock to end
+			bne *-3
 }
 			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
 .wait_bit1
 			cpx $1800
 			beq .wait_bit1
-+
 			ldx $1800
 			bmi .lock
 			cpx #$04
@@ -634,16 +626,16 @@ ___			= $7a
 +
 			cmp #BITFIRE_REQ_DISC			;sets carry if so, used later on on bcs
 			lda #.MOTOR_ON
-!if CONFIG_MOTOR_ALWAYS_ON = 0 {
-!if .BOGUS_READS > 0 {
-			ldx #.BOGUS_READS
-			stx <.bogus_reads
-}
-}
-			ora $1c00				;turn on motor (no matter if already on)
+;!if CONFIG_MOTOR_ALWAYS_ON = 0 {
+;!if .BOGUS_READS > 0 {
+;			ldx #.BOGUS_READS
+;			stx <.bogus_reads
+;}
+;}
 			bcs +					;no LED during turn disc
 			ora #.LED_ON
 +
+			ora $1c00				;turn on motor (no matter if already on)
 			sta $1c00
 
 			bcc +
@@ -656,7 +648,8 @@ ___			= $7a
 .turn_disc
 			ldy #.DIR_SECT				;first dir sector
 !if .SANCHECK_HEADER_ID = 1 {
-			inc .en_set_id				;disable id-check, as new disc side can mean, new id
+			lda #$90
+			sta .en_set_id				;disable id-check, as new disc side can mean, new id
 }
 .load_dir_sect
 			tya
@@ -754,12 +747,12 @@ ___			= $7a
 			ora .dir_file_size + 1,x		;enough to check for zero filesize?
 			bne +
 			;file not found
-			;lda $1c00
-			;and #.MOTOR_OFF
-			;ora #.LED_ON
-			;sta $1c00
-			;jam
-			jmp .idle
+			lda $1c00
+			and #.MOTOR_OFF
+			ora #.LED_ON
+			sta $1c00
+			jam
+			;jmp .idle
 +
 			lda <.blocks + 0
 			;calc first block size
@@ -1005,65 +998,26 @@ ___			= $7a
 .read_gcr_header						;read_header and do checksum, if not okay, do again
 			ldx #$07				;bytes to fetch
 			ldy #$52				;type (header)
-.read_gcr
-			txa					;A is either $ff or $07
-			asl					;$fe or $0e
-			and #$4c				;$0c/$4c -> top or jmp
-			sta <.gcr_end				;setup return jump
-			eor #$2c
-			sta .header_t2 + 1			;$20 or $60 depending if header or sector, just the right values we need there
-			txs
-!if .SANCHECK_FULL_SYNC = 1 {
-			ldx #$00
-			top
-.still_sync
-			ldx #$01
-.wait_sync
-			bit $1c00				;wait for end of sync
-			bmi .still_sync
-			txa
-			beq .wait_sync				;no loop run taken, so fell through check
-} else {
-			bit $1c00				;wait for end of sync
-			bmi *-3
-}
-			lda $1c01				;sync mark -> $ff
-			clv
-			bvc *
-			clv
-			cpy $1c01				;11111222
-			bne .read_sector			;start over with a new header again, do not wait for a sectorheadertype to arrive
-			bvc *
-			lda $1c01				;22333334
-			ldx #$3e
-			sax <.threes + 1
-			asr #$c1				;lookup? -> 4 cycles
-.header_t2		eor #$c0
-			bne .read_sector			;start over with a new header again, do not wait for a sectorheadertype to arrive
-			nop
-			pha
-			pla
-			pha
-			pla
-			lda #.EOR_VAL
-			jmp .gcr_entry				;36 cycles until entry
+			lda #$0c
+			jmp .read_gcr
 .read_header_back_
 			bne .read_sector			;header checksum check failed? reread
 
 			pla					;header_id1
 !if .SANCHECK_HEADER_ID = 1 {
-			tax
-
-.en_set_id		bcs .no_set_id				;will be enabled/disabled by increment/decrement, ends up as bcs or lda (xx),y, carry is always set due to preceeding cmp
-			dec .en_set_id				;re-enable id-check
+!warn *
+.en_set_id		bcs .no_set_id				;will be changed to bcc/bcs to allow/skip id check, carry is always set due to preceeding cmp
 			sty <.current_id2
-			stx <.current_id1			;fall through is no problem, tests will succeed
-			;bcs +
+			sta <.current_id1			;fall through is no problem, tests will succeed
+			lda #$b0
+			sta .en_set_id
+			bne +
 .no_set_id
 			cpy <.current_id2
 			bne .read_sector
-			cpx <.current_id1
+			cmp <.current_id1
 			bne .read_sector
++
 }
 			pla					;.header_track
 !if .SANCHECK_TRACK = 1 {
@@ -1083,15 +1037,15 @@ ___			= $7a
 }
 			stx <.is_loaded_sector
 								;96 cycles
-!if CONFIG_MOTOR_ALWAYS_ON = 0 {
-!if .BOGUS_READS > 0 {
-			lda <.bogus_reads
-			beq +
-			dec <.bogus_reads
-			bne .read_sector
-+
-}
-}
+;!if CONFIG_MOTOR_ALWAYS_ON = 0 {
+;!if .BOGUS_READS > 0 {
+;			lda <.bogus_reads
+;			beq +
+;			dec <.bogus_reads
+;			bne .read_sector
+;+
+;}
+;}
 			ldy <.wanted,x				;sector on list?
 !if .FORCE_LAST_BLOCK = 1 {
 			cpy <.last_block_num			;current block is last block on list?
@@ -1103,9 +1057,7 @@ ___			= $7a
 }
 .not_last
 			iny
-			bne .last				;if block index is $ff, we reread, as block is not wanted then
-.rs_retry2
-			jmp .read_sector			;will be sbc (xx),y if disabled
+			beq .rs_retry2				;if block index is $ff, we reread, as block is not wanted then
 								;max 111/112 cycles passed, so still header_gap bytes flying by and we finish in time
 .last
 			;----------------------------------------------------------------------------------------------------
@@ -1116,7 +1068,54 @@ ___			= $7a
 
 			ldx #$ff				;bytes to fetch
 			ldy #$55				;type (sector)
-			jmp .read_gcr
+			lda #$4c
+.read_gcr
+			sta <.gcr_end				;setup return jump
+			eor #$2c
+			sta .header_t2 + 1			;$20 or $60 depending if header or sector, just the right values we need there
+			txs
+!if .SANCHECK_FULL_SYNC = 1 {
+;			ldx #$00
+;			top
+;.still_sync
+;			ldx #$01
+;.wait_sync
+;			bit $1c00				;wait for end of sync
+;			bmi .still_sync
+;			txa
+;			beq .wait_sync				;no loop run taken, so fell through check
+
+			bit $1c00				;wait for end of sync
+			bpl *-3
+
+			bit $1c00				;wait for end of sync
+			bmi *-3
+} else {
+			bit $1c00				;wait for end of sync
+			bmi *-3
+}
+			lda $1c01				;sync mark -> $ff
+			clv
+			bvc *
+			clv
+			cpy $1c01				;11111222
+			bne .read_sector			;start over with a new header again, do not wait for a sectorheadertype to arrive
+			bvc *
+			lda $1c01				;22333334
+			ldx #$3e
+			sax <.threes + 1
+			asr #$c1				;lookup? -> 4 cycles
+.header_t2		eor #$c0
+			bne .read_sector			;start over with a new header again, do not wait for a sectorheadertype to arrive
+			nop
+			pla
+			pha
+			pla
+			pha
+			lda #.EOR_VAL
+			jmp .gcr_entry				;36 cycles until entry
+.rs_retry2
+			jmp .read_sector			;will be sbc (xx),y if disabled
 .read_sector_back
 			;6 cycles of 15 passed, another 9 can pass?
 			clv

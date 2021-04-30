@@ -29,7 +29,7 @@
 !src "../config.inc"
 !src "constants.inc"
 
-.CHECK_EVEN		= 1
+.CHECK_EVEN		= 0
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -47,8 +47,7 @@ bitfire_load_addr_hi	= .lz_src + 1
 .lz_bits		= CONFIG_ZP_ADDR + 1
 .lz_dst			= CONFIG_ZP_ADDR + 2
 .lz_src			= CONFIG_ZP_ADDR + 4
-.lz_offset		= CONFIG_ZP_ADDR + 6
-.lz_len_hi		= CONFIG_ZP_ADDR + 8
+.lz_len_hi		= CONFIG_ZP_ADDR + 6
 }
 
 bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only aggregate labels from this file into loader_*.inc
@@ -157,6 +156,9 @@ bitfire_send_byte_
 			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
+-
+			lda $dd00			;XXX TODO can be removed? be sure floppy is busy atfer sending of filename, but should be no problem and can be omitted safely?
+			bmi -
 			stx $dd02			;restore $dd02
 .ld_pend
 			rts
@@ -173,20 +175,15 @@ bitfire_loadraw_
 .ld_load_raw
 			jsr .ld_pblock
 			bcc -
+			rts				;XXX TODO can be omitted, maybe as we would skip blockloading on eof?
 							;just run into ld_pblock code again that will then jump to .ld_pend and rts
 .ld_pblock
 			lda $dd00			;bit 6 is always set if not ready or idle/EOF so no problem with just an ASL
 			asl				;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bmi .ld_pend			;block ready?
-.ld_poll
+.ld_pblock_
 			ldx #$60			;set rts
 			jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
-			;ror				$80 or $85? -> nop imm and sta, send $00 or $0a?
-			;sta .ld_mod_lo
-			;sta .ld_mod_hi
-			;XXX TODO enable/disable store to bitfire_load_addr_lo and bitfire_load_addr_hi in anther way? would save plp, php, pla, pha, tax, bmi
-							;sta is 85?, that is bad, as we have $04 .. $fc available, last two bits do not work :-(
-							;$04 would be a nop zp
 			php				;preserve flag
 
 	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
@@ -196,11 +193,9 @@ bitfire_loadraw_
 .bitfire_load_block
 			jsr .ld_get_byte		;fetch blockaddr hi
 			sta .bitfire_block_addr + 1	;where to place the block?
-;ld_mod_hi		sta <bitfire_load_addr_hi
 			pha				;save over A
 			jsr .ld_get_byte
 			sta .bitfire_block_addr + 0
-;ld_mod_lo		sta <bitfire_load_addr_lo
 			tax
 			pla				;lo/hi in x/a for later use
 
@@ -210,13 +205,14 @@ bitfire_loadraw_
 			sta <bitfire_load_addr_hi
 .ld_skip_stax
 			jsr .ld_get_byte		;fetch blocklen
+
 			tay
 			ldx #$99			;sta $xxxx,y
 .bitfire_ack_
 			stx .ld_store
 .ld_get_byte
 			ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
-			top
+			top				;top XXX TODO
 .ld_en_exit
 			ldx #$60
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
@@ -325,9 +321,9 @@ bitfire_loadcomp_
 			lda (.lz_src),y
 			inc <.lz_src + 0
 			bne +
-	!if CONFIG_LOADER = 1 {
 .lz_next_page
 			inc <.lz_src + 1
+	!if CONFIG_LOADER = 1 {
 .lz_next_page_
 .lz_skip_fetch
 			php
@@ -350,8 +346,6 @@ bitfire_loadcomp_
 	}
 +
 			rts
-
-;			lda $beef,x einbauen		;XXX TODO
 							;XXX TODO should be enabled/disabled, depending if inplace depacking or not?
 .lz_check_poll
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
@@ -370,7 +364,7 @@ bitfire_loadcomp_
 	!if CONFIG_LOADER = 1 {
 			bit $dd00
 			bvs .lz_start_over
-.lz_skip_poll		jsr .ld_poll			;yes, fetch another block, call is disabled for plain decomp
+.lz_skip_poll		jsr .ld_pblock_			;yes, fetch another block, call is disabled for plain decomp
 	}
 			;------------------
 			;LITERAL
@@ -414,7 +408,6 @@ bitfire_loadcomp_
 			;------------------
 			;NEW OR OLD OFFSET
 			;------------------
-
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
 			lda #$01			;same code as above, meh
 			asl <.lz_bits
@@ -431,6 +424,7 @@ bitfire_loadcomp_
 			eor #$ff
 			;beq .lz_calc_msrc		;just fall through on zero. $ff + sec -> addition is neutralized and carry is set, so no harm, no need to waste 2 cycles and bytes for a check that barely happens
 			tay
+			;XXX TODO save on eor #$ff and do sbc lz_dst + 0?
 			eor #$ff			;restore A
 			;XXX TODO match len = 2 entry, try to do a cheap version here?
 .lz_match_len2						;entry from new_offset handling
