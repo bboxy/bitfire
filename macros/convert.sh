@@ -14,7 +14,6 @@ sed 's/\(.*[[:graph:]]\)\.arg/\1\{1\}/g' | \
 #remove trailing + from macros
 sed 's/\([[:space:]]*\)+\(.*\)/\1\2/g' \
 > ./link_macros_dasm.inc
-
 ################### 64TASS ###################
 cat ./link_macros_acme.inc | \
 #comments
@@ -32,7 +31,6 @@ sed 's/\.l/l/g' | \
 #remove trailing + from macros
 sed 's/\([[:space:]]*\)+\(.*\)/\1\2/g' \
 > ./link_macros_64tass.inc
-
 ################### CA65 ###################
 cat ./link_macros_acme.inc | \
 #comments
@@ -48,7 +46,6 @@ sed 's/[[:space:]]*}/\t\t.endmacro/g' | \
 #replace arg within block
 sed 's/\.arg/arg/g' \
 > ./link_macros_ca65.inc
-
 ################### KICKASS ###################
 cat ./link_macros_acme.inc | \
 #comments
@@ -65,7 +62,6 @@ sed 's/.*\(!macro\)[[:space:]]*\(.*\)[[:space:]]*{/.macro \2() {/g' | \
 #replace arg within block
 sed 's/\.arg/arg/g' \
 > ./link_macros_kickass.inc
-
 ################### DREAMASS ###################
 cat ./link_macros_acme.inc | \
 #comments
