@@ -1,3 +1,16 @@
+		!macro link_decomp_under_io {
+			dec $01                         ;bank out IO
+			jsr link_decomp                 ;depack
+			inc $01
+		}
+
+		!macro link_load_next_raw_decomp {
+			jsr link_load_next_raw
+			dec $01                         ;bank out IO
+			jsr link_decomp                 ;depack
+			inc $01
+		}
+
 		;load next file as a raw file (do not decomp on the fly) and jump to .addr
 		!macro link_load_next_raw_jmp .arg {
 			lda #>(.arg-1)
