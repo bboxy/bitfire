@@ -27,7 +27,9 @@
 ; Much <3 goes to Krill for answering all the questions, giving very valueable hints, chats, ideas!!!
 ; Talking about bitorders for serial transfer, and sanity checks helped a lot!
 ; Also Sparkle from Sparta is a good source of inspiration <3
-; Many thanks go out to THCM, Dano and doomed for all the testing <3
+; Many thanks go out to THCM, sidspieler, dano and doomed for all the testing <3
+; Big thanks to Ikwai for more sx64 testing and helping to debug on real hardware with his logic analyzer, giving me a
+; chis-like history <3
 ;--------------------------------------------------------------------------------------------------------------------------
 
 !convtab pet
@@ -105,11 +107,13 @@
 			lda #%01111010				;DDR set bits for drivenumber to 0, ATN out, CLK out and DATA out are outputs
 			sta $1802
 
+			;ACR
+			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
+			sta $1c0b
+
+			;PCR					 111                            0        111                                  0
 			lda #%11101110				;CB2 manual output high (read), CB1 low, CA2 manual output high (byte ready), CA1 low (NC)
 			sta $1c0c
-
-			lda #%00000001				;PB disable latching, PA enable latching (content for $1c01 is then latched)
-			sta $1c0b
 
 			lda #$00				;clear lower part of counter
 			sta $1c08
@@ -174,12 +178,18 @@
 .zp_start
 
 ;.free			= .zp_start + $00
+;.free			= .zp_start + $01
+;.free			= .zp_start + $02
+;.free			= .zp_start + $03
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .spin_count		= .zp_start + $18
 .spin_up		= .zp_start + $19
 .timer			= .zp_start + $20
+;.free			= .zp_start + $21
+;.free			= .zp_start + $22
+;.free			= .zp_start + $23
 .byte			= .zp_start + $28
 .dir_entry_num		= .zp_start + $29
 .blocks 		= .zp_start + $30			;2 bytes
@@ -211,7 +221,7 @@
 .PA			= $ff					;preamble
 .BL			= 0					;blocks_on_list
 .WT			= $ff					;wanted list
-___			= $7a
+___			= $ff
 
 .tab00005555_hi		= * + $00
 .tab00333330_hi		= * + $00
@@ -258,13 +268,13 @@ ___			= $7a
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555	;after 10
-;              1                      .............   2                                      3                                   4             v      5           |-
+;              1                      .............   2                                    3                                   4             v      5           |-
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555	;after 8
-;              1                      .............   2                              3                                   4             v      5           |-
+;              1                      .............   2                            3                                   4             v      5           |-
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555	;misses after 6 cycles
-;              1                      .............   2                      3                                   4             v      5           |-
+;              1                      .............   2                    3                                   4             v      5           |-
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555		;misses bvs when delayed by 4 cycles
-;              1                      .............   2              3                                   4             v      5           |-
+;              1                      .............   2            3                                   4             v      5           |-
 ; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
@@ -292,8 +302,9 @@ ___			= $7a
 			arr #$f0
 								;sta <.fours + 1 to save tay and keep y free? if all tays are saved +0 3 cycles for 3 sta .num + 1
 			tay					;44444---		;how's about having 4444---4?
-			ldx #$03				;save another 2 cycles and use $0f, XXX TODO would mean, $0f bytes max in $00 and $40? $20? $80 would be perfect, but how to achieve?
-;15
+			;ldx #$03				;save another 2 cycles and use $0f, XXX TODO would mean, $0f bytes max in $00 and $40? $20? $80 would be perfect, but how to achieve?
+								;XXX TODO could reuse $0f and bloat table with 7th, means another table and interleaved code
+;13
 .gcr_slow1		lda $1c01				;56666677		third read	;slow down by 6,12,18
 			sax <.sevens + 1			;------77		;encode first 7 with sixes and by that shrink 6table? and add it with sevens?
 			asr #$fc				;-566666-		;can be shifted, but and would suffice?
@@ -316,7 +327,8 @@ ___			= $7a
 			tay
 			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and quintuple 8
 			ldx #$07				;delay upcoming adc as long as possible, as it clears the v flag
-.sevens			adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
+.sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
+;.sevens		adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
 ;19 -> clv?
 			pha
 ;21
@@ -350,7 +362,7 @@ ___			= $7a
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .read_sector_back
-.read_header_back	;XXX TODO coyp back to ZP
+.read_header_back
 			txs					;saves 2 cycles copared to pla
 			pla					;header_0f_2
 !if .SANCHECK_HEADER_0F = 1 {
@@ -365,7 +377,7 @@ ___			= $7a
 			pla					;header_id2
 			tay
 			eor <.chksum2 + 1
-+
+			bne -					;header checksum check failed? reread
 			jmp .read_header_back_
 
 
@@ -837,6 +849,11 @@ ___			= $7a
 			rol
 			and #3
 			eor $1c00
+			jmp .skiptab
+!align 255,5
+.tab0070dd77_hi
+                        !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
+.skiptab
 			sta $1c00
 			bit $1c09
 			bmi *-3
@@ -845,7 +862,10 @@ ___			= $7a
 			bne .step
 +
 			lda <.to_track				;already part of set_bitrate -> load track
+			jmp +
 
+                        !byte ___, ___, ___, ___, ___, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
++
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SET UP BITRATE, MODIFY GCR LOOP IN ZEROPAGE
@@ -1001,11 +1021,8 @@ ___			= $7a
 			lda #$0c
 			jmp .read_gcr
 .read_header_back_
-			bne .read_sector			;header checksum check failed? reread
-
 			pla					;header_id1
 !if .SANCHECK_HEADER_ID = 1 {
-!warn *
 .en_set_id		bcs .no_set_id				;will be changed to bcc/bcs to allow/skip id check, carry is always set due to preceeding cmp
 			sty <.current_id2
 			sta <.current_id1			;fall through is no problem, tests will succeed
@@ -1445,6 +1462,11 @@ ___			= $7a
 ;                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, ___
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
 ;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
+
+;tab0070dd77
+;                        !byte ___, ___, ___, ___, ___, $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 
 ;tab000bbbbb
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___

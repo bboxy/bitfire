@@ -190,8 +190,7 @@ benchmark
 --
 		lda #$aa
 -
-		sta $0003,x
-.prime		sta $0100,x
+.prime		sta $0400,x
 		inx
 		bne -
 		inc .prime + 2
@@ -231,41 +230,27 @@ numb		lda #$00		;file number
 !if BUSLOCK == 1 {
 		+bus_lock		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
 
-		nop
-		nop
-		nop
-		nop
-
 		ldy #$00
 -
+		sty $dd00
+		pha
+		pla
+		pha
+		pla
+		pha
+		pla
+		pha
+		pla
+		pha
+		pla
+		pha
+		pla
+		pha
+		pla
 		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		sty $dd00		;if we do a inc $dd00 here, this fails miserably on a sx-64 and will break the next send_byte o_O
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
-		nop
+		bit $ea
 		dey
 		bne -
-
-		nop
-		nop
-		nop
-		nop
 
 		+bus_unlock 3
 }
@@ -840,3 +825,6 @@ loads
 
 ;XXX TODO copy away loadercode and benchmark code to compare
 ;log barrier and block-adresses
+
+
+;load from-to, cycles, size, depacked -> print all on screen, use pointer for source and y/x offset to print at?

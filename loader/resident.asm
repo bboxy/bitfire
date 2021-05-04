@@ -157,8 +157,8 @@ bitfire_send_byte_
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 -
-			lda $dd00			;XXX TODO can be removed? be sure floppy is busy atfer sending of filename, but should be no problem and can be omitted safely?
-			bmi -
+;			lda $dd00			;XXX TODO can be removed? be sure floppy is busy after sending of filename, but should be no problem and can be omitted safely?
+;			bmi -
 			stx $dd02			;restore $dd02
 .ld_pend
 			rts
