@@ -226,7 +226,7 @@ ___			= $ff
 .tab00005555_hi		= * + $00
 .tab00333330_hi		= * + $00
 .tab05666660_lo		= * + $01
-.tab00700077_hi		= * + $00
+.tab00700077_hi		= * + $00				;XXX currently not used
 
 ;tab00AAAAA0
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
@@ -288,10 +288,11 @@ ___			= $ff
 .twos			eor .tab02200222_lo,x			;13 cycles to mask ad lookup
 			tsx
 			pha
-			beq .gcr_end				;127
+			beq .gcr_end				;125
 
-.chksum			eor #$00
-			eor $0101,x
+.chksum			eor #$00				;XXX TODO 124 cycles would be possible if we do all checksumming here, but we sacrifice one cycle for a more balanced timing.
+			eor $0101,x				;eor chksum can be moved to eor chksum2, thus reading is moved 2 cycles to front on next lda $1c01, ldx #$03 can the be used again, 127 cycles suffice and we save space?
+								;try and use nop to compensate for timing, seems like i miss something on checksum, so disable checksum first of all to see if timing works
 			eor $0102,x
 .gcr_entry
 			sta <.chksum2 + 1
@@ -302,7 +303,7 @@ ___			= $ff
 			arr #$f0
 								;sta <.fours + 1 to save tay and keep y free? if all tays are saved +0 3 cycles for 3 sta .num + 1
 			tay					;44444---		;how's about having 4444---4?
-			;ldx #$03				;save another 2 cycles and use $0f, XXX TODO would mean, $0f bytes max in $00 and $40? $20? $80 would be perfect, but how to achieve?
+			;ldx #$03				;save another 2 cycles and continue with x = $0f
 								;XXX TODO could reuse $0f and bloat table with 7th, means another table and interleaved code
 ;13
 .gcr_slow1		lda $1c01				;56666677		third read	;slow down by 6,12,18
@@ -395,6 +396,8 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
+.tab0070dd77_hi		;XXX TODO use gaps for more code
+                        !byte ___, ___, ___, ___, ___, $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 .gcr_00
 			lda ($00,x)				;8, x = 3 -> lda ($03) = lda $f0a0
 			nop					;XXX TODO add a nop here for thcms floppy?
@@ -405,6 +408,11 @@ ___			= $ff
 			nop					;2 + 3 + 3 (nop, jmp here, jmp back) = 8 cycles on top
 			lda $1c01
 			jmp .gcr_slow1 + 3
+			nop
+			nop
+			nop
+
+                        !byte ___, ___, ___, ___, ___, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -566,58 +574,69 @@ ___			= $ff
 			bne *-3
 -
 			cpx $1800				;check for a new filename-bit on bus
-			bne .wait_bit1				;go to wait bit to waste some more cycles, atn responder might take some time
+			bne .wait_bit_				;go to wait bit to waste some more cycles, atn responder might take some time
 
 			bit $1c09				;7 cycles
 			bpl -
 
 			;XXX ommit
 			;cpx $1800				;check for a new filename-bit on bus
-			;bne .wait_bit1
+			;bne .wait_bit_
 
 			sta $1c09				;reset timer 7 cycles
 
 			cpx $1800				;check for a new filename-bit on bus
-			bne .wait_bit1
+			bne .wait_bit_
 
 			dec <.timer				;count down rounds
 			bne -					;8 cycles
 
 			cpx $1800				;check for a new filename-bit on bus
-			bne .wait_bit1
+			bne .wait_bit_
 .spinval
 			lda #$00
 			sta $1c00
 			lda #$80
-			bne .wait_bit1
+			bne .wait_bit_
 .lock
 ;			lda .spinval + 1			;XXX TODO comment out
 ;			sta $1c00				;spin down finally
 
-			lda #$80				;expect a whole new byte and start with a free bus
+			lda #$18				;ack buslock
+			sta $1800
+-
 			ldx $1800				;wait for buslock to end
-			bmi *-3
-			ldx $1800
-			bne *-3
+			bmi -
 
+			lda #$80				;free bus -> acks again
+			sta $1800
+-
+			ldx $1800				;wait for silence on bus (responder might still need some time to settle and drop ATNA)
+			bne -
 } else {
 .lock
+			lda #$18				;ACK Buslock
+			sta $1800
+-
+			ldx $1800				;wait for buslock to end
+			bmi -
+
 			lda #$80				;expect a whole new byte and start with a free bus
-			sta $1800				;clear lines
+			sta $1800
+-
 			ldx $1800				;wait for buslock to end
-			bmi *-3
-			ldx $1800				;wait for buslock to end
-			bne *-3
+			bne -
 }
 			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
-.wait_bit1
+.wait_bit
 			cpx $1800
-			beq .wait_bit1
+			beq .wait_bit
+.wait_bit_
 			ldx $1800
 			bmi .lock
 			cpx #$04
 			ror
-			bcc .wait_bit1				;more bits to fetch?
+			bcc .wait_bit				;more bits to fetch?
 			sty $1800				;set busy bit
 
 			;----------------------------------------------------------------------------------------------------
@@ -849,10 +868,6 @@ ___			= $ff
 			rol
 			and #3
 			eor $1c00
-			jmp .skiptab
-!align 255,5
-.tab0070dd77_hi
-                        !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 .skiptab
 			sta $1c00
 			bit $1c09
@@ -862,10 +877,7 @@ ___			= $ff
 			bne .step
 +
 			lda <.to_track				;already part of set_bitrate -> load track
-			jmp +
 
-                        !byte ___, ___, ___, ___, ___, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
-+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SET UP BITRATE, MODIFY GCR LOOP IN ZEROPAGE
@@ -950,7 +962,9 @@ ___			= $ff
 .bitrate_1
 			lda #<.gcr_40				;06	XXX TODO 0,3,6 -> derivate from bitrate? -> asl + self?
 .bitrate_2
+			top
 .bitrate_3
+			lda #>.gcr_00
 			sty <.gcr_slow1 + 0			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
 			sta <.gcr_slow1 + 1
 			stx <.gcr_slow1 + 2
@@ -1130,7 +1144,7 @@ ___			= $ff
 			pla
 			pha
 			lda #.EOR_VAL
-			jmp .gcr_entry				;36 cycles until entry
+			jmp .gcr_entry				;32 cycles until entry
 .rs_retry2
 			jmp .read_sector			;will be sbc (xx),y if disabled
 .read_sector_back
@@ -1462,11 +1476,6 @@ ___			= $ff
 ;                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, ___
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
 ;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
-
-;tab0070dd77
-;                        !byte ___, ___, ___, ___, ___, $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 
 ;tab000bbbbb
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___

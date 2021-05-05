@@ -152,13 +152,13 @@ bitfire_send_byte_
 +
 			eor #$20
 			sta $dd02
-			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again, XXX TODO maybe still remove
+			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again, XXX TODO maybe still remove :-P
 			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 -
-;			lda $dd00			;XXX TODO can be removed? be sure floppy is busy after sending of filename, but should be no problem and can be omitted safely?
-;			bmi -
+			bit $dd00
+			bmi -
 			stx $dd02			;restore $dd02
 .ld_pend
 			rts
