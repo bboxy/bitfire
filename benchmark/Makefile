@@ -43,7 +43,11 @@ benchmark: checksum.asm Makefile ../loader/installer
 			-b files/o.lz \
 			-b files/p.lz \
 			-b files/q.lz \
-			-b files/r.lz
+			-b files/r.lz \
+			-b files/b.lz \
+			-b files/b.lz \
+			-b files/b.lz \
+			-b files/e.lz
 
 	x64 side$(TIMESTAMP).d64
 

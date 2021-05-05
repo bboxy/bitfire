@@ -274,8 +274,9 @@ ___			= $ff
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555	;misses after 6 cycles
 ;              1                      .............   2                    3                                   4             v      5           |-
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555		;misses bvs when delayed by 4 cycles
-;              1                      .............   2            3                                   4             v      5           |-
-; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough
+;              1                      .............   2            3             v                     4             v      5           |-
+; v = v-flag is cleared here
+; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough)
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
 			;XXX see if we can use bit 2 from original data, would save space in tables
@@ -964,7 +965,7 @@ ___			= $ff
 .bitrate_2
 			top
 .bitrate_3
-			lda #>.gcr_00
+			lda #<.gcr_00
 			sty <.gcr_slow1 + 0			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
 			sta <.gcr_slow1 + 1
 			stx <.gcr_slow1 + 2

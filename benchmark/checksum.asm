@@ -37,7 +37,7 @@ TIME_DECOMP = 0
 
 TIME_STRICT = 0
 
-;num_files	= $1c
+;num_files	= $16
 num_files	= $12
 
 runs		= $10
@@ -687,6 +687,10 @@ sizes
 !word $af00-$a15a
 !word $666b-$3d20
 !word $a800-$95d4
+!word $bf80-$6a67
+!word $bf80-$6a67
+!word $bf80-$6a67
+!word $6600-$3ee7
 } else {
 !word $c179-$a000	;a
 !word $bf80-$2800	;b
@@ -706,16 +710,10 @@ sizes
 !word $af00-$9000
 !word $666b-$2800
 !word $a800-$8000
-!word $c179-$a000
 !word $bf80-$2800
-!word $bd00-$7400
-!word $4900-$2f80
-!word $6600-$2800
-!word $4396-$2800
-!word $62d5-$5c00
-!word $2d00-$2800
-!word $4500-$2900
-!word $6358-$4800
+!word $bf80-$2800
+!word $bf80-$2800
+!word $6600-$2800	;e
 }
 
 chksums
@@ -738,6 +736,10 @@ chksums
 !byte $8a
 !byte $22
 !byte $ba
+!byte $a0
+!byte $a0
+!byte $a0
+!byte $bd
 } else {
 !byte $f2
 !byte $d3
@@ -757,16 +759,10 @@ chksums
 !byte $14
 !byte $34
 !byte $1f
-!byte $f2
 !byte $d3
-!byte $a6
-!byte $6f
+!byte $d3
+!byte $d3
 !byte $60
-!byte $fd
-!byte $59
-!byte $42
-!byte $bb
-!byte $f6
 }
 
 loads
@@ -789,6 +785,10 @@ loads
 !word $a15a
 !word $3d20
 !word $95d4
+!word $6a67
+!word $6a67
+!word $6a67
+!word $3ee7
 } else {
 !word $a000
 !word $2800
@@ -808,16 +808,10 @@ loads
 !word $9000
 !word $2800
 !word $8000
-!word $a000
-!word $2800
-!word $7400
-!word $2f80
 !word $2800
 !word $2800
-!word $5c00
 !word $2800
-!word $2900
-!word $4800
+!word $2800
 }
 
 

@@ -346,14 +346,14 @@ int main () {
 	for (i = 0; i < 256; i++) if (table[i] < 0) table[i] = i;
 	printf("combined\n");
 	print_table(table, 0, 255);
-	printf("11111000\n");
-	print_table(tabAAAAA000, 0, 255);
+	//printf("11111000\n");
+	//print_table(tabAAAAA000, 0, 255);
 
 	for (i = 0; i < 256; i++) table[i] = -1;
 	merge_table(table, tab0000AAAA, 0x00, 0, 0, 0);
 	merge_table(table, tab00AAAAA0, 0x00, 0, 0, 0);
 	merge_table(table, tab0Abbbbb0, 0x01, 0, 0, 0);
-	merge_table(table, tabAAA000AA, 0x00, 0, 0, 0);	//77777
+	//merge_table(table, tabAAA000AA, 0x00, 0, 0, 0);	//77777
 	printf("zeropage\n");
 	print_table(table, 0, 255);
 	return 0;
