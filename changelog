@@ -108,3 +108,4 @@ v1.0
 - amount of free blocks in d64 can be manipulated with d64write --free, play at your own risk, as it corrupts the BAM somewhat
 - fixed barrier bug
 - minor speedup
+- slow down stepping to make it work with some ALPS and Sankyo-Mechanics

@@ -151,16 +151,15 @@ bitfire_send_byte_
 			eor #$10
 +
 			eor #$20
-			sta $dd02
+			sta $dd02 - $3f,x
 			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again, XXX TODO maybe still remove :-P
 			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 -
-			bit $dd00
-			bmi -
-			stx $dd02			;restore $dd02
-.ld_pend
+;			bit $dd00			;wait for drive to become busy
+;			bmi -
+;			stx $dd02			;restore $dd02
 			rts
 
 	!if CONFIG_FRAMEWORK = 1 {
@@ -175,6 +174,7 @@ bitfire_loadraw_
 .ld_load_raw
 			jsr .ld_pblock
 			bcc -
+.ld_pend
 			rts				;XXX TODO can be omitted, maybe as we would skip blockloading on eof?
 							;just run into ld_pblock code again that will then jump to .ld_pend and rts
 .ld_pblock

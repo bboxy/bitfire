@@ -31,14 +31,14 @@ REQDISC = 1
 BUSLOCK = 1
 WAIT_SPIN_DOWN = 0
 
-TIME_RAW = 0
-TIME_LOADCOMP = 1
+TIME_RAW = 1
+TIME_LOADCOMP = 0
 TIME_DECOMP = 0
 
 TIME_STRICT = 0
 
-;num_files	= $16
-num_files	= $12
+num_files	= $16
+;num_files	= $12
 
 runs		= $10
 cnt		= $16
@@ -249,7 +249,7 @@ numb		lda #$00		;file number
 		pla
 		nop
 		bit $ea
-		dey
+		iny
 		bne -
 
 		+bus_unlock 3
@@ -396,6 +396,7 @@ no
 		lda #$02
 		jsr setcol
 reset_drv
+		jam
 		+reset_drive
 		jmp *
 
