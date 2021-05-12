@@ -108,4 +108,6 @@ v1.0
 - amount of free blocks in d64 can be manipulated with d64write --free, play at your own risk, as it corrupts the BAM somewhat
 - fixed barrier bug
 - minor speedup
-- slow down stepping to make it work with some ALPS and Sankyo-Mechanics
+- slow down stepping to make it work with some ALPS and Sankyo-mechanics
+- tested on 1541U-II, UK1541, 1541-II (Sankyo, JPN, Mitsumi), 1541 & 1541C (Mitsumi, ALPS)
+- works okay on 287-312 rpm on all speedzones

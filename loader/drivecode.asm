@@ -41,15 +41,14 @@
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
 ;.BOGUS_READS		= 0;2
-.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd
-.DELAY_SPIN_DOWN	= 1
-.SANCHECK_BVS_LOOP	= 1
-.SANCHECK_FULL_SYNC	= 1
-.SANCHECK_HEADER_0F	= 1
-.SANCHECK_HEADER_ID	= 1
+.SHRYDAR_STEPPING	= 1 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
+.DELAY_SPIN_DOWN	= 0
+.SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
+.SANCHECK_HEADER_0F	= 0
+.SANCHECK_HEADER_ID	= 0
 .SANCHECK_TRAILING_ZERO = 1
-.SANCHECK_TRACK		= 1
-.SANCHECK_SECTOR	= 1
+.SANCHECK_TRACK		= 0
+.SANCHECK_SECTOR	= 0
 .INTERLEAVE		= 4
 
 ;constants
@@ -268,13 +267,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555	;after 10
-;                1                      ............. 2                                      3                                   4             v      5           |-
+;                1                      .............   2                                    3                                   4             v      5       |--
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555	;after 8
-;                1                      ............. 2                              3                                   4             v      5           |-
+;                1                      .............   2                            3                                   4             v      5       |--
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555	;misses after 6 cycles
-;                1                      ............. 2                      3                                   4             v      5           |-
+;                1                      .............   2                    3                                   4             v      5        |--
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555		;misses bvs when delayed by 4 cycles
-;                1                      ............. 2              3             v                     4             v      5           |-
+;                1                      .............   2            3             v              v      4             v      5       |--
 ; v = v-flag is cleared here
 ; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough)
 
@@ -294,7 +293,7 @@ ___			= $ff
 ;XXX TODO enough to check for bne after $80? 4 cycles between both reads? but i miss to check for $00 first?
 ;better to fall to tge lock routine and stop motor in case? do check for timer in cpx loop and break out on positive? got to reinvent all this?
 ;for now just try normal lock without spin down with sx
-;direntry could contain: numm sectors + last sect size? then easer to find position on disk and calculate what to transfer?
+;direntry could contain: num sectors + last sect size? then easer to find position on disk and calculate what to transfer?
 
 
 .read_loop
@@ -348,7 +347,7 @@ ___			= $ff
 
 			;XXX TODO wrap here already
 
-			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and quintuple 8
+			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and whole quintuple 8
 			ldx #$07				;delay upcoming adc as long as possible, as it clears the v flag
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
 ;.sevens		adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
@@ -385,14 +384,18 @@ ___			= $ff
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .read_sector_back
 .read_header_back
+!if .SANCHECK_HEADER_0F = 0 {
+			inx
+			inx
+}
 			txs					;saves 2 cycles copared to pla
-			pla					;header_0f_2
 !if .SANCHECK_HEADER_0F = 1 {
+			pla					;header_0f_2
 			cmp #.HEADER_0F
 			bne -
 }
-			pla					;header_0f_1
 !if .SANCHECK_HEADER_0F = 1 {
+			pla					;header_0f_1
 			cmp #.HEADER_0F
 			bne -
 }
@@ -404,7 +407,7 @@ ___			= $ff
 
 
 !ifdef .second_pass {
-;	!warn $0100 - *, " bytes remaining in zeropage."
+	!warn $0100 - *, " bytes remaining in zeropage."
 }
 
 !if >*-1 != >.read_loop { !error "read_sector not in one page: ", .read_loop, " - ", * }
@@ -531,22 +534,7 @@ ___			= $ff
 			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
 			;
 			;----------------------------------------------------------------------------------------------------
-.turn_disc_back
-			lda #$0c
-			sta .en_dis_td
-			;copy over dir
-			ldy #$00
-			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
--
-			pla
-			ldx #$0f
-			sbx #$00
-			and #$f0
-			eor .ser2bin,x				;swap bits 3 and 0
-			dey
-			sta .directory,y
-			bne -
-
+.td_code_back
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			cmp #BITFIRE_REQ_DISC
 			bcs +
@@ -584,15 +572,17 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 .get_byte
 			ldy #.BUSY
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 			lda #$80				;expect a whole new byte and start with a free bus
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 			sta <.timer
+}
 ;			;sta $1c09				;this will spin down the motor after ~ 4s
 			sta $1800				;clear lines -> ready
 -
 			ldx $1800				;can be omitted?! XXX TODO
 			bne -
 
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 ;XXX TODO have two loops for spin down, with lock on, and without lock on.
 .sd_check
 			ldx $1800
@@ -616,26 +606,17 @@ ___			= $ff
 .lock
 			lda .spinval + 1
 			sta $1c00
-
--
-			ldx $1800
-			bmi -
-
--
-			ldx $1800
-			bne -
-
-			lda #$80
 } else {
 .lock
-			lda #$80
--
-			ldx $1800				;wait for buslock to end
-			bmi -
--
-			ldx $1800				;wait for buslock to end
-			bne -
 }
+			lda #$85
+-
+			bit $1800				;wait until bit 0 2 and 7 drop, bit 2 will drop last
+			bne -
+
+			ldx #$00
+			lda #$80
+
 			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
 .wait_bit
 			cpx $1800
@@ -867,8 +848,16 @@ ___			= $ff
 .seek_up
 			asl					;counter is twice the number of tracks (halftracks)
 			tax
+
+!if .SHRYDAR_STEPPING = 1 {
+.stepping_speed		lda #.STEPPING_SPEED
+			top
+.step
+			lda #.STEPPING_SPEED
+} else {
 .step
 .stepping_speed		lda #.STEPPING_SPEED
+}
 			sta $1c09
 			tya
 .halftrack
@@ -879,11 +868,12 @@ ___			= $ff
 			eor $1c00
 .skiptab
 			sta $1c00
+			dex
+			beq +
+
 			bit $1c09
 			bmi *-3
-
-			dex
-			bne .step
+			bpl .step
 +
 			lda <.to_track				;already part of set_bitrate -> load track
 
@@ -894,10 +884,10 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .set_bitrate
-!if .SHRYDAR_STEPPING = 1 {
-			ldx .STEPPING_SPEED
-			stx .stepping_speed + 1
-}
+;!if .SHRYDAR_STEPPING = 1 {
+;			ldx .STEPPING_SPEED
+;			stx .stepping_speed + 1
+;}
 			tay
 !if .SANCHECK_TRACK = 1 {
 			ldx #$0f
@@ -1110,26 +1100,12 @@ ___			= $ff
 			ldy #$55				;type (sector)
 			lda #$4c
 .read_gcr
-!if .SANCHECK_FULL_SYNC = 1 {
-;			ldx #$00
-;			top
-;.still_sync
-;			ldx #$01
-;.wait_sync
-;			bit $1c00				;wait for end of sync
-;			bmi .still_sync
-;			txa
-;			beq .wait_sync				;no loop run taken, so fell through check
-
 			bit $1c00				;wait for end of sync
 			bpl *-3
 
 			bit $1c00				;wait for end of sync
 			bmi *-3
-} else {
-			bit $1c00				;wait for end of sync
-			bmi *-3
-}
+
 			bit $1c01				;sync mark -> $ff
 			clv
 			bvc *
@@ -1420,60 +1396,51 @@ ___			= $ff
 			!byte $07 xor .EOR_VAL
 			!byte $0f xor .EOR_VAL
 
-                        !byte $50, $91, $92, $93, $0d, $95, $96, $97, $40, $99, $9a, $9b, $05, $9d, $9e, $9f
-                        !byte $a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $80, $0e, $0f, $07, $00, $0a, $0b, $03
-                        !byte $10, $b1, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08, $bf
-                        !byte $c0, $c1, $c2, $c3, $c4, $c5, $c6, $c7, $e0, $1e, $1f, $17, $06, $1a, $1b, $13
-                        !byte $d0, $d1, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, $df
-                        !byte $e0, $e1, $e2, $e3, $e4, $e5, $e6, $e7, $a0, $0e, $0f, $07, $02, $0a, $0b, $03
-                        !byte $90, $f1, $0d, $05, $08, $00, $09, $01, $f8, $06, $0c, $04, $fc, $02, $08, $ff
+;                        !byte $50, $91, $92, $93, $0d, $95, $96, $97, $40, $99, $9a, $9b, $05, $9d, $9e, $9f
+;                        !byte $a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $80, $0e, $0f, $07, $00, $0a, $0b, $03
+;                        !byte $10, $b1, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08, $bf
+;                        !byte $c0, $c1, $c2, $c3, $c4, $c5, $c6, $c7, $e0, $1e, $1f, $17, $06, $1a, $1b, $13
+;                        !byte $d0, $d1, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, $df
+;                        !byte $e0, $e1, $e2, $e3, $e4, $e5, $e6, $e7, $a0, $0e, $0f, $07, $02, $0a, $0b, $03
+;                        !byte $90, $f1, $0d, $05, $08, $00, $09, $01, $f8, $06, $0c, $04, $fc, $02, $08, $ff
 
-;			!byte $50
-;.scramble_preamble
-;			sty <.preamble_data + 0			;ack/status to set load addr, signal block ready
-;			dop
-;			!byte $0d
-;			sta <.preamble_data + 1 + CONFIG_DECOMP	;block address high
-;			dop
-;			!byte $40
-;			ldx #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
-;			dop
-;			!byte $05
-;			stx .pre_len + 1			;set preamble size
-;			ldy #.preloop - .branch - 2		;setup branch to point to preloop first
-;			jmp .start_send
-;			nop
-;			nop
-;			nop
-;
-;                        !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
-;                        !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
-;
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;
-;                        !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
-;                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
-;
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;			nop
-;
-;                        !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
-;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
+			!byte $50
+.turn_disc_back
+.td_code
+			ldy #$00
+			dop
+			!byte $0d
+			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
+			dop
+			!byte $40
+			lda #$0c
+			dop
+			!byte $05
+			sta .en_dis_td
+-
+			pla
+			ldx #$0f
+			sbx #$00
+			jmp +
+
+                        !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
+                        !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
++
+			and #$f0
+			eor .ser2bin,x				;swap bits 3 and 0
+			dey
+			jmp +
+
+                        !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
+                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
++
+			sta .directory,y
+			bne -
+			jmp .td_code_back
+			nop
+
+                        !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
+                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
 
 ;                        !byte $50, ___, ___, ___, $0d, ___, ___, ___, $40, ___, ___, ___, $05, ___, ___, ___		;20 bytes with 3 dops
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, $0e, $0f, $07, $00, $0a, $0b, $03
@@ -1571,29 +1538,4 @@ ___			= $ff
 ;XXX TODO optimize code size on stepping
 ;XXX TODO optimze eof detection?
 
-
-
-;check in loader read of $0700 after turn disc?
-;klappt laden und entpacken von eigentlichem file? ZP adessen konflikt?
-;watch exec 0100 -> step through
-;else revert changes in drivecode and check again, only happens with spin up/down?
-;does it kill 1c00 vals with double and?
 ;turn disc, make it send a single byte to ack? -> wait block ready, receive a byte and then floppy goes idle?
-
-
-;1 0010	8	eor	a		2
-;1 0011	9	eor	a		3
-;1 0101	5	eor	a		f
-;1 0110	c	eor	a		6
-;1 0111	d	eor	a		7
-;0 1001	8	eor	0		8
-;1 1001	3x	eor	a		9
-;1 1010	0	eor	a		a
-;0 1010	0	eor	0		0
-;1 1011	1	eor	a		b
-;0 1011	1	eor	0		1
-;0 1110	4	eor	0		4
-;1 1110	4	eor	a		e
-;0 1101	c	eor	0		c
-;1 1101	7x	eor	a		d
-;0 1111	5	eor	0		5

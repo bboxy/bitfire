@@ -115,7 +115,7 @@
 		}
 
 		!macro bus_lock {
-			lda #$37			;set ATN and DATA to make ATN responder still behave well
+			lda #$27			;set ATN and CLK
 			sta $dd02
 		}
 
@@ -123,7 +123,17 @@
 			ldx #(.arg & 3) + $c0
 			stx $dd00
 
-			lda #$3f			;release ATN
+			lda #$2f			;release ATN
+			sta $dd02
+
+			pha
+			pla
+			pha
+			pla
+			pha
+			pla
+
+			lda #$3f			;release CLK
 			sta $dd02
 
 			pha

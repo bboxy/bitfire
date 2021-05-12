@@ -29,7 +29,7 @@
 !src "../config.inc"
 !src "constants.inc"
 
-.CHECK_EVEN		= 0
+.CHECK_EVEN		= 1
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -157,9 +157,9 @@ bitfire_send_byte_
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 -
-;			bit $dd00			;wait for drive to become busy
-;			bmi -
-;			stx $dd02			;restore $dd02
+			bit $dd00			;wait for drive to become busy
+			bmi -
+			stx $dd02			;restore $dd02
 			rts
 
 	!if CONFIG_FRAMEWORK = 1 {
@@ -172,7 +172,7 @@ bitfire_loadraw_
 			jsr bitfire_send_byte_		;easy, open...
 -
 .ld_load_raw
-			jsr .ld_pblock
+			jsr .ld_pblock			;fetch all blocks until eof
 			bcc -
 .ld_pend
 			rts				;XXX TODO can be omitted, maybe as we would skip blockloading on eof?
@@ -266,8 +266,8 @@ bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
 bitfire_decomp_
 link_decomp
 	!if CONFIG_LOADER = 1 {
-			;lda #(.lz_start_over - .lz_skip_poll) - 2
-			lda #$2c
+			lda #(.lz_start_over - .lz_skip_poll) - 2
+			;lda #$2c
 			ldx #$60
 			bne .loadcomp_entry
 		!if CONFIG_FRAMEWORK = 1 {
@@ -277,11 +277,11 @@ link_load_comp
 		}
 bitfire_loadcomp_
 			jsr bitfire_send_byte_		;returns now with x = $3f
-			;lda #(.lz_poll - .lz_skip_poll) - 2
-			lda #$20
+			lda #(.lz_poll - .lz_skip_poll) - 2
+			;lda #$20
 			ldx #$08
 .loadcomp_entry
-			sta .lz_skip_poll
+			sta .lz_skip_poll + 1
 			stx .lz_skip_fetch
 
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with y = 0
@@ -317,54 +317,11 @@ bitfire_loadcomp_
 			nop
 	}
 
-.lz_get_byte
-			lda (.lz_src),y
-			inc <.lz_src + 0
-			bne +
-.lz_next_page
-			inc <.lz_src + 1
-	!if CONFIG_LOADER = 1 {
-.lz_next_page_
-.lz_skip_fetch
-			php
-			txa
-			pha
-.lz_fetch_sector					;entry of loop
-			jsr .ld_pblock			;fetch another block
-			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
-			lda <.lz_src + 1		;get current depack position
-			cmp <.barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
-							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
-			bcs .lz_fetch_sector		;already reached, loop
-.lz_fetch_eof						;not reached, go on depacking
-			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
-			pla
-			tax
-			plp
-	} else {
-.lz_next_page_
-	}
-+
-			rts
-							;XXX TODO should be enabled/disabled, depending if inplace depacking or not?
-.lz_check_poll
-			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
-!if .CHECK_EVEN = 1 {
-			bne .lz_poll			;we could check against src >= dst XXX TODO
-}
-			lda <.lz_dst + 1
-			sbc <.lz_src + 1
-!if .CHECK_EVEN = 1 {
-			beq .lz_next_page_		;finish loading or just run into .lz_poll -> start_over	XXX TODO need to disable barrier check for it to finish
-} else {
-			bcs .lz_next_page_
-}
-
 .lz_poll
 	!if CONFIG_LOADER = 1 {
 			bit $dd00
 			bvs .lz_start_over
-.lz_skip_poll		jsr .ld_pblock_			;yes, fetch another block, call is disabled for plain decomp
+			jsr .ld_pblock_			;yes, fetch another block, call is disabled for plain decomp
 	}
 			;------------------
 			;LITERAL
@@ -376,7 +333,7 @@ bitfire_loadcomp_
 .lz_literal
 			jsr .lz_length
 			tax
-			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it sets carry and resets Y, what is unnecessary, but happens so seldom it doesn't hurt
+			beq .lz_l_page_			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
 			lda (.lz_src),y			;looks expensive, but is cheaper than loop
 			sta (.lz_dst),y
@@ -424,9 +381,8 @@ bitfire_loadcomp_
 			eor #$ff
 			;beq .lz_calc_msrc		;just fall through on zero. $ff + sec -> addition is neutralized and carry is set, so no harm, no need to waste 2 cycles and bytes for a check that barely happens
 			tay
-			;XXX TODO save on eor #$ff and do sbc lz_dst + 0?
+							;XXX TODO save on eor #$ff and do sbc lz_dst + 0?
 			eor #$ff			;restore A
-			;XXX TODO match len = 2 entry, try to do a cheap version here?
 .lz_match_len2						;entry from new_offset handling
 			adc <.lz_dst + 0
 			sta <.lz_dst + 0
@@ -450,8 +406,21 @@ bitfire_loadcomp_
 			inc <.lz_dst + 1
 
 			lda <.lz_len_hi			;check for more loop runs
-			beq .lz_check_poll		;do more page runs? Yes? Fall through
-
+			bne .lz_m_page			;do more page runs? Yes? Fall through
+.lz_check_poll
+			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
+!if .CHECK_EVEN = 1 {
+.lz_skip_poll		bne .lz_poll			;we could check against src >= dst XXX TODO
+}
+			lda <.lz_dst + 1
+			sbc <.lz_src + 1
+!if .CHECK_EVEN = 1 {
+			bne .lz_start_over
+			beq .lz_next_page_
+} else {
+.lz_skip_poll		bcc .lz_poll
+			bcs .lz_next_page_
+}
 			;------------------
 			;SELDOM STUFF
 			;------------------
@@ -463,10 +432,11 @@ bitfire_loadcomp_
 			clc
 			bcc .lz_clc_back
 .lz_l_page
-			dec <.lz_len_hi
 			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
 			ldy #$00
-			beq .lz_cp_lit
+.lz_l_page_
+			dec <.lz_len_hi
+			bcs .lz_cp_lit
 
 			;------------------
 			;FETCH A NEW OFFSET
@@ -499,12 +469,9 @@ bitfire_loadcomp_
 			inc <.lz_src + 1
 	}
 +
-							;XXX TODO would be nice to have inverted data sent, but would mean MSB also receives inverted bits? sucks. As soon as we refill bits we fall into loop that checks overflow on LSB, should check for bcc however :-( then things would work
-							;would work on offset MSB, but need to clear lz_len_hi after that
 			lda #$01
 			ldy #$fe
 			bcs .lz_match_len2		;length = 2 ^ $ff, do it the very short way :-)
-			ldy #$00
 -
 			asl <.lz_bits			;fetch first payload bit
 							;XXX TODO we could check bit 7 before further asl?
@@ -512,6 +479,7 @@ bitfire_loadcomp_
 			asl <.lz_bits
 			bcc -
 			bne .lz_match_big
+			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big
 
@@ -531,27 +499,55 @@ bitfire_loadcomp_
 			txa
 			bcs .lz_lend
 
-							;fetch up to 8 bits first, if first byte overflows, stash away byte and fetch more bits as MSB
+
 .lz_get_loop
 			asl <.lz_bits			;fetch payload bit
+.lz_length_16_
 			rol				;can also moved to front and executed once on start
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .lz_length
 			asl <.lz_bits
 			bcc .lz_get_loop
 			beq .lz_refill_bits
+.lz_lend
 .lz_eof
 			rts
-
 .lz_length_16						;happens very rarely
 			pha				;save LSB
-			lda #$01			;start with MSB = 1
-			jsr .lz_length			;get up to 7 more bits
+			tya				;was lda #$01, but A = 0 + rol makes this also start with MSB = 1
+			jsr .lz_length_16_		;get up to 7 more bits
 			sta <.lz_len_hi			;save MSB
 			pla				;restore LSB
-.lz_lend
 			rts
 
+.lz_get_byte
+			lda (.lz_src),y
+			inc <.lz_src + 0
+			bne +
+.lz_next_page
+			inc <.lz_src + 1
+.lz_next_page_
+	!if CONFIG_LOADER = 1 {
+.lz_skip_fetch
+			php
+			txa
+			pha
+.lz_fetch_sector					;entry of loop
+			jsr .ld_pblock			;fetch another block
+			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
+			lda <.lz_src + 1		;get current depack position
+			cmp <.barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
+							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
+			bcs .lz_fetch_sector		;already reached, loop
+.lz_fetch_eof						;not reached, go on depacking
+			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
+			pla
+			tax
+			plp
+	}
++
+			rts
+							;XXX TODO should be enabled/disabled, depending if inplace depacking or not?
 }
 
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR

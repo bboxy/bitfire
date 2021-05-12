@@ -31,8 +31,8 @@ REQDISC = 1
 BUSLOCK = 1
 WAIT_SPIN_DOWN = 0
 
-TIME_RAW = 1
-TIME_LOADCOMP = 0
+TIME_RAW = 0
+TIME_LOADCOMP = 1
 TIME_DECOMP = 0
 
 TIME_STRICT = 0
@@ -187,16 +187,15 @@ text7
 
 benchmark
 		ldx #$00
---
-		lda #$aa
+
+		lda #$20
 -
-.prime		sta $0400,x
+		sta screen + $0000,x
+		sta screen + $0100,x
+		sta screen + $0200,x
+		sta screen + $0300,x
 		inx
 		bne -
-		inc .prime + 2
-		lda .prime + 2
-		cmp #$28
-		bne --
 
 		lda #$00
 		sta runs
