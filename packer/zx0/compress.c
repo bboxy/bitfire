@@ -198,7 +198,8 @@ unsigned char *compress(BLOCK *optimal, const unsigned char *input_data, int inp
         }
 
         if (inplace) {
-            overwrite = (input_index) - (input_size - *output_size + output_index);
+            /* added +1, was off by one, thanks to Krill! */
+            overwrite = (input_index) - (input_size - *output_size + output_index) + 1;
             /* we would overwrite our packed data with a match, or have a literal that directly is followed by plain literal, so they can be aggregated */
             if ((overwrite >= 0 && optimal->offset) || (overwrite == 0 && !optimal->offset)) {
                 if (optimal->offset) {
