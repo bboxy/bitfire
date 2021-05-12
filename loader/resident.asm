@@ -287,11 +287,17 @@ bitfire_loadcomp_
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with y = 0
 	}
 							;copy over end_pos and lz_dst from stream
-			ldy #$00			;nneds to be set in any case, also plain decomp enters here
-			jsr .lz_get_byte
-			sta <.lz_dst + 1
-			jsr .lz_get_byte
-			sta <.lz_dst + 0
+			ldx #$01
+			ldy #$00			;needs to be set in any case, also plain decomp enters here
+-
+			lda (.lz_src),y
+			inc <.lz_src + 0
+			bne +
+			jsr .lz_next_page
++
+			sta <.lz_dst + 0,x
+			dex
+			bpl -
 
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
@@ -300,8 +306,6 @@ bitfire_loadcomp_
 			lda #$40			;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
 			sta <.lz_bits
 			bne .lz_start_over		;start with a literal
-
-			;XXX TODO 4 bytes left here until gap
 
 	!if CONFIG_NMI_GAPS = 1 {
 			;!ifdef .lz_gap2 {
@@ -316,6 +320,20 @@ bitfire_loadcomp_
 			nop
 			nop
 	}
+
+			;------------------
+			;SELDOM STUFF
+			;------------------
+.lz_l_page
+			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
+			ldy #$00
+.lz_l_page_
+			dec <.lz_len_hi
+			bcs .lz_cp_lit
+
+			;------------------
+			;POLLING
+			;------------------
 
 .lz_poll
 	!if CONFIG_LOADER = 1 {
@@ -416,27 +434,37 @@ bitfire_loadcomp_
 			sbc <.lz_src + 1
 !if .CHECK_EVEN = 1 {
 			bne .lz_start_over
-			beq .lz_next_page_
 } else {
 .lz_skip_poll		bcc .lz_poll
-			bcs .lz_next_page_
 }
+			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
+			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+
 			;------------------
-			;SELDOM STUFF
+			;NEXT PAGE IN STREAM
 			;------------------
-.lz_m_page
-			dec <.lz_len_hi
-			inc .lz_msrcr + 1		;XXX TODO only needed if more pages follow
-			bne .lz_cp_match
-.lz_clc
-			clc
-			bcc .lz_clc_back
-.lz_l_page
-			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
-			ldy #$00
-.lz_l_page_
-			dec <.lz_len_hi
-			bcs .lz_cp_lit
+.lz_next_page
+			inc <.lz_src + 1
+.lz_next_page_
+	!if CONFIG_LOADER = 1 {
+.lz_skip_fetch
+			php
+			txa
+			pha
+.lz_fetch_sector					;entry of loop
+			jsr .ld_pblock			;fetch another block
+			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
+			lda <.lz_src + 1		;get current depack position
+			cmp <.barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
+							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
+			bcs .lz_fetch_sector		;already reached, loop
+.lz_fetch_eof						;not reached, go on depacking
+			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
+			pla
+			tax
+			plp
+	}
+			rts
 
 			;------------------
 			;FETCH A NEW OFFSET
@@ -483,6 +511,20 @@ bitfire_loadcomp_
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big
 
+			;------------------
+			;SELDOM STUFF
+			;------------------
+.lz_clc
+			clc
+			bcc .lz_clc_back
+.lz_m_page
+			dec <.lz_len_hi
+			inc .lz_msrcr + 1		;XXX TODO only needed if more pages follow
+			bne .lz_cp_match
+
+			;------------------
+			;ELIAS FETCH
+			;------------------
 .lz_refill_bits
 			tax
 			lda (.lz_src),y
@@ -519,55 +561,12 @@ bitfire_loadcomp_
 			sta <.lz_len_hi			;save MSB
 			pla				;restore LSB
 			rts
-
-.lz_get_byte
-			lda (.lz_src),y
-			inc <.lz_src + 0
-			bne +
-.lz_next_page
-			inc <.lz_src + 1
-.lz_next_page_
-	!if CONFIG_LOADER = 1 {
-.lz_skip_fetch
-			php
-			txa
-			pha
-.lz_fetch_sector					;entry of loop
-			jsr .ld_pblock			;fetch another block
-			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
-			lda <.lz_src + 1		;get current depack position
-			cmp <.barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
-							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
-			bcs .lz_fetch_sector		;already reached, loop
-.lz_fetch_eof						;not reached, go on depacking
-			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
-			pla
-			tax
-			plp
-	}
-+
-			rts
-							;XXX TODO should be enabled/disabled, depending if inplace depacking or not?
 }
 
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
 ;set end_address for inplace to real end of file if not inplaced? so nothing can go wrong? or set it to $ffff? also sane
 
-;XXX TODO do eof marker one earlier, place last match/literal after that?, then let final match happen? also okay for overlap version? would avoid other of check? can we do end_marker and bogus match? where to check that eof? after match? last thing can be either match/literal? but hows about rep? :-(
-
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
-
 ;do a jmp ($00xx) to determine branch?
-;
-
-
-
-;XXX TODO
-;if a match is between literals and has same costs, ommit, aggregate actions with same costs?
-;-> match must have better costs, not same? but can also have worse costs to achieve better results later on?
-;zsuammenfassen von literal bus literal if danach kein repeat
-
-
-;check cost of match (elias cost + offset cost) if same as length * 8 then replacable, same for rep match
