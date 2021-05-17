@@ -34,25 +34,25 @@
 
 !convtab pet
 !cpu 6510
-!src "../config.inc"
+!src "config.inc"
 !src "constants.inc"
 
 ;config params
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
-;.BOGUS_READS		= 0;2
 .SHRYDAR_STEPPING	= 1 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
-.DELAY_SPIN_DOWN	= 0
+.DELAY_SPIN_DOWN	= 1
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
-.SANCHECK_HEADER_0F	= 0
-.SANCHECK_HEADER_ID	= 0
+.SANCHECK_HEADER_0F	= 0	;
+.SANCHECK_HEADER_ID	= 0	;
 .SANCHECK_TRAILING_ZERO = 1
-.SANCHECK_TRACK		= 0
-.SANCHECK_SECTOR	= 0
+.SANCHECK_TRACK		= 0	;
+.SANCHECK_SECTOR	= 0	;
 .INTERLEAVE		= 4
 
 ;constants
 .STEPPING_SPEED		= $9a					;98 is too low for some ALPS and Sankyo-Drives
+.STEPPING_SPEED_	= $8c
 .CHECKSUM_CONST1	= $05					;%00000101 -> 4 times 01010
 .CHECKSUM_CONST2	= $29					;%00101001
 .CHECKSUM_CONST3	= $4a					;%01001010
@@ -68,7 +68,7 @@
 .MOTOR_ON		= $04
 
 ;adresses
-.reset_drive		= $eaa0
+.reset_drive		= $fffc	;eaa0
 .drivecode		= $0000
 .bootstrap		= $0700
 .tables			= $0600
@@ -185,7 +185,7 @@
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .spin_count		= .zp_start + $18
 .spin_up		= .zp_start + $19
-.timer			= .zp_start + $20
+;.free			= .zp_start + $20
 ;.free			= .zp_start + $21
 ;.free			= .zp_start + $22
 ;.free			= .zp_start + $23
@@ -421,12 +421,12 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .gcr_00
-			lda ($00),y				;8, x = 3 -> lda ($03) = lda $f0a0
-			jmp .gcr_20
+			lda ($03),y				;-> reads: $f0a0,y
+			jmp .gcr_20				;8 cycles
 .tab0070dd77_hi		;XXX TODO use gaps for more code
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 .gcr_20
-			lda ($00,x)				;8
+			lda ($00,x)				;8, x = 3 -> lda ($03) = lda $f0a0
 			nop
 .gcr_40
 			nop					;2 + 3 + 3 (nop, jmp here, jmp back) = 8 cycles on top
@@ -508,21 +508,10 @@ ___			= $ff
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #18
-!if .SHRYDAR_STEPPING = 1 {
-			ldx #$8c
-			top
 -
-			ldx #.STEPPING_SPEED
-} else {
--
-}
 			;sec					;set by send_block and also set if beq
 			isc <.to_track
 			beq -					;skip dirtrack however
-
-!if .SHRYDAR_STEPPING = 1 {
-			stx .stepping_speed + 1
-}
 
 			;XXX TODO make this check easier? only done hre?
 			lda <.end_of_file			;EOF
@@ -571,19 +560,13 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .get_byte
-			ldy #.BUSY
 			lda #$80				;expect a whole new byte and start with a free bus
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-			sta <.timer
-}
-;			;sta $1c09				;this will spin down the motor after ~ 4s
 			sta $1800				;clear lines -> ready
--
-			ldx $1800				;can be omitted?! XXX TODO
-			bne -
-
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-;XXX TODO have two loops for spin down, with lock on, and without lock on.
+			tay
+-
+			ldx $1800
+			bne -
 .sd_check
 			ldx $1800
 			bne .wait_bit_
@@ -592,10 +575,7 @@ ___			= $ff
 			bpl .sd_check
 			sta $1c09
 
-			ldx $1800
-			bne .wait_bit_
-
-			dec <.timer
+			dey
 			bne .sd_check
 
 .spinval		ldx #$00
@@ -627,6 +607,7 @@ ___			= $ff
 			cpx #$04
 			ror
 			bcc .wait_bit				;more bits to fetch?
+			ldy #.BUSY
 			sty $1800				;set busy bit
 
 			;----------------------------------------------------------------------------------------------------
@@ -640,19 +621,13 @@ ___			= $ff
 .load_file
 			cmp #BITFIRE_RESET
 			bne *+5
-			jmp .reset_drive
+			jmp (.reset_drive)
 			cmp #BITFIRE_LOAD_NEXT
 			beq +
 			sta <.filenum				;set new filenum
 +
 			cmp #BITFIRE_REQ_DISC			;sets carry if so, used later on on bcs
 			lda #.MOTOR_ON
-;!if CONFIG_MOTOR_ALWAYS_ON = 0 {
-;!if .BOGUS_READS > 0 {
-;			ldx #.BOGUS_READS
-;			stx <.bogus_reads
-;}
-;}
 			bcs +					;no LED during turn disc
 			ora #.LED_ON
 +
@@ -849,15 +824,16 @@ ___			= $ff
 			asl					;counter is twice the number of tracks (halftracks)
 			tax
 
-!if .SHRYDAR_STEPPING = 1 {
-.stepping_speed		lda #.STEPPING_SPEED
-			top
+;!if .SHRYDAR_STEPPING = 1 {
+;			lda #.STEPPING_SPEED_
+;			cpx #$02
+;			beq .step_
+;}
+;			lda #.STEPPING_SPEED_
+;			top
 .step
 			lda #.STEPPING_SPEED
-} else {
-.step
-.stepping_speed		lda #.STEPPING_SPEED
-}
+.step_
 			sta $1c09
 			tya
 .halftrack
@@ -884,10 +860,6 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .set_bitrate
-;!if .SHRYDAR_STEPPING = 1 {
-;			ldx .STEPPING_SPEED
-;			stx .stepping_speed + 1
-;}
 			tay
 !if .SANCHECK_TRACK = 1 {
 			ldx #$0f
@@ -1067,15 +1039,6 @@ ___			= $ff
 }
 			stx <.is_loaded_sector
 								;96 cycles
-;!if CONFIG_MOTOR_ALWAYS_ON = 0 {
-;!if .BOGUS_READS > 0 {
-;			lda <.bogus_reads
-;			beq +
-;			dec <.bogus_reads
-;			bne .read_sector
-;+
-;}
-;}
 			ldy <.wanted,x				;sector on list?
 !if .FORCE_LAST_BLOCK = 1 {
 			cpy <.last_block_num			;current block is last block on list?
@@ -1254,26 +1217,17 @@ ___			= $ff
 			dex					;next entry
 			bpl .min_loop
 
-			;barrier, if new, last block-addr = new barrier? nope can even be higher :-(
-			;else we could remember values and just copy them instead of doing new calc :-(
-
 			ldx <.dir_entry_num
-								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
-			tay
-			beq .barr_zero				;zero, so still not loaded
-			dey
 
-;			lda .dir_load_addr + 0,x
-;			sec					;filesize/first_block_size is stored with -1, add here again
-;			adc <.first_block_size
-;			;bcs +
-;			dey
-;+
-			tya
+			sec
+			sbc #$02				;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
+			bcc .barr_zero
+
 			clc
-
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
+			top
 .barr_zero
+			lda #$00
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
 

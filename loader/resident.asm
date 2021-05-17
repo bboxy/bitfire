@@ -25,8 +25,8 @@
 
 !convtab pet
 !cpu 6510
-!src "../music.inc"
-!src "../config.inc"
+!src "music.inc"
+!src "config.inc"
 !src "constants.inc"
 
 .CHECK_EVEN		= 1
@@ -137,8 +137,6 @@ link_music_addr = * + 1
 
 !if CONFIG_LOADER = 1 {
 			;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
-			;XXX ATTENTION /!\ never ever get back to the idea of swapping the two bits on sending a filename for the sake of saving cycls or bytes, it only works this way round when doing bus_lock, as checks on driveside define the bitpositions where the clock is low and hi, that is more sane
-
 bitfire_send_byte_
 			sec
 			ror
@@ -152,12 +150,12 @@ bitfire_send_byte_
 +
 			eor #$20
 			sta $dd02 - $3f,x
-			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again, XXX TODO maybe still remove :-P
+			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
 			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 -
-			bit $dd00			;wait for drive to become busy
+			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
 			bmi -
 			stx $dd02			;restore $dd02
 			rts

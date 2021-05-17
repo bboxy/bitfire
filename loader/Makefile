@@ -2,6 +2,7 @@ ACME ?= acme
 ACME_OPTS ?= -f cbm
 loader_CFLAGS ?= $(CFLAGS) -Os -Wall
 CC ?= cc
+LOADER_CONFIG ?= '../config.inc'
 
 V ?= 0
 ifeq ($(V),1)
@@ -18,7 +19,7 @@ gcr_tables: gcr_tables.c
 
 resident: resident.asm ../config.inc constants.inc Makefile
 	@echo -n "Buidling resident part ->"
-	$(VR)$(ACME) $(ACME_OPTS) -o resident -l resident_labels.txt resident.asm
+	$(VR)$(ACME) $(ACME_OPTS) -I ../../ -I ../ -o resident -l resident_labels.txt resident.asm
 	@printf " Size: $$%04x\n" $$((`wc -c < resident` - 2))
 	@echo "Creating loader_acme.inc..."
 	@#fetch all global labels for resident part
@@ -41,7 +42,7 @@ resident: resident.asm ../config.inc constants.inc Makefile
 
 installer: resident drivecode.asm installer.asm constants.inc ../config.inc detect.asm Makefile
 	@echo "Buidling installer..."
-	@$(ACME) $(ACME_OPTS) -o installer installer.asm
+	@$(ACME) $(ACME_OPTS) -I ../../ -I ../ -o installer installer.asm
 
 bitfire: installer
 
