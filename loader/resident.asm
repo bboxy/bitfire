@@ -395,7 +395,6 @@ bitfire_loadcomp_
 			sec				;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
-			;beq .lz_calc_msrc		;just fall through on zero. $ff + sec -> addition is neutralized and carry is set, so no harm, no need to waste 2 cycles and bytes for a check that barely happens
 			tay
 							;XXX TODO save on eor #$ff and do sbc lz_dst + 0?
 			eor #$ff			;restore A
@@ -436,7 +435,7 @@ bitfire_loadcomp_
 .lz_skip_poll		bcc .lz_poll
 }
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
-			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+			top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
 
 			;------------------
 			;NEXT PAGE IN STREAM
@@ -447,8 +446,6 @@ bitfire_loadcomp_
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
 			php
-			txa
-			pha
 .lz_fetch_sector					;entry of loop
 			jsr .ld_pblock			;fetch another block
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
@@ -458,8 +455,6 @@ bitfire_loadcomp_
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking
 			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
-			pla
-			tax
 			plp
 	}
 			rts
@@ -528,15 +523,17 @@ bitfire_loadcomp_
 			lda (.lz_src),y
 			rol
 			sta <.lz_bits
+			txa				;restore a already before doing lz_next_page
 			inc <.lz_src + 0 		;postponed, so no need to save A on next_page call
 			bne +				;XXX TODO if we would prefer beq, 0,2% saving
 	!if CONFIG_LOADER = 1 {
+			pha
 			jsr .lz_next_page
+			pla
 	} else {
 			inc <.lz_src + 1
 	}
 +
-			txa
 			bcs .lz_lend
 
 
@@ -546,7 +543,8 @@ bitfire_loadcomp_
 			rol				;can also moved to front and executed once on start
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .lz_length
-			asl <.lz_bits
+			asl <.lz_bits			;XXX TODO works also with rol
+
 			bcc .lz_get_loop
 			beq .lz_refill_bits
 .lz_lend
@@ -568,3 +566,8 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
+
+
+;deinterlace elias an store two bytes in stream, would that simplify anything?:
+;00001000       <-runlen_bits
+;76543210	<-data bits
