@@ -201,19 +201,14 @@ unsigned char *compress(BLOCK *optimal, const unsigned char *input_data, int inp
             /* added +1, was off by one, thanks to Krill! */
             overwrite = (input_index) - (input_size - *output_size + output_index) + 1;
             /* we would overwrite our packed data with a match, or have a literal that directly is followed by plain literal, so they can be aggregated */
-            if ((overwrite >= 0 && optimal->offset) || (overwrite == 0 && !optimal->offset)) {
-                if (optimal->offset) {
-                    /* accept match and update end_position, literals are skipped then, as they fall back to last position */
-                    *inplace_end_pos = input_index - skip;
-                    inplace_output_index = output_index;
-                    inplace_input_index = input_index;
-                };
-                break;
-            } else {
-                *inplace_end_pos = input_index - skip;
-                inplace_output_index = output_index;
-                inplace_input_index = input_index;
-            }
+            /* it is a literal that woudl overwrite, so exit already here */
+            if (overwrite >= 0 && !optimal->offset) break;
+            /* accept match and update end_position, literals are skipped then, as they fall back to last position */
+            *inplace_end_pos = input_index - skip;
+            inplace_output_index = output_index;
+            inplace_input_index = input_index;
+            /* it is a match that overwrites, let it still happen, but then end with plain literal */
+            if (overwrite >= 0 && optimal->offset) break;
         }
     }
 
