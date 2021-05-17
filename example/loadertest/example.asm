@@ -1,8 +1,8 @@
-!src "../loader/loader_acme.inc"
-!src "../macros/link_macros_acme.inc"
+!src "../../loader/loader_acme.inc"
+!src "../../macros/link_macros_acme.inc"
 
 		* = $1000
-!bin "../loader/installer",,2
+!bin "../../loader/installer",,2
 		* = $0800
 		lda #$0b
 		sta $d020
