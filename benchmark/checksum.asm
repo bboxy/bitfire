@@ -52,10 +52,10 @@ screen		= $2000
 !src "../loader/loader_acme.inc"
 !src "../macros/link_macros_acme.inc"
 
-		* = $c000
+		* = $1000
 !bin "../loader/installer",,2
 
-		* = $cf00
+		* = $0900
 		lda #$0b
 !if TIME_STRICT == 1 {
 		sta $d011
@@ -109,8 +109,6 @@ screen		= $2000
 		cli
 }
 		jmp benchmark
-
-		* = $e000
 
 display
 		lda #<screen

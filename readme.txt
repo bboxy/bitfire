@@ -42,8 +42,6 @@ As a final step a dirart can be added to the dir, if there's still enough sector
 
 If you want to place multiple files, (in standard format, for bitfire format it is mandatory to write in one go), you can add the -b or -s option multiple times to one commandline. So the right order is kept on a single call. Files in bitfire format are written sequentially so that no unecessary seektimes are created, that can be broken when standard files are placed in between. That said, it is wisely to place files on disk in the same order to be loaded, if being loaded once (random access is possible of course, but gives penalties due to excessive seeking).
 
-You can choose to write with different interleaves, however 4 always has been the best choice in any tested scenario and thus is the default. If you change the interleave you also have to change it with the loader as it needs to calculate the sectors belonging to each file by this value. To do so simply change the value for BITFIRE_CONFIG_INTERLEAVE in config.inc.
-
 Example:
 d64write -c cooldemo.d64 -h oxyron -i rules --side 1 --boot cooldemo.lz -b bootstrap1.lz -b part1.lz -b part2.lz -b part3.lz -s note
 
@@ -99,18 +97,19 @@ Add/remove functionality
 ------------------------
 
 In config.inc you may turn off certain functionality and by that save memory (is it necessary with that size however?). The plain loadraw-function will consume $7e bytes only. With all functions enabled the resident size is still smaller than $200 bytes, small, isn't it?
+The config.inc can also be placed in the root folder, so that you can include bitfire as a submodule, but you retain your own config within your project.
 
 Else, choose from the following functions:
-BITFIRE_INCLUDE_DECOMP          = 1             ;Include decompressor including on the fly decompression capabilities
-BITFIRE_INCLUDE_FRAMEWORK       = 1             ;Include helpful calls (link_*) for loading files from a safe spot in mem, load_next functionality with no overhead, or to add an io safe base-irq
+CONFIG_INCLUDE_DECOMP          = 1             ;Include decompressor including on the fly decompression capabilities
+CONFIG_INCLUDE_FRAMEWORK       = 1             ;Include helpful calls (link_*) for loading files from a safe spot in mem, load_next functionality with no overhead, or to add an io safe base-irq
 
 Also you might want to try the following:
-BITFIRE_CONFIG_MOTOR_ALWAYS_ON  = 1		;This lets the motor spin all way round like a record and thus save valueable spinup time. If it goes on your nerves, set it to 0 and the drive will stop after loading.
+CONFIG_CONFIG_MOTOR_ALWAYS_ON  = 1		;This lets the motor spin all way round like a record and thus save valueable spinup time. If it goes on your nerves, set it to 0 and the drive will stop after loading.
 
 Those values speak for themself:
-BITFIRE_ZP_ADDR			= $02
-BITFIRE_INSTALLER_ADDR		= $1000
-BITFIRE_RESIDENT_ADDR		= $0200
+CONFIG_ZP_ADDR			= $02
+CONFIG_INSTALLER_ADDR		= $1000
+CONFIG_RESIDENT_ADDR		= $0200
 
 Yes, i prefer to place the whole thing at $0200-$3ff, there's no point in wasting precious ram at $0800 or $0c00, charsets or screens can be placed there or a bigger sid that reaches from $0800-$1fff.
 

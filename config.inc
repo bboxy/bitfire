@@ -6,7 +6,7 @@ CONFIG_ZP_ADDR			= $02		;maximum 7 bytes needed
 CONFIG_LAX_ADDR			= $00		;Usually save to have the value $37 here, but can be also set elsewhere, but must stay persistent during loading
 
 ;options for installer
-CONFIG_INSTALLER_ADDR		= $c000
+CONFIG_INSTALLER_ADDR		= $1000
 CONFIG_RESIDENT_AUTOINST	= 1		;Set this to zero if you want to do the install of the resident part on your own, but why would you want to do so anyway? :-D
 
 ;Framework options, certain features can be switched on/off separatedly
