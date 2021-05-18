@@ -29,7 +29,7 @@
 !src "config.inc"
 !src "constants.inc"
 
-.CHECK_EVEN		= 1
+.CHECK_EVEN		= 0
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -285,17 +285,11 @@ bitfire_loadcomp_
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with y = 0
 	}
 							;copy over end_pos and lz_dst from stream
-			ldx #$01
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
--
-			lda (.lz_src),y
-			inc <.lz_src + 0
-			bne +
-			jsr .lz_next_page
-+
-			sta <.lz_dst + 0,x
-			dex
-			bpl -
+			jsr .lz_get_byte		;y will stay 0
+			sta <.lz_dst + 1
+			jsr .lz_get_byte		;y will stay 0
+			sta <.lz_dst + 0
 
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
@@ -305,10 +299,20 @@ bitfire_loadcomp_
 			sta <.lz_bits
 			bne .lz_start_over		;start with a literal
 
+			;------------------
+			;SELDOM STUFF
+			;------------------
+.lz_l_page
+			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
+			ldy #$00
+.lz_l_page_
+			dec <.lz_len_hi
+			bcs .lz_cp_lit
+
 	!if CONFIG_NMI_GAPS = 1 {
-			;!ifdef .lz_gap2 {
-			;	!warn .lz_gap2 - *, " bytes left until gap2"
-			;}
+			!ifdef .lz_gap2 {
+				!warn .lz_gap2 - *, " bytes left until gap2"
+			}
 !align 255,2
 .lz_gap2
 !if .lz_gap2 - .lz_gap1 > $0100 {
@@ -320,14 +324,13 @@ bitfire_loadcomp_
 	}
 
 			;------------------
-			;SELDOM STUFF
+			;GET BYTE FROM STREAM
 			;------------------
-.lz_l_page
-			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
-			ldy #$00
-.lz_l_page_
-			dec <.lz_len_hi
-			bcs .lz_cp_lit
+.lz_get_byte
+			lda (.lz_src),y
+			inc <.lz_src + 0
+			beq .lz_next_page
+			rts
 
 			;------------------
 			;POLLING
@@ -370,7 +373,7 @@ bitfire_loadcomp_
 			sta <.lz_src + 0
 			bcc +
 	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;/!\ this destroys A!
+			jsr .lz_next_page		;/!\ this destroys X!
 	} else {
 			inc <.lz_src + 1
 	}
@@ -446,6 +449,7 @@ bitfire_loadcomp_
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
 			php
+			pha
 .lz_fetch_sector					;entry of loop
 			jsr .ld_pblock			;fetch another block
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
@@ -455,6 +459,9 @@ bitfire_loadcomp_
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking
 			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
+			ldx #$00
+			ldy #$00
+			pla
 			plp
 	}
 			rts
@@ -523,13 +530,11 @@ bitfire_loadcomp_
 			lda (.lz_src),y
 			rol
 			sta <.lz_bits
-			txa				;restore a already before doing lz_next_page
+			txa
 			inc <.lz_src + 0 		;postponed, so no need to save A on next_page call
 			bne +				;XXX TODO if we would prefer beq, 0,2% saving
 	!if CONFIG_LOADER = 1 {
-			pha
 			jsr .lz_next_page
-			pla
 	} else {
 			inc <.lz_src + 1
 	}
@@ -543,7 +548,7 @@ bitfire_loadcomp_
 			rol				;can also moved to front and executed once on start
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .lz_length
-			asl <.lz_bits			;XXX TODO works also with rol
+			asl <.lz_bits
 
 			bcc .lz_get_loop
 			beq .lz_refill_bits
@@ -566,8 +571,3 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
-
-
-;deinterlace elias an store two bytes in stream, would that simplify anything?:
-;00001000       <-runlen_bits
-;76543210	<-data bits

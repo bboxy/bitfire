@@ -40,14 +40,14 @@
 ;config params
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
-.SHRYDAR_STEPPING	= 1 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
+.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
 .DELAY_SPIN_DOWN	= 1
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
-.SANCHECK_HEADER_0F	= 0	;
-.SANCHECK_HEADER_ID	= 0	;
+.SANCHECK_HEADER_0F	= 1	;
+.SANCHECK_HEADER_ID	= 1	;
 .SANCHECK_TRAILING_ZERO = 1
-.SANCHECK_TRACK		= 0	;
-.SANCHECK_SECTOR	= 0	;
+.SANCHECK_TRACK		= 1	;
+.SANCHECK_SECTOR	= 1	;
 .INTERLEAVE		= 4
 
 ;constants
@@ -824,11 +824,11 @@ ___			= $ff
 			asl					;counter is twice the number of tracks (halftracks)
 			tax
 
-;!if .SHRYDAR_STEPPING = 1 {
-;			lda #.STEPPING_SPEED_
-;			cpx #$02
-;			beq .step_
-;}
+!if .SHRYDAR_STEPPING = 1 {
+			lda #.STEPPING_SPEED_
+			cpx #$02
+			beq .step_
+}
 ;			lda #.STEPPING_SPEED_
 ;			top
 .step
@@ -946,14 +946,14 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			lda <.sector				;now crate our wishlist for the current track
+			lda <.sector				;now create our wishlist for the current track
 .wanted_loop
 			tax
 			ldy <.index				;get index
 			sty <.wanted,x				;write index into wantedlist
 			inc <.blocks_on_list			;count number of blocks in list (per track num of blocks)
+			inc <.index				;XXX TODO, maybe move after bcs?
 			cpy <.last_block_num			;inc index and check if index > file_size + 1 -> EOF
-			inc <.index
 			bcs .load_wanted_blocks			;yep, EOF, carry is set
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
@@ -990,7 +990,8 @@ ___			= $ff
 			ldx <.is_loaded_sector			;track is okay, sector too?
 								;XXX TODO, why restricting this to index 0? Could in theory also be any other valid block, but saves code this way and as this block is forced, other cases should not happen
 			ldy <.wanted,x				;check with wanted list if it is the first sector in our chain
-			bne .rs_cont				;not requested, load new sector
+			iny
+			beq .rs_cont				;not requested, load new sector
 			jmp .wipe_from_wanted			;skip loading of any data and directly start sending
 .rs_cont
 }
@@ -1026,6 +1027,10 @@ ___			= $ff
 			cmp <.track_frob			;needs to be precalced, else we run out of time
 			bne .read_sector
 }
+!if .CACHED_SECTOR = 1 {
+			ldx <.track				;remember T/S for later check if sector is cached
+			stx <.is_loaded_track
+}
 			;XXX TODO, can only be $1x or 0x
 			pla					;header_sector
 			ldx #$0f
@@ -1033,11 +1038,11 @@ ___			= $ff
 			and #$f0
 			eor .ser2bin,x
 			tax
+			stx <.is_loaded_sector
 !if .SANCHECK_SECTOR = 1 {
 			cpx <.max_sectors
 			bcs .rs_retry2
 }
-			stx <.is_loaded_sector
 								;96 cycles
 			ldy <.wanted,x				;sector on list?
 !if .FORCE_LAST_BLOCK = 1 {
@@ -1130,17 +1135,12 @@ ___			= $ff
 			bne .rs_retry2				;checksum okay? Nope, take two hops to get to the beginning of code again
 								;counter dd db d8 d6
 			;XXX TODO -> set this once anayway per track? but after send?
-!if .CACHED_SECTOR = 1 {
-			ldx <.track				;remember T/S for later check if sector is cached
-			stx <.is_loaded_track
-}
 			;XXX TODO a lot of wanted reads and decisions made, can they be aggregated?!?!?!?!
-			ldx <.is_loaded_sector			;XXX TODO is check already above, can we remember result?
 .wipe_from_wanted
-			ldy #$ff				;blocksize full sector ($ff)
+			ldx <.is_loaded_sector			;XXX TODO is check already above, can we remember result?
 			lda <.wanted,x				;grab index from list (A with index reused later on after this call), also a is loaded last this way and we can directly check flags afterwards
+			ldy #$ff				;blocksize full sector ($ff)
 			sty <.wanted,x				;clear entry in wanted list
-.send_data
 .en_dis_td		top .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
 
 			;----------------------------------------------------------------------------------------------------
@@ -1148,7 +1148,7 @@ ___			= $ff
 			; SET UP SEND LOOP, AND DECIDE BLOCK SIZES FIRST
 			;
 			;----------------------------------------------------------------------------------------------------
-
+.setup_send
 			cmp <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
 			sta <.block_num
 			tax					;is needed then however to restore flags, but cheaper
@@ -1207,8 +1207,8 @@ ___			= $ff
 			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
 
 !if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
-			lda <.index				;max index to match against
 			ldx #$14				;walk through list of sectors to be loaded
+			lda <.index
 .min_loop
 			cmp <.wanted,x				;compare
 			bcc .is_bigger				;bigger index, next please
@@ -1219,15 +1219,14 @@ ___			= $ff
 
 			ldx <.dir_entry_num
 
-			sec
-			sbc #$02				;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
-			bcc .barr_zero
-
+			tay
+			beq .barr_zero
+			dey
+			tya
+								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
 			clc
 			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
-			top
 .barr_zero
-			lda #$00
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
 
@@ -1266,6 +1265,8 @@ ___			= $ff
 			sbc #$00				;subtract one in case of overflow
 			clc
 			adc <.block_num				;add block num
+;.sau			sta $0760
+;			inc .sau + 1
 
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sty <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready

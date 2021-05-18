@@ -27,7 +27,7 @@
 !cpu 6510
 
 CHECKSUM = 1
-REQDISC = 1
+REQDISC = 0
 BUSLOCK = 0
 WAIT_SPIN_DOWN = 0
 
@@ -668,7 +668,7 @@ hex
 sizes
 !if TIME_RAW == 1 {
 !word $c179-$b635
-!word $bf80-$6a67
+!word $bf80-$6a65
 !word $bd00-$aa4a
 !word $4900-$3eed
 !word $6600-$3ee7
@@ -679,15 +679,15 @@ sizes
 !word $6358-$54d2
 !word $6200-$3ab4
 !word $7300-$6954
-!word $67a1-$5822
+!word $67a1-$5821
 !word $bef7-$bb95
 !word $8000-$7950
-!word $af00-$a15a
+!word $af00-$a159
 !word $666b-$3d20
 !word $a800-$95d4
-!word $bf80-$6a67
-!word $bf80-$6a67
-!word $bf80-$6a67
+!word $bf80-$6a65
+!word $bf80-$6a65
+!word $bf80-$6a65
 !word $6600-$3ee7
 } else {
 !word $c179-$a000	;a
@@ -717,7 +717,7 @@ sizes
 chksums
 !if TIME_RAW == 1 {
 !byte $84
-!byte $a0
+!byte $01
 !byte $eb
 !byte $03
 !byte $bd
@@ -728,15 +728,15 @@ chksums
 !byte $48
 !byte $b8
 !byte $04
-!byte $29
+!byte $bb
 !byte $8d
 !byte $9a
-!byte $8a
+!byte $c4
 !byte $22
 !byte $ba
-!byte $a0
-!byte $a0
-!byte $a0
+!byte $01
+!byte $01
+!byte $01
 !byte $bd
 } else {
 !byte $f2
@@ -766,7 +766,7 @@ chksums
 loads
 !if TIME_RAW == 1 {
 !word $b635
-!word $6a67
+!word $6a65
 !word $aa4a
 !word $3eed
 !word $3ee7
@@ -777,15 +777,15 @@ loads
 !word $54d2
 !word $3ab4
 !word $6954
-!word $5822
+!word $5821
 !word $bb95
 !word $7950
-!word $a15a
+!word $a159
 !word $3d20
 !word $95d4
-!word $6a67
-!word $6a67
-!word $6a67
+!word $6a65
+!word $6a65
+!word $6a65
 !word $3ee7
 } else {
 !word $a000
