@@ -90,7 +90,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 .literal
 		jsr .get_length
 		tax
-		beq .lz_l_page
+		beq .lz_l_page_
 ;		dec <.lz_len_hi			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it sets carry and resets Y, what is unnecessary, but happens so seldom it doesn't hurt
 .cp_literal
 .lz_src = * + 1
@@ -169,10 +169,11 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		inc <.lz_msrcr + 1		;XXX TODO only needed if more pages follow
 		bne .cp_match
 .lz_l_page
-		dec <.lz_len_hi
 		sec				;only needs to be set for consecutive rounds of literals, happens very seldom
 		ldy #$00
-		beq .cp_literal
+.lz_l_page_
+		dec <.lz_len_hi
+		bcs .cp_literal
 
 		;------------------
 		;FETCH A NEW OFFSET
@@ -206,7 +207,6 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		lda #$01
 		ldy #$fe
 		bcs .lz_match__			;length = 2 ^ $ff, do it the very short way :-)
-		ldy #$00
 -
 		asl <.lz_bits			;fetch first payload bit
 
@@ -214,6 +214,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		asl <.lz_bits
 		bcc -
 		bne .lz_match_
+		ldy #$00
 		jsr .lz_refill_bits		;fetch remaining bits
 		bcs .lz_match_
 .lz_bits	!byte $40
@@ -232,6 +233,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		;fetch up to 8 bits first, if first byte overflows, stash away byte and fetch more bits as MSB
 .lz_get_loop
 		asl <.lz_bits			;fetch payload bit
+.get_length_
 		rol				;can also moved to front and executed once on start
 		bcs .get_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .get_length
@@ -242,8 +244,8 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 
 .get_length_16
 		pha				;save LSB
-		lda #$01			;start with MSB = 1
-		jsr .get_length			;get up to 7 more bits
+		tya				;start with MSB = 1
+		jsr .get_length_		;get up to 7 more bits
 		sta <.lz_len_hi			;save MSB
 		pla				;restore LSB
 .end_bit_16
