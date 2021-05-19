@@ -29,7 +29,7 @@
 !src "config.inc"
 !src "constants.inc"
 
-.CHECK_EVEN		= 0
+.CHECK_EVEN		= 1
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -282,7 +282,7 @@ bitfire_loadcomp_
 			sta .lz_skip_poll + 1
 			stx .lz_skip_fetch
 
-			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with y = 0
+			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with Y = 0, X = 0
 	}
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
@@ -304,9 +304,9 @@ bitfire_loadcomp_
 			;------------------
 .lz_l_page
 			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
-			ldy #$00
 .lz_l_page_
 			dec <.lz_len_hi
+			ldy #$00
 			bcs .lz_cp_lit
 
 	!if CONFIG_NMI_GAPS = 1 {
@@ -326,6 +326,7 @@ bitfire_loadcomp_
 			;------------------
 			;GET BYTE FROM STREAM
 			;------------------
+							;XXX TODO would be nice to merge that with .lz_l_page_ and fall through bcs -> ldy #$00 can be used
 .lz_get_byte
 			lda (.lz_src),y
 			inc <.lz_src + 0
@@ -373,7 +374,7 @@ bitfire_loadcomp_
 			sta <.lz_src + 0
 			bcc +
 	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;/!\ this destroys X!
+			jsr .lz_next_page		;sets X = 0, so all sane
 	} else {
 			inc <.lz_src + 1
 	}
@@ -428,17 +429,18 @@ bitfire_loadcomp_
 .lz_check_poll
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
 !if .CHECK_EVEN = 1 {
-.lz_skip_poll		bne .lz_poll			;we could check against src >= dst XXX TODO
+.lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
 }
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
 !if .CHECK_EVEN = 1 {
 			bne .lz_start_over
 } else {
-.lz_skip_poll		bcc .lz_poll
+.lz_skip_poll		bcc .lz_start_over
 }
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
-			top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
 
 			;------------------
 			;NEXT PAGE IN STREAM
@@ -448,11 +450,12 @@ bitfire_loadcomp_
 .lz_next_page_
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
-			php
-			pha
+			php				;save carry
+			pha				;and A
 .lz_fetch_sector					;entry of loop
 			jsr .ld_pblock			;fetch another block
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
+							;XXX TODO send a high enough barrier on last block being sent
 			lda <.lz_src + 1		;get current depack position
 			cmp <.barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
 							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
@@ -492,7 +495,7 @@ bitfire_loadcomp_
 			inc <.lz_src + 0		;postponed, so no need to save A on next_page call
 			bne +
 	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page
+			jsr .lz_next_page		;preserves carry, all sane
 	} else {
 			inc <.lz_src + 1
 	}
@@ -534,7 +537,7 @@ bitfire_loadcomp_
 			inc <.lz_src + 0 		;postponed, so no need to save A on next_page call
 			bne +				;XXX TODO if we would prefer beq, 0,2% saving
 	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page
+			jsr .lz_next_page		;preserves carry and A, clears X, Y, all sane
 	} else {
 			inc <.lz_src + 1
 	}

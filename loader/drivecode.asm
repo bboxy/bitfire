@@ -503,7 +503,7 @@ ___			= $ff
 
 			dec <.blocks_on_list			;last block on wishlist?
 			beq .track_finished
-			jmp .cont_track
+			jmp .next_sector
 .track_finished
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
@@ -846,11 +846,16 @@ ___			= $ff
 			sta $1c00
 			dex
 			beq +
-
 			bit $1c09
 			bmi *-3
 			bpl .step
+			;dex
+			;bne .step
+.step_done
 +
+;			bit $1c09
+;			bne *-3
+
 			lda <.to_track				;already part of set_bitrate -> load track
 
 			;----------------------------------------------------------------------------------------------------
@@ -886,7 +891,7 @@ ___			= $ff
 
 			cpx #$fe
 			beq +
-			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch
+			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 +
 
 			rol					;00000xx1
@@ -952,9 +957,9 @@ ___			= $ff
 			ldy <.index				;get index
 			sty <.wanted,x				;write index into wantedlist
 			inc <.blocks_on_list			;count number of blocks in list (per track num of blocks)
-			inc <.index				;XXX TODO, maybe move after bcs?
 			cpy <.last_block_num			;inc index and check if index > file_size + 1 -> EOF
 			bcs .load_wanted_blocks			;yep, EOF, carry is set
+			inc <.index				;XXX TODO, maybe move after bcs?
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc .wanted_loop			;nope
@@ -981,7 +986,13 @@ ___			= $ff
 			;lsr
 			;sta .eof				;-> $4c / $0c
 			ror <.end_of_file			;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
-.cont_track
+
+			;----------------------------------------------------------------------------------------------------
+			;
+			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT
+			;
+			;----------------------------------------------------------------------------------------------------
+
 !if .CACHED_SECTOR = 1 {
 			lda <.is_loaded_track			;is the sector we hold in ram the one we need?
 			cmp <.track
@@ -990,16 +1001,18 @@ ___			= $ff
 			ldx <.is_loaded_sector			;track is okay, sector too?
 								;XXX TODO, why restricting this to index 0? Could in theory also be any other valid block, but saves code this way and as this block is forced, other cases should not happen
 			ldy <.wanted,x				;check with wanted list if it is the first sector in our chain
-			iny
+			iny					;XXX TODO, bne .rs_cont woudl be enough, cached sector can only be first sector of new file
 			beq .rs_cont				;not requested, load new sector
-			jmp .wipe_from_wanted			;skip loading of any data and directly start sending
+			jmp .skip_read_sector			;skip loading of any data and directly start sending
 .rs_cont
 }
-			;----------------------------------------------------------------------------------------------------
-			;
-			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT
-			;
-			;----------------------------------------------------------------------------------------------------
+
+.next_sector
+!if .CACHED_SECTOR = 1 {
+			ldx <.track				;remember T/S for later check if sector is cached
+			stx <.is_loaded_track
+}
+
 .read_sector
 .read_gcr_header						;read_header and do checksum, if not okay, do again
 			ldx #$07				;bytes to fetch
@@ -1027,10 +1040,6 @@ ___			= $ff
 			cmp <.track_frob			;needs to be precalced, else we run out of time
 			bne .read_sector
 }
-!if .CACHED_SECTOR = 1 {
-			ldx <.track				;remember T/S for later check if sector is cached
-			stx <.is_loaded_track
-}
 			;XXX TODO, can only be $1x or 0x
 			pla					;header_sector
 			ldx #$0f
@@ -1050,7 +1059,7 @@ ___			= $ff
 			bne .not_last				;nope continue
 			ldx <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
 			dex
-			beq .last				;yes, so finally load last blovk
+			beq .last				;yes, so finally load last block
 			bne .rs_retry2				;reread
 }
 .not_last
@@ -1136,7 +1145,7 @@ ___			= $ff
 								;counter dd db d8 d6
 			;XXX TODO -> set this once anayway per track? but after send?
 			;XXX TODO a lot of wanted reads and decisions made, can they be aggregated?!?!?!?!
-.wipe_from_wanted
+.skip_read_sector
 			ldx <.is_loaded_sector			;XXX TODO is check already above, can we remember result?
 			lda <.wanted,x				;grab index from list (A with index reused later on after this call), also a is loaded last this way and we can directly check flags afterwards
 			ldy #$ff				;blocksize full sector ($ff)
