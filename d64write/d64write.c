@@ -635,7 +635,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     d64->sector   = d64->sector_link;
 
     while((data = fgetc(file)) != EOF) {
-        d64->checksum ^= (unsigned char)data;
+        d64->checksum += (unsigned char)data;
         length++;
         /* no more space in buffer? */
         if(d64->sectpos == d64->sectsize) {
