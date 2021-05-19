@@ -358,8 +358,9 @@ checksum
 
 		lda #$00
 -
+		clc
 srch = * + 2
-		eor $1000,x
+		adc $1000,x
 		inx
 		bne +
 		inc srch
@@ -393,7 +394,6 @@ no
 		lda #$02
 		jsr setcol
 reset_drv
-		jam
 		+reset_drive
 		jmp *
 
@@ -716,51 +716,95 @@ sizes
 
 chksums
 !if TIME_RAW == 1 {
-!byte $84
-!byte $01
-!byte $eb
-!byte $03
+!byte $40
+!byte $55
+!byte $fb
+!byte $e9
+!byte $a7
+!byte $c1
+!byte $33
+!byte $a1
+!byte $5c
+!byte $3a
+!byte $d4
+!byte $66
+!byte $97
 !byte $bd
-!byte $e7
-!byte $bf
-!byte $ad
-!byte $1c
-!byte $48
-!byte $b8
-!byte $04
-!byte $bb
-!byte $8d
-!byte $9a
+!byte $ec
 !byte $c4
-!byte $22
-!byte $ba
-!byte $01
-!byte $01
-!byte $01
-!byte $bd
+!byte $aa
+!byte $28
+!byte $55
+!byte $55
+!byte $55
+!byte $a7
+;!byte $84
+;!byte $01
+;!byte $eb
+;!byte $03
+;!byte $bd
+;!byte $e7
+;!byte $bf
+;!byte $ad
+;!byte $1c
+;!byte $48
+;!byte $b8
+;!byte $04
+;!byte $bb
+;!byte $8d
+;!byte $9a
+;!byte $c4
+;!byte $22
+;!byte $ba
+;!byte $01
+;!byte $01
+;!byte $01
+;!byte $bd
 } else {
-!byte $f2
-!byte $d3
-!byte $a6
-!byte $6f
-!byte $60
+!byte $ea
 !byte $fd
-!byte $59
-!byte $42
-!byte $bb
-!byte $f6
-!byte $fa
-!byte $79
-!byte $02
-!byte $a5
-!byte $35
-!byte $14
-!byte $34
-!byte $1f
-!byte $d3
-!byte $d3
-!byte $d3
+!byte $8e
+!byte $ad
+!byte $3c
+!byte $2b
+!byte $8f
 !byte $60
+!byte $23
+!byte $1a
+!byte $28
+!byte $c1
+!byte $5e
+!byte $85
+!byte $c3
+!byte $5e
+!byte $1c
+!byte $c3
+!byte $fd
+!byte $fd
+!byte $fd
+!byte $3c
+;!byte $f2
+;!byte $d3
+;!byte $a6
+;!byte $6f
+;!byte $60
+;!byte $fd
+;!byte $59
+;!byte $42
+;!byte $bb
+;!byte $f6
+;!byte $fa
+;!byte $79
+;!byte $02
+;!byte $a5
+;!byte $35
+;!byte $14
+;!byte $34
+;!byte $1f
+;!byte $d3
+;!byte $d3
+;!byte $d3
+;!byte $60
 }
 
 loads
