@@ -164,11 +164,8 @@
 
 .fn			lda #$00				;load directory
 			jmp .load_file
-
-
-
-
 }
+
 .bootstrap_end
 .bootstrap_size = .bootstrap_end - .bootstrap_start
 
@@ -527,12 +524,10 @@ ___			= $ff
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			cmp #BITFIRE_REQ_DISC
 			bcs +
-			jmp .load_file_				;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
+			bcc .load_file_				;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
 +
 			eor .dir_diskside			;compare side info
-			beq +
-			jmp .turn_disc				;XXX TODO two times out of range :-( still wrong side
-+
+			bne .turn_disc				;XXX TODO two times out of range :-( still wrong side
 			sta <.filenum				;reset filenum
 			top
 
@@ -620,8 +615,9 @@ ___			= $ff
 			;load file, file number is in A
 .load_file
 			cmp #BITFIRE_RESET
-			bne *+5
+			bne +
 			jmp (.reset_drive)
++
 			cmp #BITFIRE_LOAD_NEXT
 			beq +
 			sta <.filenum				;set new filenum
@@ -853,8 +849,8 @@ ___			= $ff
 			;bne .step
 .step_done
 +
-;			bit $1c09
-;			bne *-3
+			bit $1c09
+			bne *-3
 
 			lda <.to_track				;already part of set_bitrate -> load track
 

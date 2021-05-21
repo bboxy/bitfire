@@ -364,7 +364,7 @@ bitfire_loadcomp_
 			dey				;this way we force increment of lz_src + 1 if y = 0
 			tya				;carry is still set on first round
 			adc <.lz_dst + 0
-			sta <.lz_dst + 0		;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on? but this could be called mutliple times for several pages? :-(
+			sta <.lz_dst + 0		;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on? but this could be called mutliple times for several pages? :-( nevermind, the first page is the lowbyte, all further pages do not change lowbyte anymore
 			bcc +				;XXX TODO branch out and reenter
 			inc <.lz_dst + 1
 +
@@ -574,3 +574,11 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
+
+
+;XXX TODO invert numbers?
+;-> start with $fe
+;-> eor #$ff = 1
+;run until 0 falls out on other side
+;saves on eor #$ff one time? saves on sbc #$01? no. -> adc #$00 + sec to compensate then
+;do this only on matches for now? and only on lowbyte/first 8 bits

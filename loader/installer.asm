@@ -42,6 +42,10 @@
 !if (CONFIG_AUTODETECT = 1) {
 		!src "detect.asm"
 }
+		lda #$7f
+		sta $dc0d
+		lda $dc0d
+
 		lda #$37
 		sta <CONFIG_LAX_ADDR
 !if (CONFIG_AUTODETECT = 0) {
