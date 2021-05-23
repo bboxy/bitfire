@@ -246,7 +246,7 @@ bitfire_ntsc2		and $dd00
 bitfire_ntsc3		adc $dd00			;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
 							;%xx111xxx
 .ld_gend
-			stx $dd02			;carry is cleared now, we can exit here and do our rts
+			stx $dd02			;carry is cleared now, we can exit here and do our rts with .ld_gend
 			lsr				;%xxx111xx
 			lsr				;%xxxx111x
 bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
@@ -265,7 +265,6 @@ bitfire_decomp_
 link_decomp
 	!if CONFIG_LOADER = 1 {
 			lda #(.lz_start_over - .lz_skip_poll) - 2
-			;lda #$2c
 			ldx #$60
 			bne .loadcomp_entry
 		!if CONFIG_FRAMEWORK = 1 {
@@ -276,7 +275,6 @@ link_load_comp
 bitfire_loadcomp_
 			jsr bitfire_send_byte_		;returns now with x = $3f
 			lda #(.lz_poll - .lz_skip_poll) - 2
-			;lda #$20
 			ldx #$08
 .loadcomp_entry
 			sta .lz_skip_poll + 1

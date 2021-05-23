@@ -38,9 +38,10 @@
 !src "constants.inc"
 
 ;config params
+.POSTPONED_XFER		= 1
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
-.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
+.SHRYDAR_STEPPING	= 1 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
 .DELAY_SPIN_DOWN	= 1
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
 .SANCHECK_HEADER_0F	= 1	;
@@ -498,6 +499,10 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
+!if .POSTPONED_XFER = 1 {
+.en_dis_seek		bit .send_back
+.en_dis_seek_
+}
 			dec <.blocks_on_list			;last block on wishlist?
 			beq .track_finished
 			jmp .next_sector
@@ -506,7 +511,7 @@ ___			= $ff
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #18
 -
-			;sec					;set by send_block and also set if beq
+			sec					;set by send_block and also set if beq
 			isc <.to_track
 			beq -					;skip dirtrack however
 
@@ -524,7 +529,7 @@ ___			= $ff
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			cmp #BITFIRE_REQ_DISC
 			bcs +
-			bcc .load_file_				;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
+			jmp .load_file_				;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
 +
 			eor .dir_diskside			;compare side info
 			bne .turn_disc				;XXX TODO two times out of range :-( still wrong side
@@ -615,9 +620,8 @@ ___			= $ff
 			;load file, file number is in A
 .load_file
 			cmp #BITFIRE_RESET
-			bne +
+			bne *+5
 			jmp (.reset_drive)
-+
 			cmp #BITFIRE_LOAD_NEXT
 			beq +
 			sta <.filenum				;set new filenum
@@ -847,9 +851,21 @@ ___			= $ff
 			bpl .step
 			;dex
 			;bne .step
-.step_done
 +
-			bit $1c09
+!if .POSTPONED_XFER = 1 {
+			lda #$4c				;postponed xfer?
+			cmp .en_dis_seek
+			bne .seek_end				;nope, continue
+
+;			asl
+;			sta $1c09				;set timer
+			jmp .start_send				;send data now
+.send_back
+			lda #$2c				;and disable jmp after that
+			sta .en_dis_seek
+.seek_end
+}
+			bit $1c09				;wait for timer to elapse, just in case xfer does ot take enough cycles
 			bne *-3
 
 			lda <.to_track				;already part of set_bitrate -> load track
@@ -990,8 +1006,9 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 !if .CACHED_SECTOR = 1 {
-			lda <.is_loaded_track			;is the sector we hold in ram the one we need?
-			cmp <.track
+			lda <.track
+			cmp <.is_loaded_track			;is the sector we hold in ram the one we need?
+			sta <.is_loaded_track
 			bne .rs_cont				;nope
 
 			ldx <.is_loaded_sector			;track is okay, sector too?
@@ -1001,14 +1018,12 @@ ___			= $ff
 			beq .rs_cont				;not requested, load new sector
 			jmp .skip_read_sector			;skip loading of any data and directly start sending
 .rs_cont
+;}
+;!if .CACHED_SECTOR = 1 {
+;			lda <.track				;remember T/S for later check if sector is cached
 }
 
 .next_sector
-!if .CACHED_SECTOR = 1 {
-			ldx <.track				;remember T/S for later check if sector is cached
-			stx <.is_loaded_track
-}
-
 .read_sector
 .read_gcr_header						;read_header and do checksum, if not okay, do again
 			ldx #$07				;bytes to fetch
@@ -1270,12 +1285,23 @@ ___			= $ff
 			sbc #$00				;subtract one in case of overflow
 			clc
 			adc <.block_num				;add block num
-;.sau			sta $0760
-;			inc .sau + 1
 
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sty <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
 			sta <.preamble_data + 2			;block address high
+
+!if .POSTPONED_XFER = 1 {
+			lda <.end_of_file
+			bmi +
+			ldx .blocks_on_list
+			dex
+			bne +
+
+			lda #$4c
+			sta .en_dis_seek			;enable jmp, skip send of data for now
+			jmp .en_dis_seek_
++
+}
 			jmp .start_send
 
 .debug_decode_sector
