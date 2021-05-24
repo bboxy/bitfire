@@ -301,10 +301,7 @@ bitfire_loadcomp_
 			;SELDOM STUFF
 			;------------------
 .lz_l_page
-			sec
-.lz_l_page_
 			dec <.lz_len_hi
-			ldy #$00
 			jmp .lz_cp_lit
 
 	!if CONFIG_NMI_GAPS = 1 {
@@ -324,12 +321,22 @@ bitfire_loadcomp_
 			;------------------
 			;GET BYTE FROM STREAM
 			;------------------
-							;XXX TODO would be nice to merge that with .lz_l_page_ and fall through bcs -> ldy #$00 can be used
 .lz_get_byte
 			lda (.lz_src),y
 			inc <.lz_src + 0
 			beq .lz_next_page
 			rts
+
+.lz_dst_inc
+			inc <.lz_dst + 1
+			jmp .lz_dst_inc_
+.lz_src_inc
+	!if CONFIG_LOADER = 1 {
+			jsr .lz_next_page		;sets X = 0, so all sane
+	} else {
+			inc <.lz_src + 1
+	}
+			jmp .lz_src_inc_
 
 			;------------------
 			;POLLING
@@ -351,26 +358,20 @@ bitfire_loadcomp_
 .lz_literal
 			jsr .lz_length
 			tax
-			beq .lz_l_page_			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
+			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
 			lda (.lz_src),y			;looks expensive, but is cheaper than loop
 			sta (.lz_dst),y
 			inc <.lz_src + 0
-			bne +
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;sets X = 0, so all sane
-	} else {
-			inc <.lz_src + 1
-	}
-+
+			beq .lz_src_inc
+.lz_src_inc_
 			inc <.lz_dst + 0
-			bne +
-			inc <.lz_dst + 1
-+
+			beq .lz_dst_inc
+.lz_dst_inc_
 			dex
 			bne .lz_cp_lit
 
-			ldy <.lz_len_hi			;more pages to copy?
+			lda <.lz_len_hi			;more pages to copy?
 			bne .lz_l_page			;happens very seldom
 
 			;------------------

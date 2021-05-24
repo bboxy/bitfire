@@ -865,8 +865,8 @@ ___			= $ff
 			sta .en_dis_seek
 .seek_end
 }
-			bit $1c09				;wait for timer to elapse, just in case xfer does ot take enough cycles
-			bne *-3
+			;bit $1c09				;wait for timer to elapse, just in case xfer does ot take enough cycles
+			;bne *-3
 
 			lda <.to_track				;already part of set_bitrate -> load track
 
