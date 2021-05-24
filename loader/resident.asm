@@ -301,11 +301,11 @@ bitfire_loadcomp_
 			;SELDOM STUFF
 			;------------------
 .lz_l_page
-			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
+			sec
 .lz_l_page_
 			dec <.lz_len_hi
 			ldy #$00
-			bcs .lz_cp_lit
+			jmp .lz_cp_lit
 
 	!if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -355,28 +355,21 @@ bitfire_loadcomp_
 .lz_cp_lit
 			lda (.lz_src),y			;looks expensive, but is cheaper than loop
 			sta (.lz_dst),y
-			iny
-			dex
-			bne .lz_cp_lit
-
-			dey				;this way we force increment of lz_src + 1 if y = 0
-			tya				;carry is still set on first round
-			adc <.lz_dst + 0
-			sta <.lz_dst + 0		;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on? but this could be called mutliple times for several pages? :-( nevermind, the first page is the lowbyte, all further pages do not change lowbyte anymore
-			bcc +				;XXX TODO branch out and reenter
-			inc <.lz_dst + 1
-+
-			tya
-			sec				;XXX TODO meh, setting carry ...
-			adc <.lz_src + 0
-			sta <.lz_src + 0
-			bcc +
+			inc <.lz_src + 0
+			bne +
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;sets X = 0, so all sane
 	} else {
 			inc <.lz_src + 1
 	}
 +
+			inc <.lz_dst + 0
+			bne +
+			inc <.lz_dst + 1
++
+			dex
+			bne .lz_cp_lit
+
 			ldy <.lz_len_hi			;more pages to copy?
 			bne .lz_l_page			;happens very seldom
 
@@ -450,6 +443,8 @@ bitfire_loadcomp_
 .lz_skip_fetch
 			php				;save carry
 			pha				;and A
+			txa
+			pha
 .lz_fetch_sector					;entry of loop
 			jsr .ld_pblock			;fetch another block
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
@@ -460,8 +455,8 @@ bitfire_loadcomp_
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking
 			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
-			ldx #$00
-			ldy #$00
+			pla
+			tax
 			pla
 			plp
 	}
@@ -531,7 +526,6 @@ bitfire_loadcomp_
 			lda (.lz_src),y
 			rol
 			sta <.lz_bits
-			txa
 			inc <.lz_src + 0 		;postponed, so no need to save A on next_page call
 			bne +				;XXX TODO if we would prefer beq, 0,2% saving
 	!if CONFIG_LOADER = 1 {
@@ -540,6 +534,7 @@ bitfire_loadcomp_
 			inc <.lz_src + 1
 	}
 +
+			txa
 			bcs .lz_lend
 
 			;lda #$00
