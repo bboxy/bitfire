@@ -800,6 +800,7 @@ ___			= $ff
 .found_sector
 .turn_disc_entry
 			sta <.sector
+			dex
 			stx <.index				;reset block index, x = 0
 .load_track
 			;----------------------------------------------------------------------------------------------------
@@ -965,13 +966,13 @@ ___			= $ff
 
 			lda <.sector				;now create our wishlist for the current track
 .wanted_loop
+			inc <.index				;XXX TODO, maybe move after bcs?
 			tax
 			ldy <.index				;get index
 			sty <.wanted,x				;write index into wantedlist
 			inc <.blocks_on_list			;count number of blocks in list (per track num of blocks)
 			cpy <.last_block_num			;inc index and check if index > file_size + 1 -> EOF
 			bcs .load_wanted_blocks			;yep, EOF, carry is set
-			inc <.index				;XXX TODO, maybe move after bcs?
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc .wanted_loop			;nope

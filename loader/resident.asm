@@ -542,7 +542,8 @@ bitfire_loadcomp_
 +
 			bcs .lz_lend
 
-
+			;lda #$00
+			;slo <.lz_bits
 .lz_get_loop
 			asl <.lz_bits			;fetch payload bit
 .lz_length_16_
