@@ -41,7 +41,7 @@
 .POSTPONED_XFER		= 1
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
-.SHRYDAR_STEPPING	= 1 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
+.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
 .DELAY_SPIN_DOWN	= 1
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
 .SANCHECK_HEADER_0F	= 1	;
@@ -465,7 +465,6 @@ ___			= $ff
 			sax $1800				;76540213	-> dddd0d1d
 			asl					;6540213. 7
 			ora #$10				;654X213. 7	-> dddX2d3d
-			dey
 			bit $1800
 			bpl *-3
 			sta $1800
@@ -476,6 +475,7 @@ ___			= $ff
 			sta $1800
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d.d
+			dey
 			cpy #$ff				;XXX TODO could make loop faster here, by looping alread here on bne? needs a bit of code duplication then
 			bit $1800
 			bpl *-3
@@ -865,8 +865,8 @@ ___			= $ff
 			sta .en_dis_seek
 .seek_end
 }
-			;bit $1c09				;wait for timer to elapse, just in case xfer does ot take enough cycles
-			;bne *-3
+			bit $1c09				;wait for timer to elapse, just in case xfer does ot take enough cycles
+			bne *-3
 
 			lda <.to_track				;already part of set_bitrate -> load track
 
@@ -971,7 +971,7 @@ ___			= $ff
 			inc <.blocks_on_list			;count number of blocks in list (per track num of blocks)
 			cpy <.last_block_num			;inc index and check if index > file_size + 1 -> EOF
 			bcs .load_wanted_blocks			;yep, EOF, carry is set
-			inc <.index				;XXX TODO, maybe move after bcs?
+			inc <.index				;keep index as low as possible, so that literal blob gets loaded with lz_next_page in any case and over more than one page
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc .wanted_loop			;nope

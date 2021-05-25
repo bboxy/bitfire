@@ -302,7 +302,16 @@ bitfire_loadcomp_
 			;------------------
 .lz_l_page
 			dec <.lz_len_hi
-			jmp .lz_cp_lit
+			bcs .lz_cp_lit
+
+			;------------------
+			;GET BYTE FROM STREAM
+			;------------------
+.lz_get_byte
+			lda (.lz_src),y
+			inc <.lz_src + 0
+			beq .lz_next_page
+			rts
 
 	!if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -319,24 +328,18 @@ bitfire_loadcomp_
 	}
 
 			;------------------
-			;GET BYTE FROM STREAM
+			;POINTER HANDLING LITERAL COPY
 			;------------------
-.lz_get_byte
-			lda (.lz_src),y
-			inc <.lz_src + 0
-			beq .lz_next_page
-			rts
-
 .lz_dst_inc
 			inc <.lz_dst + 1
-			jmp .lz_dst_inc_
+			bcs .lz_dst_inc_
 .lz_src_inc
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;sets X = 0, so all sane
 	} else {
 			inc <.lz_src + 1
 	}
-			jmp .lz_src_inc_
+			bcs .lz_src_inc_
 
 			;------------------
 			;POLLING
@@ -360,8 +363,9 @@ bitfire_loadcomp_
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
-			lda (.lz_src),y			;looks expensive, but is cheaper than loop
+			lda (.lz_src),y			;Need to copy this way, or wie copy from area that is blocked by barrier
 			sta (.lz_dst),y
+
 			inc <.lz_src + 0
 			beq .lz_src_inc
 .lz_src_inc_
@@ -378,7 +382,7 @@ bitfire_loadcomp_
 			;NEW OR OLD OFFSET
 			;------------------
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
-			lda #$01			;same code as above, meh
+			rol				;A = 0, C = 1 -> A = 1
 			asl <.lz_bits
 			bcs .lz_match			;either match with new offset or old offset
 
@@ -569,11 +573,3 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
-
-
-;XXX TODO invert numbers?
-;-> start with $fe
-;-> eor #$ff = 1
-;run until 0 falls out on other side
-;saves on eor #$ff one time? saves on sbc #$01? no. -> adc #$00 + sec to compensate then
-;do this only on matches for now? and only on lowbyte/first 8 bits
