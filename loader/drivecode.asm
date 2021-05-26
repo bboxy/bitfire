@@ -52,8 +52,8 @@
 .INTERLEAVE		= 4
 
 ;constants
-.STEPPING_SPEED		= $9a					;98 is too low for some ALPS and Sankyo-Drives
-.STEPPING_SPEED_	= $8c
+.STEPPING_SPEED		= $1a					;98 is too low for some ALPS and Sankyo-Drives
+.STEPPING_SPEED_	= $0c
 .CHECKSUM_CONST1	= $05					;%00000101 -> 4 times 01010
 .CHECKSUM_CONST2	= $29					;%00101001
 .CHECKSUM_CONST3	= $4a					;%01001010
@@ -117,6 +117,7 @@
 
 			lda #$00				;clear lower part of counter
 			sta $1c08
+			sta $1c04
 
 			lda #$7f				;disable all interrupts
 			sta $180e
@@ -421,7 +422,7 @@ ___			= $ff
 .gcr_00
 			lda ($03),y				;-> reads: $f0a0,y
 			jmp .gcr_20				;8 cycles
-.tab0070dd77_hi		;XXX TODO use gaps for more code
+.tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 .gcr_20
 			lda ($00,x)				;8, x = 3 -> lda ($03) = lda $f0a0
@@ -432,11 +433,10 @@ ___			= $ff
 			jmp .gcr_slow1 + 3
 .start_send							;entered with c = 0
 			lda #.preloop - .branch - 2		;setup branch to point to preloop first
-			ldy #$03 + CONFIG_DECOMP		;with or without barrier, depending on stand-alone loader or not
 			sta .branch + 1
+			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldx #$0f				;masking value
 			bne .preloop
-			nop
-			nop
 
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 
@@ -446,13 +446,12 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .preloop
-			lax <.preamble_data,y			;ilda would be 16 bit, lax works with 8 bit \o/
-			ldx #$0f				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
-			sbx #$00
+			lda <.preamble_data,y			;meh, 16 bit, lax xx,y would be 8 bit
+			sbx #$00				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
 			and #$f0
 			eor .ser2bin,x				;swap bits 3 and 0
-			ldx #$0a				;masking value for later sax $1800
-			bne .preamble_entry			;could work with dop here, but want to prefer data_entry with less cycles on shift over
+			ldx #$0f				;masking value for later sax $1800 and for preamble encoding
+			bne .preamble_entry			;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
 .send_sector_data
 			sta .branch + 1				;do not save code here (could do so by bcc .pre_send and reuse sty/sta, but timing get's very tight then when shifting over from preamble to data
 			ldy <.preamble_data + 0			;blocksize + 1, could store that val in an extra ZP-addr, waste 1 byte compared to this solution and save 2 cycles on the dey
@@ -463,23 +462,28 @@ ___			= $ff
 			bit $1800
 			bmi *-3
 			sax $1800				;76540213	-> dddd0d1d
+
+			dey
 			asl					;6540213. 7
 			ora #$10				;654X213. 7	-> dddX2d3d
 			bit $1800
 			bpl *-3
 			sta $1800
+
+			;bit $00
 			ror					;7654X213 x
 			asr #%11110000				;.7654... x	-> ddd54d.d
 			bit $1800
 			bmi *-3
 			sta $1800
+
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d.d
-			dey
 			cpy #$ff				;XXX TODO could make loop faster here, by looping alread here on bne? needs a bit of code duplication then
 			bit $1800
 			bpl *-3
 			sta $1800
+
 .branch			bcc .sendloop
 			;XXX carry is set here, always, might be useful somewhen
 .sendloop_end
@@ -489,7 +493,7 @@ ___			= $ff
 			lda #.BUSY
 			bit $1800
 			bmi *-3
-			sta $1800				;XXX TODO could use sax to store $2 there if A has a suitable value, X = $a here
+			sta $1800
 !if >*-1 != >.sendloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
 }
@@ -834,7 +838,7 @@ ___			= $ff
 .step
 			lda #.STEPPING_SPEED
 .step_
-			sta $1c09
+			sta $1c05
 			tya
 .halftrack
 			eor $1c00
@@ -846,11 +850,9 @@ ___			= $ff
 			sta $1c00
 			dex
 			beq +
-			bit $1c09
-			bmi *-3
-			bpl .step
-			;dex
-			;bne .step
+			lda $1c05
+			bne *-3
+			beq .step
 +
 !if .POSTPONED_XFER = 1 {
 			lda #$4c				;postponed xfer?
@@ -858,14 +860,13 @@ ___			= $ff
 			bne .seek_end				;nope, continue
 
 ;			asl
-;			sta $1c09				;set timer
 			jmp .start_send				;send data now
 .send_back
 			lda #$2c				;and disable jmp after that
 			sta .en_dis_seek
 .seek_end
 }
-			bit $1c09				;wait for timer to elapse, just in case xfer does ot take enough cycles
+			lda $1c05				;wait for timer to elapse, just in case xfer does ot take enough cycles
 			bne *-3
 
 			lda <.to_track				;already part of set_bitrate -> load track

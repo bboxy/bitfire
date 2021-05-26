@@ -190,17 +190,16 @@ bitfire_loadraw_
 	}
 .bitfire_load_block
 			jsr .ld_get_byte		;fetch blockaddr hi
-			sta .bitfire_block_addr + 1	;where to place the block?
-			pha				;save over A
+			sta .ld_store + 2		;where to place the block?
+			tay				;preserve value in Y
 			jsr .ld_get_byte
-			sta .bitfire_block_addr + 0
-			tax
-			pla				;lo/hi in x/a for later use
-
+			sta .ld_store + 1
+							;lo/hi-1 in a/y for later use
 			plp
 			bmi .ld_skip_stax		;#$fc -> first block, fetch load-address
-			stx <bitfire_load_addr_lo
-			sta <bitfire_load_addr_hi
+			iny				;increment, as last .ld_get_byte call decremented y by 1
+			sta <bitfire_load_addr_lo
+			sty <bitfire_load_addr_hi
 .ld_skip_stax
 			jsr .ld_get_byte		;fetch blocklen
 
@@ -235,12 +234,9 @@ bitfire_ntsc1		ora $dd00
 			sax .ld_nibble + 1
 bitfire_ntsc2		and $dd00
 			stx $dd02
-.ld_nibble
-			ora #$00
-.bitfire_block_addr = * + 1
-.ld_store
-			sta $b00b,y
 
+.ld_nibble		ora #$00
+.ld_store		sta $b00b,y
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
 bitfire_ntsc3		adc $dd00			;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
@@ -249,7 +245,7 @@ bitfire_ntsc3		adc $dd00			;a is anything between 38 and 3b after add (37 + 00..
 			stx $dd02			;carry is cleared now, we can exit here and do our rts with .ld_gend
 			lsr				;%xxx111xx
 			lsr				;%xxxx111x
-bitfire_ntsc4		bne .ld_gloop			;BRA, a is anything between 0e and 3e
+bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }
 ;XXX TODO in fact the branch can also take 4 cycles if needed, ora $dd00 - $3f,x wastes one cycle anyway
@@ -326,7 +322,6 @@ bitfire_loadcomp_
 			nop
 			nop
 	}
-
 			;------------------
 			;POINTER HANDLING LITERAL COPY
 			;------------------
@@ -344,7 +339,6 @@ bitfire_loadcomp_
 			;------------------
 			;POLLING
 			;------------------
-
 .lz_poll
 	!if CONFIG_LOADER = 1 {
 			bit $dd00
@@ -384,6 +378,10 @@ bitfire_loadcomp_
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
 			rol				;A = 0, C = 1 -> A = 1
 			asl <.lz_bits
+			;rol
+			;bne .lz_match
+			;else A = 0
+			;but only for lowbyte?!
 			bcs .lz_match			;either match with new offset or old offset
 
 			;------------------
@@ -500,7 +498,7 @@ bitfire_loadcomp_
 +
 			lda #$01
 			ldy #$fe
-			bcs .lz_match_len2		;length = 2 ^ $ff, do it the very short way :-)
+			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
 -
 			asl <.lz_bits			;fetch first payload bit
 							;XXX TODO we could check bit 7 before further asl?
