@@ -123,6 +123,13 @@
 			ldx #(.arg & 3) + $c0
 			stx $dd00
 
+			pha
+			pla
+			pha
+			pla
+			pha
+			pla
+
 			lda #$2f			;release ATN
 			sta $dd02
 

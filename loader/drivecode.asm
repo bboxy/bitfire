@@ -122,8 +122,11 @@
 			lda #$7f				;disable all interrupts
 			sta $180e
 			sta $1c0e
-			sta $180d				;clear all IRQ flags to ack possibly pending IRQs
-			sta $1c0d
+			lda $180d				;clear all IRQ flags to ack possibly pending IRQs
+			lda $1c0d
+
+			lda #$c0				;enable timer 1 flag
+			sta $1c0e
 
 			;cli					;now it is save to allow interrupts again, as they won't happen anymore
 
@@ -564,15 +567,18 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .get_byte
-			lda #$80				;expect a whole new byte and start with a free bus
-			sta $1800				;clear lines -> ready
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-			tay
+			ldy #$80				;expect a whole new byte and start with a free bus
+			sty $1800				;clear lines -> ready
 -
-			ldx $1800
+			lda $1800				;wait until all bitsare low, catch flipping bits in between (atn/data toggle) by merging two reads, so no read of zero between toggle can happen
+			ora $1800
 			bne -
+
+			tya
 .sd_check
 			ldx $1800
+			bmi .lock
 			bne .wait_bit_
 
 			bit $1c09
@@ -582,20 +588,20 @@ ___			= $ff
 			dey
 			bne .sd_check
 
-.spinval		ldx #$00
-			stx $1c00
-
 			ldx $1800
-			jmp .wait_bit
+			bmi .lock
+			bne .wait_bit_
 .lock
-			lda .spinval + 1
+.spinval		lda #$00
 			sta $1c00
 } else {
+			lda #$80				;expect a whole new byte and start with a free bus
+			sta $1800				;clear lines -> ready
 .lock
 }
-			lda #$85
 -
-			bit $1800				;wait until bit 0 2 and 7 drop, bit 2 will drop last
+			lda $1800				;wait until all bitsare low, catch flipping bits in between (atn/data toggle) by merging two reads, so no read of zero between toggle can happen
+			ora $1800
 			bne -
 
 			ldx #$00
@@ -839,6 +845,7 @@ ___			= $ff
 			lda #.STEPPING_SPEED
 .step_
 			sta $1c05
+			;lda $1c0d
 			tya
 .halftrack
 			eor $1c00
@@ -850,9 +857,9 @@ ___			= $ff
 			sta $1c00
 			dex
 			beq +
-			lda $1c05
-			bne *-3
-			beq .step
+			bit $1c0d
+			bpl *-3
+			bmi .step
 +
 !if .POSTPONED_XFER = 1 {
 			lda #$4c				;postponed xfer?
@@ -866,8 +873,8 @@ ___			= $ff
 			sta .en_dis_seek
 .seek_end
 }
-			lda $1c05				;wait for timer to elapse, just in case xfer does ot take enough cycles
-			bne *-3
+			bit $1c0d				;wait for timer to elapse, just in case xfer does ot take enough cycles
+			bpl *-3
 
 			lda <.to_track				;already part of set_bitrate -> load track
 
