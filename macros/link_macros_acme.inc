@@ -115,13 +115,23 @@
 		}
 
 		!macro bus_lock {
-			lda #$27			;set ATN and CLK
+			lda #$07			;set ATN and CLK
 			sta $dd02
 		}
 
 		!macro bus_unlock .arg {
 			ldx #(.arg & 3) + $c0
 			stx $dd00
+
+			pha
+			pla
+			pha
+			pla
+			pha
+			pla
+
+			lda #$0f			;release ATN
+			sta $dd02
 
 			pha
 			pla

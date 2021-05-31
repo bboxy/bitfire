@@ -214,7 +214,7 @@
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
-;.free			= .zp_start + $7a
+.cmd			= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
 
 .DT			= 18					;dir_track
@@ -539,7 +539,8 @@ ___			= $ff
 			jmp .load_file_				;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
 +
 			eor .dir_diskside			;compare side info
-			bne .turn_disc				;XXX TODO two times out of range :-( still wrong side
+			beq *+5
+			jmp .turn_disc				;XXX TODO two times out of range :-( still wrong side
 			sta <.filenum				;reset filenum
 			top
 
@@ -567,58 +568,66 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .get_byte
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 			ldy #$80				;expect a whole new byte and start with a free bus
+			sty <.cmd
 			sty $1800				;clear lines -> ready
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 -
-			lda $1800				;wait until all bitsare low, catch flipping bits in between (atn/data toggle) by merging two reads, so no read of zero between toggle can happen
+			lda $1800				;/!\ wait until all bits are low, catch flipping bits in between (atn/data toggle) by merging two reads, else we happen to read 0 in between on seldom occasions :-(
 			ora $1800
 			bne -
 
 			tya
+			tax
 .sd_check
-			ldx $1800
-			bmi .lock
-			bne .wait_bit_
+			lda $1800
+			ora $1800
+			bne .wb_entry
 
 			bit $1c09
 			bpl .sd_check
-			sta $1c09
+			stx $1c09
+
+			lda $1800
+			ora $1800
+			bne .wb_entry
 
 			dey
 			bne .sd_check
 
-			ldx $1800
-			bmi .lock
-			bne .wait_bit_
 .lock
 .spinval		lda #$00
 			sta $1c00
 } else {
-			lda #$80				;expect a whole new byte and start with a free bus
-			sta $1800				;clear lines -> ready
 .lock
 }
 -
-			lda $1800				;wait until all bitsare low, catch flipping bits in between (atn/data toggle) by merging two reads, so no read of zero between toggle can happen
+			lda $1800				;/!\ wait until all bits are low, catch flipping bits in between (atn/data toggle) by merging two reads, else we happen to read 0 in between on seldom occasions :-(
 			ora $1800
 			bne -
 
-			ldx #$00
-			lda #$80
-
-			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
-.wait_bit
-			cpx $1800
-			beq .wait_bit
-.wait_bit_
-			ldx $1800
+.wait_bit1
+			lda $1800
+.wb_entry
 			bmi .lock
-			cpx #$04
-			ror
-			bcc .wait_bit				;more bits to fetch?
+			lsr
+			bcc .wait_bit1
+			lda $1800
+			cmp #$04
+			ror <.cmd
+.wait_bit2
+			lda $1800
+			bmi .lock
+			lsr
+			bcs .wait_bit2
+			lda $1800
+			cmp #$04
+			ror <.cmd
+			bcc .wait_bit1				;more bits to fetch?
+
 			ldy #.BUSY
 			sty $1800				;set busy bit
+			lda <.cmd
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -866,7 +875,8 @@ ___			= $ff
 			cmp .en_dis_seek
 			bne .seek_end				;nope, continue
 
-;			asl
+			asl
+			sta $1c05
 			jmp .start_send				;send data now
 .send_back
 			lda #$2c				;and disable jmp after that

@@ -184,16 +184,19 @@ unsigned char *compress(BLOCK *optimal, const unsigned char *input_data, int inp
 
     for (optimal = next->chain; optimal; optimal = optimal->chain) {
         if (!optimal->offset) {
+            //printf("literal: len $%04x\n", optimal->length);
             encode_literal(optimal->length, input_data, delta, backwards_mode, first);
             actual += costof_literal(optimal->length);
             /* copy literals indicator */
             if (first) first = FALSE;
         } else if (optimal->offset == last_offset) {
+            //printf("copy last offset: $%04x len $%04x\n", optimal->offset, optimal->length);
             /* copy from last offset indicator */
             encode_rep(optimal->length, delta, backwards_mode);
             actual += costof_rep(optimal->length);
         } else {
             /* copy from new offset indicator */
+            //printf("copy new offset: $%04x len $%04x\n", optimal->offset, optimal->length);
             encode_match(optimal->length, optimal->offset, delta, backwards_mode);
             last_offset = optimal->offset;
             actual += costof_match(optimal->offset, optimal->length);
