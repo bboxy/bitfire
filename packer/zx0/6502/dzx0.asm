@@ -1,3 +1,6 @@
+;/!\ Attention, this depacker only works with the original zx0 version contained within this folder was well, it does not work with the modified version coming with bitfire, as some things on the encoding got changed due to speed optimizations
+
+
 !cpu 6510
 
 ZX0_INPLACE		= 0
