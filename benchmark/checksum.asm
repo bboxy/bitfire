@@ -28,11 +28,11 @@
 
 CHECKSUM = 1
 REQDISC = 0
-BUSLOCK = 1
+BUSLOCK = 0
 WAIT_SPIN_DOWN = 0
 
-TIME_RAW = 0
-TIME_LOADCOMP = 1
+TIME_RAW = 1
+TIME_LOADCOMP = 0
 TIME_DECOMP = 0
 
 TIME_STRICT = 0
@@ -353,6 +353,7 @@ checksum
 		sta endl
 		lda loads+1,y
 		sta srch
+		sta srcd
 		adc sizes+1,y
 		sta endh
 
@@ -361,9 +362,15 @@ checksum
 		clc
 srch = * + 2
 		adc $1000,x
+		tay
+		lda #$ff
+srcd = * + 2
+		sta $1000,x
+		tya
 		inx
 		bne +
 		inc srch
+		inc srcd
 +
 endl = * + 1
 		cpx #$00
@@ -377,18 +384,7 @@ endh = * + 1
 		bne no
 
 		lda #$05
-		jsr setcol
-
-!if WAIT_SPIN_DOWN = 1 {
-		jsr clear
-		jsr clear
-		jsr clear
-		jsr clear
-		jsr clear
-		jsr clear
-		jsr clear
-}
-		jmp clear
+		jmp setcol
 
 no
 		lda #$02
@@ -497,22 +493,6 @@ print_
 		lda hex,x
 		sta (prnt),y
 		iny
-		rts
-clear
-		lda #$28
-		sta cln+2
---
-		ldy #$00
-		lda #$ff
--
-cln
-		sta $1000,y
-		dey
-		bne -
-		inc cln+2
-		ldx cln+2
-		cpx #$d0
-		bne -
 		rts
 
 print_count

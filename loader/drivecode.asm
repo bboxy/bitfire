@@ -38,7 +38,7 @@
 !src "constants.inc"
 
 ;config params
-.POSTPONED_XFER		= 1
+.POSTPONED_XFER		= 1 ;ALPS drive fails if reading is started directly after stepping action
 .CACHED_SECTOR		= 1
 .FORCE_LAST_BLOCK	= 1
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
@@ -52,7 +52,7 @@
 .INTERLEAVE		= 4
 
 ;constants
-.STEPPING_SPEED		= $1a					;98 is too low for some ALPS and Sankyo-Drives
+.STEPPING_SPEED		= $1d					;98 is too low for some ALPS and Sankyo-Drives
 .STEPPING_SPEED_	= $0c
 .CHECKSUM_CONST1	= $05					;%00000101 -> 4 times 01010
 .CHECKSUM_CONST2	= $29					;%00101001
@@ -214,7 +214,7 @@
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
-.cmd			= .zp_start + $7a
+;.free			= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
 
 .DT			= 18					;dir_track
@@ -337,7 +337,7 @@ ___			= $ff
 
 .fives			lda <.tab00005555_hi			;ZP!
 			adc <.tab05666660_lo,x			;XXX TODO shifted by 1 this would be same as 7d788888 table?
-			pha
+			pha					;HINIB FAILS SOMETIMES
 ;36
 			lax $1c01				;77788888	forth read	;slow down by 2, 4, 6
 			asr #$40				;ora #$11011111 would also work, and create an offset of $1f? Unfortunatedly the tab then wraps  but okay when in ZP :-(
@@ -354,7 +354,7 @@ ___			= $ff
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
 ;.sevens		adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
 ;19 -> clv?
-			pha
+			pha					;HINIB FAILS SOMETIMES
 ;21
 			lda $1c01				;11111222	fifth read
 			sax <.twos + 1
@@ -568,66 +568,57 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .get_byte
-			ldy #$80				;expect a whole new byte and start with a free bus
-			sty <.cmd
-			sty $1800				;clear lines -> ready
+			lda #$80				;expect a whole new byte and start with a free bus
+			sta $1800				;clear lines -> ready
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
+			tay
 -
-			lda $1800				;/!\ wait until all bits are low, catch flipping bits in between (atn/data toggle) by merging two reads, else we happen to read 0 in between on seldom occasions :-(
-			ora $1800
+			ldx $1800
 			bne -
-
-			tya
-			tax
 .sd_check
-			lda $1800
-			ora $1800
-			bne .wb_entry
+			ldx $1800
+			bmi .lock
+			bne .wait_bit_
 
 			bit $1c09
 			bpl .sd_check
-			stx $1c09
-
-			lda $1800
-			ora $1800
-			bne .wb_entry
+			sta $1c09
 
 			dey
 			bne .sd_check
 
+.spinval		ldx #$00
+			stx $1c00
+
+			ldx $1800
+			bmi .lock
+			jmp .wait_bit
 .lock
-.spinval		lda #$00
+			lda .spinval + 1
 			sta $1c00
 } else {
 .lock
 }
 -
-			lda $1800				;/!\ wait until all bits are low, catch flipping bits in between (atn/data toggle) by merging two reads, else we happen to read 0 in between on seldom occasions :-(
+			lda $1800				;wait until bit 0 2 and 7 drop, bit 2 will drop last
 			ora $1800
 			bne -
 
-.wait_bit1
-			lda $1800
-.wb_entry
-			bmi .lock
-			lsr
-			bcc .wait_bit1
-			lda $1800
-			cmp #$04
-			ror <.cmd
-.wait_bit2
-			lda $1800
-			bmi .lock
-			lsr
-			bcs .wait_bit2
-			lda $1800
-			cmp #$04
-			ror <.cmd
-			bcc .wait_bit1				;more bits to fetch?
+			tax
+			lda #$80
 
+			;XXX TODO wait on turn disc for $1800 to be 0? ($dd02 == $3f) But we do so already on entyr of this func?
+.wait_bit
+			cpx $1800
+			beq .wait_bit
+.wait_bit_
+			ldx $1800
+			bmi .lock
+			cpx #$04
+			ror
+			bcc .wait_bit				;more bits to fetch?
 			ldy #.BUSY
 			sty $1800				;set busy bit
-			lda <.cmd
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -862,7 +853,7 @@ ___			= $ff
 			rol
 			and #3
 			eor $1c00
-.skiptab
+
 			sta $1c00
 			dex
 			beq +
@@ -882,9 +873,9 @@ ___			= $ff
 			lda #$2c				;and disable jmp after that
 			sta .en_dis_seek
 .seek_end
-}
 			bit $1c0d				;wait for timer to elapse, just in case xfer does ot take enough cycles
 			bpl *-3
+}
 
 			lda <.to_track				;already part of set_bitrate -> load track
 
