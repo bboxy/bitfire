@@ -115,40 +115,13 @@
 		}
 
 		!macro bus_lock {
-			lda #$07			;set ATN and CLK
+			lda #$37			;set ATN and CLK
 			sta $dd02
 		}
 
 		!macro bus_unlock .arg {
 			ldx #(.arg & 3) + $c0
 			stx $dd00
-
-			pha
-			pla
-			pha
-			pla
-			pha
-			pla
-
-			lda #$0f			;release ATN
-			sta $dd02
-
-			pha
-			pla
-			pha
-			pla
-			pha
-			pla
-
-			lda #$2f			;release ATN
-			sta $dd02
-
-			pha
-			pla
-			pha
-			pla
-			pha
-			pla
 
 			lda #$3f			;release CLK
 			sta $dd02
@@ -159,10 +132,6 @@
 			pla
 			pha
 			pla
--
-                        bit $dd00                       ;be sure floppy/bus is idle, before we send a filename
-                        bvc -
-                        bpl -
 		}
 
 		!macro set_depack_pointers .arg {

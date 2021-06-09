@@ -572,6 +572,14 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     int loadaddr = 0;
     int startpos = d64->sectpos;
 
+    int s_dbg[32];
+    int t_dbg = -1;
+    int filepos;
+    int blocksize = 0;
+    int i;
+
+    for (i = 0; i < 32; i++) s_dbg[i] = 0;
+
     /* at which sector on track do we start? */
     int sectnum = sectors[d64->track] - d64_get_free_track_blocks(d64, d64->track);
 
@@ -606,7 +614,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             d64_allocate_next_block(d64, &d64->track_link, &d64->sector_link, interleave);
             memset(d64->sectbuf, 0, 256);
         } else {
-            /* reuse last sector ans start from there on */
+            /* reuse last sector and start from there on */
             if(!d64_read_sector(d64, d64->track, d64->sector, d64->sectbuf)) return 0;
 	    d64->track_link = d64->track;
 	    d64->sector_link = d64->sector;
@@ -620,6 +628,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     //fetch load address
     loadaddr = fgetc(file);
     loadaddr += fgetc(file) << 8;
+    filepos = loadaddr;
 
     /* init buffer positions */
     if (type == FILETYPE_BITFIRE) {
@@ -634,9 +643,12 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     d64->track    = d64->track_link;
     d64->sector   = d64->sector_link;
 
+    s_dbg[d64->sector_link] = filepos;
+
     while((data = fgetc(file)) != EOF) {
         d64->checksum += (unsigned char)data;
         length++;
+        blocksize++;
         /* no more space in buffer? */
         if(d64->sectpos == d64->sectsize) {
             /* allocate a new block, therefore set up ts-link */
@@ -645,6 +657,17 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             d64_allocate_next_block(d64, &d64->track_link, &d64->sector_link, interleave);
             /* count blocks up */
             size++;
+
+            if (t_dbg != d64->track_link) {
+                if (t_dbg >= 0) {
+                    printf("t%02d:", t_dbg);
+                    for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
+                    printf("\n");
+                    for (i = 0; i < 32; i++) s_dbg[i] = 0;
+                }
+                t_dbg = d64->track_link;
+            }
+            //s_dbg[d64->sector] = filepos;
 
             if (type != FILETYPE_BITFIRE) {
                 /* set ts-link in finished block */
@@ -668,11 +691,15 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
                 d64->sectpos  = 2;
             }
             d64->sectsize = SECTOR_SIZE;
+            s_dbg[d64->sector_link] = filepos;
         }
 
         d64->sectbuf[d64->sectpos] = data;
         d64->sectpos++;
+        filepos += blocksize;
+        blocksize = 0;
     }
+
 
     /* write back bam and dirent with final blocksize in time */
     /* set last ts-link */
@@ -691,6 +718,11 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
 
     d64->track_link = start_track;
     d64->sector_link = start_sector;
+
+    printf("t%02d:", t_dbg);
+    for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
+    printf("\n");
+    for (i = 0; i < 32; i++) s_dbg[i] = 0;
 
     /* create direntry */
     if (type != FILETYPE_BITFIRE) {

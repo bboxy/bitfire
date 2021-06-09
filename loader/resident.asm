@@ -41,13 +41,14 @@ bitfire_load_addr_hi	= .filenum + 1
 bitfire_load_addr_lo	= .lz_src + 0
 bitfire_load_addr_hi	= .lz_src + 1
 	}
+bitfire_errors		= CONFIG_ZP_ADDR + 1
 }
 
 !if CONFIG_DECOMP = 1 {
-.lz_bits		= CONFIG_ZP_ADDR + 1
-.lz_dst			= CONFIG_ZP_ADDR + 2
-.lz_src			= CONFIG_ZP_ADDR + 4
-.lz_len_hi		= CONFIG_ZP_ADDR + 6
+.lz_bits		= CONFIG_ZP_ADDR + 2
+.lz_dst			= CONFIG_ZP_ADDR + 3
+.lz_src			= CONFIG_ZP_ADDR + 5
+.lz_len_hi		= CONFIG_ZP_ADDR + 7
 }
 
 bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only aggregate labels from this file into loader_*.inc
@@ -138,6 +139,9 @@ link_music_addr = * + 1
 !if CONFIG_LOADER = 1 {
 			;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 bitfire_send_byte_
+			ldx #$37
+			stx $dd02
+
 			sec
 			ror
 			sta .filenum
@@ -183,6 +187,11 @@ bitfire_loadraw_
 			ldx #$60			;set rts
 			jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
 			php				;preserve flag
+			;extract errors here:
+			asr #$7f
+			lsr
+			adc bitfire_errors
+			sta bitfire_errors
 
 	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
 			jsr .ld_get_byte		;fetch barrier
@@ -191,6 +200,10 @@ bitfire_loadraw_
 .bitfire_load_block
 			jsr .ld_get_byte		;fetch blockaddr hi
 			sta .ld_store + 2		;where to place the block?
+;.sau			sta $1000
+;			inc .sau + 1
+;			ldx .sau + 1
+;			stx $0fff
 			tay				;preserve value in Y
 			jsr .ld_get_byte
 			sta .ld_store + 1
@@ -215,10 +228,12 @@ bitfire_loadraw_
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
 			bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
 bitfire_ntsc5
-			bmi .ld_gentry
 .ld_gloop
+			bmi .ld_gentry
+;.ld_gloop
 			ldx #$3f
-bitfire_ntsc0		ora $dd00 - $3f,x
+;bitfire_ntsc0		ora $dd00 - $3f,x
+bitfire_ntsc0		ora $dd00
 			stx $dd02
 			lsr				;%xxxxx111
 			lsr				;%xxxxxx11 1

@@ -353,7 +353,7 @@ checksum
 		sta endl
 		lda loads+1,y
 		sta srch
-		sta srcd
+;		sta srcd
 		adc sizes+1,y
 		sta endh
 
@@ -362,15 +362,15 @@ checksum
 		clc
 srch = * + 2
 		adc $1000,x
-		tay
-		lda #$ff
+;		tay
+;		lda #$ff
 srcd = * + 2
-		sta $1000,x
-		tya
+;		lda $1000,x
+;		tya
 		inx
 		bne +
 		inc srch
-		inc srcd
+;		inc srcd
 +
 endl = * + 1
 		cpx #$00
