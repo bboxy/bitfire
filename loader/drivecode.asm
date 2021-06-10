@@ -38,17 +38,17 @@
 !src "constants.inc"
 
 ;config params
-.POSTPONED_XFER		= 1 ;ALPS drive fails if reading is started directly after stepping action
+.POSTPONED_XFER		= 0 ;ALPS drive fails if reading is started directly after stepping action
 .CACHED_SECTOR		= 0
 .FORCE_LAST_BLOCK	= 0
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
 .DELAY_SPIN_DOWN	= 0
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
-.SANCHECK_HEADER_0F	= 0	;
-.SANCHECK_HEADER_ID	= 0	;
+.SANCHECK_HEADER_0F	= 1	;
+.SANCHECK_HEADER_ID	= 1	;
 .SANCHECK_TRAILING_ZERO = 1
 .SANCHECK_TRACK		= 1	;
-.SANCHECK_SECTOR	= 0	;
+.SANCHECK_SECTOR	= 1	;
 .INTERLEAVE		= 4
 .GCR_125		= 1
 
@@ -300,16 +300,7 @@ ___			= $ff
 
 
 .read_loop
-			lda $1c01				;22333334
-			sax <.threes + 1
-			asr #$c1				;lookup? -> 4 cycles
-			tax
-			lda .tab11111000_hi,y			;8 cycles to mask and lookup
-.twos			eor .tab02200222_lo,x			;13 cycles to mask ad lookup
-			tsx
-			pha
-			beq .gcr_end				;125
-
+			;XXX TODO mv .chksum to other checksum block
 .chksum			eor #$00				;XXX TODO 124 cycles would be possible if we do all checksumming here, but we sacrifice one cycle for a more balanced timing.
 			eor $0101,x
 			eor $0102,x
@@ -369,28 +360,20 @@ ___			= $ff
 			ldx #$3e
 								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 ;13
-			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop				;and use 2 bvs as safety zone? Would be pretty much save that it misses however, so need to find out
-			bvs .read_loop				;2 cycle jitter only
-			bvs .read_loop
-								;bail out here on zone 0
-			;those loop runs will be reduced one  per speedzone, so the loop times out and we restart the whol procedure
-.bvs_01			bvs .read_loop
-								;here on zone 1
-.bvs_02			bvs .read_loop
-								;zone 2
-.bvs_03			bvs .read_loop
+			bvc *
 								;zone 3
 			;10, 8, 6, 4
 			;if we run out of this loop, we have timed out and better reread, maybe the disc spins too slow yet?
 -
-			jmp .next_sector			;took too long, retry
+			lda $1c01				;22333334
+			sax <.threes + 1
+			asr #$c1				;lookup? -> 4 cycles
+			tax
+			lda .tab11111000_hi,y			;8 cycles to mask and lookup
+.twos			eor .tab02200222_lo,x			;13 cycles to mask ad lookup
+			tsx
+			pha
+			bne .read_loop				;125
 ;29
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
@@ -565,9 +548,9 @@ ___			= $ff
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
 			lda $1c00				;turn off LED
 !if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
-			and #.MOTOR_OFF; & .LED_OFF
+			and #.MOTOR_OFF & .LED_OFF
 } else {
-			;and #.LED_OFF
+			and #.LED_OFF
 }
 			sta $1c00
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
@@ -660,7 +643,7 @@ ___			= $ff
 			cmp #BITFIRE_REQ_DISC			;sets carry if so, used later on on bcs
 			lda #.MOTOR_ON
 			bcs +					;no LED during turn disc
-			;ora #.LED_ON
+			ora #.LED_ON
 +
 			ora $1c00				;turn on motor (no matter if already on)
 			sta $1c00
@@ -776,7 +759,7 @@ ___			= $ff
 			;file not found
 			lda $1c00
 			and #.MOTOR_OFF
-			;ora #.LED_ON
+			ora #.LED_ON
 			sta $1c00
 			jam
 			;jmp .idle
@@ -1054,9 +1037,9 @@ ___			= $ff
 }
 			jmp .next_sector
 .read_sector
-			lda $1c00
-			eor #.LED_ON
-			sta $1c00
+			;lda $1c00
+			;eor #.LED_ON
+			;sta $1c00
 			lda .errors + 1
 			clc
 			adc #4

@@ -228,12 +228,12 @@ bitfire_loadraw_
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
 			bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
 bitfire_ntsc5
-.ld_gloop
-			bmi .ld_gentry
 ;.ld_gloop
+			bmi .ld_gentry
+.ld_gloop
 			ldx #$3f
-;bitfire_ntsc0		ora $dd00 - $3f,x
-bitfire_ntsc0		ora $dd00
+bitfire_ntsc0		ora $dd00 - $3f,x
+;bitfire_ntsc0		ora $dd00
 			stx $dd02
 			lsr				;%xxxxx111
 			lsr				;%xxxxxx11 1

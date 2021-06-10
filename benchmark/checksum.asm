@@ -46,6 +46,7 @@ dst		= $18
 dst_		= $1a
 prnt		= $1c
 prnt_		= $1e
+err		= $24
 
 screen		= $2000
 
@@ -67,6 +68,9 @@ screen		= $2000
 		sta $d018
 
 		ldx #$00
+		stx err
+		stx err + 1
+		stx bitfire_errors
 -
 		lda #$20
 		sta screen + $0000,x
@@ -142,7 +146,7 @@ display
 		cpx #num_files + 1
 		bne -
 
-		ldx #$0a
+		ldx #$12
 -
 		lda text4,x
 		sta screen + 23 * 40,x
@@ -151,11 +155,20 @@ display
 		dex
 		bpl -
 
+		ldx #16
+-
+		lda text3,x
+		sta screen + 22 * 40,x
+		lda #$0c
+		sta $d800 + 22 * 40,x
+		dex
+		bpl -
+
 		ldx #21
 -
 		lda text7,x
 		sta screen + 24 * 40,x
-		lda #$0f
+		lda #$0c
 		sta $d800 + 24 * 40,x
 		dex
 		bpl -
@@ -178,8 +191,10 @@ nmi
 		inc $d020
 		rti
 
+text3
+		!text "#    cycles   err"
 text4
-		!text "runs: $0000"
+		!text "runs: $0000   $0000"
 text7
 		!text "caps-lock for checksum"
 
@@ -223,6 +238,15 @@ numb		lda #$00		;file number
 		pha
 		lda #$01
 		jsr setcol
+		lda err
+		clc
+		adc bitfire_errors
+		sta err
+		bcc +
+		inc err + 1
++
+		lda #$00
+		sta bitfire_errors
 
 !if BUSLOCK == 1 {
 		+bus_lock		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
@@ -453,6 +477,11 @@ rev
 		lda $0f03,x
 		jsr print_
 
+		iny
+		iny
+		lda bitfire_errors
+		jsr print_
+
 		lda prnt + 1
 		and #$03
 		ora #$d8
@@ -465,7 +494,7 @@ rev
 		lda #$01
 		sta (prnt),y
 		iny
-		cpy #$0c
+		cpy #$10
 		bne -
 
 		lda prnt + 0
@@ -604,6 +633,35 @@ hex_runs
 		tay
 		lda hex,y
 		sta screen + 23 * 40 + $9
+
+		lda err + 1
+		tax
+		and #$0f
+		tay
+		lda hex,y
+		sta screen + 23 * 40 + $10
+		txa
+		lsr
+		lsr
+		lsr
+		lsr
+		tay
+		lda hex,y
+		sta screen + 23 * 40 + $0f
+		lda err
+		tax
+		and #$0f
+		tay
+		lda hex,y
+		sta screen + 23 * 40 + $12
+		txa
+		lsr
+		lsr
+		lsr
+		lsr
+		tay
+		lda hex,y
+		sta screen + 23 * 40 + $11
 .barerts
 		rts
 
