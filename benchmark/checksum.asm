@@ -238,16 +238,6 @@ numb		lda #$00		;file number
 		pha
 		lda #$01
 		jsr setcol
-		lda err
-		clc
-		adc bitfire_errors
-		sta err
-		bcc +
-		inc err + 1
-+
-		lda #$00
-		sta bitfire_errors
-
 !if BUSLOCK == 1 {
 		+bus_lock		;raise ATN and lock bus, does it help to set bit 6 + 7 for output? Had problems on sx-64 with all the buslock and maybe drifting of raise/fall times
 
@@ -310,6 +300,16 @@ numb		lda #$00		;file number
 }
 		jsr checksum
 +
+		lda err
+		clc
+		adc bitfire_errors
+		sta err
+		bcc +
+		inc err + 1
++
+		lda #$00
+		sta bitfire_errors
+
 		inc numb+1
 		lda numb+1
 		cmp #num_files
