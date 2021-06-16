@@ -48,6 +48,8 @@ prnt		= $1c
 prnt_		= $1e
 err		= $24
 
+accum		= $26
+
 screen		= $2000
 
 !src "../loader/loader_acme.inc"
@@ -155,7 +157,7 @@ display
 		dex
 		bpl -
 
-		ldx #16
+		ldx #20
 -
 		lda text3,x
 		sta screen + 22 * 40,x
@@ -192,7 +194,7 @@ nmi
 		rti
 
 text3
-		!text "#    cycles   err"
+		!text "#    cycles   err acc"
 text4
 		!text "runs: $0000   $0000"
 text7
@@ -211,6 +213,12 @@ benchmark
 		bne -
 
 		lda #$00
+		ldx #$19
+-
+		sta accum,x
+		dex
+		bpl -
+
 		sta runs
 		sta runs+1
 
@@ -298,6 +306,12 @@ numb		lda #$00		;file number
 		cmp #$7f
 		bne +
 }
+		ldx numb + 1
+		lda accum,x
+		clc
+		adc bitfire_errors
+		sta accum,x
+
 		jsr checksum
 +
 		lda err
@@ -482,6 +496,12 @@ rev
 		lda bitfire_errors
 		jsr print_
 
+		iny
+		iny
+		ldx numb + 1
+		lda accum,x
+		jsr print_
+
 		lda prnt + 1
 		and #$03
 		ora #$d8
@@ -494,7 +514,7 @@ rev
 		lda #$01
 		sta (prnt),y
 		iny
-		cpy #$10
+		cpy #$14
 		bne -
 
 		lda prnt + 0
