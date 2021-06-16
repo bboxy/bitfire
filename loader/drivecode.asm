@@ -38,17 +38,17 @@
 !src "constants.inc"
 
 ;config params
-.POSTPONED_XFER		= 0 ;ALPS drive fails if reading is started directly after stepping action
+.POSTPONED_XFER		= 1 ;ALPS drive fails if reading is started directly after stepping action
 .CACHED_SECTOR		= 0
 .FORCE_LAST_BLOCK	= 0
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
 .DELAY_SPIN_DOWN	= 0
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
-.SANCHECK_HEADER_0F	= 0	;
-.SANCHECK_HEADER_ID	= 0	;
+.SANCHECK_HEADER_0F	= 1	;
+.SANCHECK_HEADER_ID	= 1	;
 .SANCHECK_TRAILING_ZERO = 1
 .SANCHECK_TRACK		= 1	;
-.SANCHECK_SECTOR	= 0	;
+.SANCHECK_SECTOR	= 1	;
 .INTERLEAVE		= 4
 .GCR_125		= 1
 
@@ -269,41 +269,53 @@ ___			= $ff
 
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
-;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;                111                     .............   222                                  333           vvv            vvv    444           vvv    555     bb
-;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;                111                     .............   222                          333           vvv            vvv    444           vvv    555     bb
-;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;                111                     .............   222                  333           vvv            vvv    444           vvv    555     bb
-;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;                111                     .............   222          333           vvv            vvv    444           vvv    555     bb
+;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555	;after 10
+;              1                      .............   2                                      3                                 4             v      5         |--
+;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555	;after 8
+;              1                      .............   2                              3                                 4             v      5         |--
+;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555	;misses after 6 cycles
+;              1                      .............   2                      3                                 4             v      5          |--
+;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555		;misses bvs when delayed by 4 cycles
+;              1                      .............   2            3             v              v      4             v      5          bbbbbbb
+
+;this fails?! despite better timing?!?! on otehr speedzones it is as relaxed as the other one. weird. try 127 way, adopt to new scheme
+;              1                      .............   2                      3             v   .....   4             v      5          bbbbbbb
 ; v = v-flag is cleared here
 ; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough)
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
 			;XXX see if we can use bit 2 from original data, would save space in tables
 
-			;neu gestalten und mal nur speedzone 1 testen, verlähmung dann eben anders machen :-(
+;timing with bvc one earlier, need to move around checksumming (can aggregate?)
+	;add other chunk, decrement highnibble and inc lownibble in one move $f0,$e1,$d2,$c3,$b4,$a5,$96,$87,$78,$69,$5a,$...
+;1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
+;           v      5            1                                      2            3             v              v      4  |--
+;filesize thingy:
+;loadadress
+;end sector, endtrack, endpos in sector needed?
+;disable checksumming while rearranging code, start with chcksum on header first?
+;use gap between sync and first byte to set up things?
+;XXX TODO remove BVS check, let it run as is on real hardware? check on real hardware with motor on/off without buslock
+;XXX TODO enough to check for bne after $80? 4 cycles between both reads? but i miss to check for $00 first?
+;better to fall to tge lock routine and stop motor in case? do check for timer in cpx loop and break out on positive? got to reinvent all this?
+;for now just try normal lock without spin down with sx
+;direntry could contain: num sectors + last sect size? then easer to find position on disk and calculate what to transfer?
 
-					;+2									;+6
-;3          5555555555555555555555555555555511111111111111111111111111111111222222222222222222222222222222223333333333333333333333333333333344444444444444444444444444444444
-;                      v      5                  1                       .............   2                              3             v   .....      v      4  bb
-;3          555555555555555555555555555555111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444
-;                      v      5                1                       .............   2                        3             v   .....      v      4  bb
-;3          55555555555555555555555555551111111111111111111111111111222222222222222222222222222233333333333333333333333333334444444444444444444444444444
-;                      v      5              1                       .............   2                  3             v   .....      v      4  bb
-;3          5555555555555555555555555511111111111111111111111111222222222222222222222222223333333333333333333333333344444444444444444444444444
-;                      v      5            1                       .............   2            3             v   .....      v      4  bb
+;XXX TODO we wait for v-flag, v flag is cleared but 1c00 not read yet (then we will wait forever) , if a new byte is pending and we clear the v-flag and wait for the new byte to arrive, it will not happen until latch is read
+;so revert to a lot of bvs with bail out, does not help
+
+;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555		;misses bvs when delayed by 4 cycles
+;              1                       .............   2                      3             v   .....   4             v      5         bbbbbbb
+;              1                       .............   2            3             v   .....      v      4             v      5         bbbbbbb
 
 .read_loop
-
 .chksum			eor #$00				;XXX TODO 124 cycles would be possible if we do all checksumming here, but we sacrifice one cycle for a more balanced timing.
 			eor $0101,x
 			eor $0102,x
 .gcr_entry
 			sta <.chksum2 + 1
-			lda $1c01				;44445555	second read
 ;39
+			lda $1c01				;44445555	second read
 			ldx #$0f
 			sax <.fives + 1
 .dummy			arr #$f0
@@ -312,7 +324,6 @@ ___			= $ff
 !if .GCR_125 = 0 {
 			ldx #$03
 }
-;13
 .gcr_slow1		lda $1c01				;56666677		third read	;slow down by 6,12,18
 			sax <.sevens + 1			;------77		;encode first 7 with sixes and by that shrink 6table? and add it with sevens?
 			asr #$fc				;-566666-		;can be shifted, but and would suffice?
@@ -330,30 +341,32 @@ ___			= $ff
 ;36
 			lax $1c01				;77788888	forth read	;slow down by 2, 4, 6
 			asr #$40				;ora #$11011111 would also work, and create an offset of $1f? Unfortunatedly the tab then wraps  but okay when in ZP :-(
-			;bvc here?
-			bvc *
+			;XXX TODO use ARR to clear v?
+			;XXX TODO reuse a table lookup value for x? maybe with dex to have at least $0f set?
+								;will asr help here?
+			;bvs here?
 			tay
 
 			;XXX TODO wrap here already
 
 			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and whole quintuple 8
 			ldx #$07				;delay upcoming adc as long as possible, as it clears the v flag
+			;bvc *					;XXX TODO enables speeds from 275 up to 307
 !if .GCR_125 = 1 {
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
 } else {
 .sevens			adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
 }
-;19 -> clv?
 			pha					;HINIB FAILS SOMETIMES
-;21
 			lda $1c01				;11111222	fifth read
+			;clv					???
 			sax <.twos + 1
 			and #$f8				;XXX TODO could shift with asr and compress ones table?
 			tay
-								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
-			bvc *					;XXX TODO enables speeds from 275 up to 307
-
 			ldx #$3e
+								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
+			bvc *
+-
 			lda $1c01				;22333334
 			sax <.threes + 1
 			asr #$c1				;lookup? -> 4 cycles
@@ -363,12 +376,31 @@ ___			= $ff
 			tsx
 			pha
 			bne .read_loop				;125
-			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given
 ;29
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .read_sector_back
-			jmp .read_header_back
+.read_header_back
+!if .SANCHECK_HEADER_0F = 0 {
+			inx
+			inx
+}
+			txs					;saves 2 cycles copared to pla
+!if .SANCHECK_HEADER_0F = 1 {
+			pla					;header_0f_2
+			cmp #.HEADER_0F
+			bne -
+}
+!if .SANCHECK_HEADER_0F = 1 {
+			pla					;header_0f_1
+			cmp #.HEADER_0F
+			bne -
+}
+			pla					;header_id2
+			tay
+			eor <.chksum2 + 1
+			jmp .read_header_back_
+
 
 !ifdef .second_pass {
 	!warn $0100 - *, " bytes remaining in zeropage."
@@ -1022,25 +1054,7 @@ ___			= $ff
 			ldy #$52				;type (header)
 			lda #$0c
 			jmp .read_gcr
-.read_header_back
-!if .SANCHECK_HEADER_0F = 0 {
-			inx
-			inx
-}
-			txs					;saves 2 cycles copared to pla
-!if .SANCHECK_HEADER_0F = 1 {
-			pla					;header_0f_2
-			cmp #.HEADER_0F
-			bne .retry_no_count
-}
-!if .SANCHECK_HEADER_0F = 1 {
-			pla					;header_0f_1
-			cmp #.HEADER_0F
-			bne .retry_no_count
-}
-			pla					;header_id2
-			tay
-			eor <.chksum2 + 1
+.read_header_back_
 			bne .retry_no_count			;header checksum check failed? reread
 			pla					;header_id1
 !if .SANCHECK_HEADER_ID = 1 {
@@ -1099,12 +1113,11 @@ ___			= $ff
 			ldy #$55				;type (sector)
 			lda #$4c
 .read_gcr
--
-			bit $1c00				;wait for start of sync
-			bpl -
--
 			bit $1c00				;wait for end of sync
-			bmi -
+			bpl *-3
+
+			bit $1c00				;wait for end of sync
+			bmi *-3
 
 			bit $1c01				;sync mark -> $ff
 			clv
@@ -1124,7 +1137,8 @@ ___			= $ff
 .header_t2		eor #$c0
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			nop
-			bit $ea
+			nop
+			nop
 			lda #.EOR_VAL
 			jmp .gcr_entry				;32 cycles until entry
 .retry_count
@@ -1155,10 +1169,10 @@ ___			= $ff
 			bne .retry_no_count
 }
 !if .SANCHECK_TRAILING_ZERO = 1 {
-			;lda $1c01
-			;and #$e0
-			;cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
-			;bne .retry_count
+			lda $1c01
+			and #$e0
+			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
+			bne .retry_no_count
 }
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
