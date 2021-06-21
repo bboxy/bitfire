@@ -37,8 +37,9 @@
 !src "config.inc"
 !src "constants.inc"
 
+;A,D,G,H,L,N,O
 ;config params
-.POSTPONED_XFER		= 1 ;ALPS drive fails if reading is started directly after stepping action
+.POSTPONED_XFER		= 0 ;ALPS drive fails if reading is started directly after stepping action
 .CACHED_SECTOR		= 0
 .FORCE_LAST_BLOCK	= 0
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
@@ -50,7 +51,6 @@
 .SANCHECK_TRACK		= 1	;
 .SANCHECK_SECTOR	= 0	;
 .INTERLEAVE		= 4
-.GCR_125		= 1
 
 ;constants
 .STEPPING_SPEED		= $1a					;98 is too low for some ALPS and Sankyo-Drives
@@ -289,100 +289,103 @@ ___			= $ff
 			;XXX see if we can use bit 2 from original data, would save space in tables
 
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;              1                         ccccccccccc   2                   ggggggggggg   3ggggggggggggg                 ccccccc   4             v      4       bbbbbbb
+;              1                      ccccccccccc   2                                    3             v   ccccccc      v      4             v      5         bbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;              1                         ccccccccccc   2                   ggggggg   3ggggggggg                 ccccccc   4             v      4       bbbbbbb
+;              1                      ccccccccccc   2                            3             v   ccccccc      v      4             v      5         bbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;              1                         ccccccccccc   2                   ggg   3ggggg                 ccccccc   4             v      4       bbbbbbb
+;              1                      ccccccccccc   2                    3             v   ccccccc      v      4             v      5         bbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;                1                       ccccccccccc   2                      3                 ccccccc   4             v      4       bbbbbbb
+;              1                      ccccccccccccc   2            3             v   ccccc      v      4             v      5         bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
 ;g = gcr slowdown
 
-.read_loop							;        -> $0100,x
-			eor $0101,x				;           $0101,x
-			eor $0103,x				;           $0103,x
+.read_loop
+			lda $1c01				;22333334
+			sax <.threes + 1
+			asr #$c1				;lookup? -> 4 cycles
+			tax
+			lda .tab11111000_hi,y			;8 cycles to mask and lookup
+.twos			eor .tab02200222_lo,x			;13 cycles to mask ad lookup
+			tsx
+			pha
+			beq .gcr_end				;125
+
+.chksum			eor #$00				;XXX TODO 124 cycles would be possible if we do all checksumming here, but we sacrifice one cycle for a more balanced timing.
+			eor $0101,x				;eor chksum can be moved to eor chksum2, thus reading is moved 2 cycles to front on next lda $1c01, ldx #$03 can the be used again, 127 cycles suffice and we save space?
+								;try and use nop to compensate for timing, seems like i miss something on checksum, so disable checksum first of all to see if timing works
+			eor $0102,x
 .gcr_entry
 			sta <.chksum2 + 1
+;39
 			lda $1c01				;44445555	second read
 			ldx #$0f
 			sax <.fives + 1
 .dummy			arr #$f0
 								;sta <.fours + 1 to save tay and keep y free? if all tays are saved +0 3 cycles for 3 sta .num + 1
 			tay					;44444---		;how's about having 4444---4?
-!if .GCR_125 = 0 {
-			ldx #$03
-}
-.threes			lda <.tab00333330_hi			;ZP!
-			ora .tab44444000_lo,y
-			pha					;$0103
-
+;13
 .gcr_slow1		lda $1c01				;56666677		third read	;slow down by 6,12,18
 			sax <.sevens + 1			;------77		;encode first 7 with sixes and by that shrink 6table? and add it with sevens?
 			asr #$fc				;-566666-		;can be shifted, but and would suffice?
 			tax
 
+.threes			lda <.tab00333330_hi			;ZP!
+			adc .tab44444000_lo,y
+			pha
+.chksum2		eor #$00				;adds one cycle to checksum this way, but timing seems to be safer
+			sta <.chksum + 1			;XXX TODO move this after .sevens?!
+
 .fives			lda <.tab00005555_hi			;ZP!
-			ora <.tab05666660_lo,x			;XXX TODO shifted by 1 this would be same as 7d788888 table?
-			pha					;$0102
-.chksum			eor #$00				;103,101,100
-.chksum2		eor #$00
-			sta <.chksum + 1
+			adc <.tab05666660_lo,x			;XXX TODO shifted by 1 this would be same as 7d788888 table?
+			pha
+;36
 			lax $1c01				;77788888	forth read	;slow down by 2, 4, 6
 			asr #$40				;ora #$11011111 would also work, and create an offset of $1f? Unfortunatedly the tab then wraps  but okay when in ZP :-(
-			;bvc * here?
+			;XXX TODO use ARR to clear v?
+			;XXX TODO reuse a table lookup value for x? maybe with dex to have at least $0f set?
+								;will asr help here?
+			;bvs here?
 			tay
 
 			;XXX TODO wrap here already
 
-			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and whole quintuple 8
+			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and quintuple 8
 			ldx #$07				;delay upcoming adc as long as possible, as it clears the v flag
-			;bvc *
-!if .GCR_125 = 1 {
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
-} else {
-.sevens			adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
-}
-			pha					;$0101
+;.sevens		adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
+;19 -> clv?
+			pha
+;21
 			lda $1c01				;11111222	fifth read
 			sax <.twos + 1
 			and #$f8				;XXX TODO could shift with asr and compress ones table?
 			tay
-								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-+
 			ldx #$3e
-			lda $1c01				;22333334
-			sax <.threes + 1
-			asr #$c1				;lookup? -> 4 cycles
-			tax
-			lda .tab11111000_hi,y			;8 cycles to mask and lookup
-.twos			ora .tab02200222_lo,x			;13 cycles to mask ad lookup
-			tsx
-			pha					;$0100
-			bne .read_loop				;125
+								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
+;13
 			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given
+			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop				;and use 2 bvs as safety zone? Would be pretty much save that it misses however, so need to find out
+			bvs .read_loop				;2 cycle jitter only
+			bvs .read_loop
+								;bail out here on zone 0
+			;those loop runs will be reduced one  per speedzone, so the loop times out and we restart the whol procedure
+.bvs_01			bvs .read_loop
+								;here on zone 1
+.bvs_02			bvs .read_loop
+								;zone 2
+.bvs_03			bvs .read_loop
+								;zone 3
+			;10, 8, 6, 4
+			;if we run out of this loop, we have timed out and better reread, maybe the disc spins too slow yet?
+-
+			jmp .next_sector			;took too long, retry
 .gcr_end
+;29
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .read_sector_back
 			jmp .read_header_back
@@ -402,13 +405,11 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .gcr_00
-			jmp +					;8 cycles
 			lda ($03),y				;-> reads: $f0a0,y
-!if .GCR_125 = 1 {
+			jmp .gcr_20				;8 cycles
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
-}
-;.gcr_20
+.gcr_20
 			lda ($00,x)				;8, x = 3 -> lda ($03) = lda $f0a0
 			nop
 .gcr_40
@@ -422,27 +423,8 @@ ___			= $ff
 			ldx #$0f				;masking value
 			bne .preloop
 
-!if .GCR_125 = 1 {
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
-}
-+
-			bit $ea
-			nop
-			lda $1c01
-			nop
-			nop
-			nop
-			nop
-			nop
-			jmp .gcr_slow1 + 3
-.gcr_20
-			nop
-			nop
-			lda $1c01
-			nop
-			nop
-			nop
-			jmp .gcr_slow1 + 3
+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SEND PREAMBLE AND DATA
@@ -875,8 +857,8 @@ ___			= $ff
 			cmp .en_dis_seek
 			bne .seek_end				;nope, continue
 
-		;	lda #$ff					;reduce time to wait here, either by no shift or even lsr
-			asl
+			lda #$ff					;reduce time to wait here, either by no shift or even lsr
+			;asl
 			sta $1c05
 			jmp .start_send				;send data now
 .send_back
@@ -1082,8 +1064,7 @@ ___			= $ff
 }
 			pla					;header_id2
 			tay					;$0103
-			eor <.chksum + 1
-			eor #.HEADER_0F
+			eor <.chksum2 + 1
 			bne .retry_no_count			;header checksum check failed? reread
 			pla					;header_id1
 !if .SANCHECK_HEADER_ID = 1 {
@@ -1166,7 +1147,8 @@ ___			= $ff
 			asr #$c1				;lookup? -> 4 cycles
 .header_t2		eor #$c0
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
-			sta <.chksum + 1 - $3e,x
+			bit $ea
+			nop
 			lda #.EOR_VAL
 			jmp .gcr_entry				;32 cycles until entry
 .retry_count
@@ -1176,6 +1158,8 @@ ___			= $ff
 .read_sector_back
 			;6 cycles of 15 passed, another 9 can pass?
 			clv
+			eor $0101
+			sta .chksum2 + 1
 								;checksum
 			lax $1c01				;44445555
 			bvc *
@@ -1203,9 +1187,8 @@ ___			= $ff
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
 			ora .tab44444000_lo,y
-			eor $0100
-			eor $0101
-			eor $0103
+			eor $0102
+			eor <.chksum2 + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
 			eor <.chksum + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
 			bne .retry_count			;checksum okay? Nope, take two hops to get to the beginning of code again
 								;counter dd db d8 d6
@@ -1380,6 +1363,74 @@ ___			= $ff
 ;			tsx
 ;			bne -
 
+;-
+;			bvc *
+;			clv
+;			lda $1c01
+;			tsx
+;			pha
+;			bne -
+;			ldx #$3f
+;-
+;			bvc *
+;			clv
+;			lda $1c01
+;			sta $0780,x
+;			dex
+;			bpl -
+;
+;.read_loop_
+;.gcr_entry_
+;			lda $0100,y
+;			ldx #$0f
+;			sax .fives_ + 1
+;			arr #$f0
+;;
+;			tax
+;.threes_		lda <.tab00333330_hi
+;			ora .tab44444000_lo,x
+;			pha
+;
+;			dey
+;			ldx #$0f
+;			lda $0100,y
+;			sax .sevens__ + 1
+;			asr #$fc
+;			tax
+;
+;.fives_			lda <.tab00005555_hi
+;			ora <.tab05666660_lo,x
+;			pha
+;
+;			dey
+;			lax $0100,y
+;			asr #$40
+;.sevens__		adc #$00
+;			sta .sevens_ + 1
+;
+;			lda .tab7d788888_lo,x
+;			ldx #$07
+;.sevens_		adc .tab0070dd77_hi
+;			pha
+;
+;			dey
+;			lda $0100,y
+;			sax .twos_ + 1
+;			and #$f8
+;			sta .ones_ + 1
+;
+;			ldx #$3e
+;			dey
+;			lda $0100,y
+;			sax .threes_ + 1
+;			asr #$c1
+;			tax
+;.ones			lda .tab11111000_hi
+;.twos			ora .tab02200222_lo,x
+;			tsx
+;			pha
+;			bne .read_loop_
+;
 
 ;tables with possible offsets
 .tab11111000_hi		= .tables + $00
