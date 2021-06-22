@@ -302,6 +302,7 @@ ___			= $ff
 ;g = gcr slowdown
 
 .read_loop
+			ldx #$3e
 			lda $1c01				;22333334
 			sax <.threes + 1
 			asr #$c1				;lookup? -> 4 cycles
@@ -359,7 +360,6 @@ ___			= $ff
 			sax <.twos + 1
 			and #$f8				;XXX TODO could shift with asr and compress ones table?
 			tay
-			ldx #$3e
 								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 ;13
 			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given
@@ -1145,6 +1145,7 @@ ___			= $ff
 .header_t2		eor #$c0
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			bit $ea
+			nop
 			nop
 			lda #.EOR_VAL
 			jmp .gcr_entry				;32 cycles until entry

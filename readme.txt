@@ -97,7 +97,7 @@ Add/remove functionality
 ------------------------
 
 In config.inc you may turn off certain functionality and by that save memory (is it necessary with that size however?). The plain loadraw-function will consume $7e bytes only. With all functions enabled the resident size is still smaller than $200 bytes, small, isn't it?
-The config.inc as well as the music.inc can also be placed in the root folder outside of the repository, so that you can include bitfire as a submodule, but you retain your own config within your project. The config outside teh repo will be preferred and will verrule teh config that comes with this repository.
+The config.inc as well as the music.inc can also be placed in the root folder outside of the repository, so that you can include bitfire as a submodule, but you retain your own config within your project. The config outside the repo will be preferred and will verrule the config that comes with this repository.
 
 Else, choose from the following functions:
 CONFIG_INCLUDE_DECOMP          = 1             ;Include decompressor including on the fly decompression capabilities
@@ -146,7 +146,7 @@ link_cia2_type			;alias for CIA2 type
 Functions via macros
 --------------------
 
-The link_* functions represent the same functins as above, but they include a jmp-target that is jumped to after loading. Why? The advantage of this is, that any code in the memory can be overwritten, except the resident part of the loader dunring the loading-operation, and after laoding the code can be entered by teh given address:
+The link_* functions represent the same functins as above, but they include a jmp-target that is jumped to after loading. Why? The advantage of this is, that any code in the memory can be overwritten, except the resident part of the loader dunring the loading-operation, and after laoding the code can be entered by the given address:
 
 link_load_next_raw_jmp .addr
 link_load_next_comp_jmp .addr
@@ -159,7 +159,7 @@ Example:
 +link_load_next_comp_jmp $2000	;will load next file and decompress it on the fly and afterwards jump to $2000 to execute the loaded part
 
 link_player_irq			;links the raster-irq to the base-irq
-reset_drive			;resets the drive, so the laoder can be reuploaded later again and teh drive is free for own stuff like drive-code
+reset_drive			;resets the drive, so the laoder can be reuploaded later again and the drive is free for own stuff like drive-code
 request_disk .num		;command the floppy to check for given side#, will return as soon as the new diskside is detected
 setup_sync .frames		;setup frame counter to wait for $0000-$7fff frames
 sync				;wait for sync to happen or expire
@@ -308,3 +308,11 @@ jsr link_load_next_comp		;load
 +sync				;wait for timer to elapse -> so this happens $180 frames after the setup
 
 Other possibilities are to use syncpoints in SIDs and sync to those syncpoints. There's a syncpoint.inc included to have a single file to edit with all framecounts, so that the timings are not scattered all over your project.
+
+Drive Speed / Wobble
+--------------------
+
+It might be a good idea to hav a look at the rpm*.prgs at this URL:
+https://sourceforge.net/p/vice-emu/code/HEAD/tree/testprogs/drive/rpm/
+
+Please check your drive so that it is running at 300 rpm. In fact the loader can cope with floppys that are off that range by a few rounds, still it will have retries and possible read errors and hickups. Belt driven drives (which can be found in 1541, 1541C and 1541-ii) show a so called wobble, so the drive's rotation speed is drifting between a minimum and maximum in a sinus like manner. There's also 1541-ii drives out there (jpn, sankyo) that come along with a direct driven spindle. The plot-programs show a quite straight line then. On other drives, one can see howstrong the amplitude of the wobble is. I have drives that left the green area by quite a bit, and have drives with alps-mechanics, that jitter more or less randomly. They throw the most read errors in my tests. Things were better, when the disks were written with a drive, that has a direct drive. If the disks are written with the same floppy, on can assure, that the track alignment is the same, but when written with a strong wobble and read back with the same strong wobble, amplitudes can add up to twice the wobble, reading speed can increase and decrease fast and that can trip the gcr-read-loop of the loader. There are many sanity checks implemented, as the eor-checksum of a sector is a bit weak, it can happen that the chcksum is still okay, but the content of a sector is wrong. So the last trailing bytes after the checksum are also checked for being zero. Also the header is double checked, if track, sector and disk-id are correct besides the checksum. A lot of tests on all kind of hardware showed, that there's the possibility of a file being loaded with a corrupt content in very seldom cases due to this physical restrictions. The gcr-loop used in the rom takes only 19 cycles for a byte to read from disk, that might allow for more tolerance regarding that matter.
