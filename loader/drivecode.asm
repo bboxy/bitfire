@@ -289,13 +289,13 @@ ___			= $ff
 			;XXX see if we can use bit 2 from original data, would save space in tables
 
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;              1                      ccccccccccc   2                                    3             v   ccccccc      v      4             v      5         bbbbbbbb
+;              1                      ccccccccccccc   2                                    3             v   ccccc      v      4             v      5         bbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;              1                      ccccccccccc   2                            3             v   ccccccc      v      4             v      5         bbbbbbbb
+;              1                      ccccccccccccc   2                            3             v   ccccc      v      4             v      5         bbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;              1                      ccccccccccc   2                    3             v   ccccccc      v      4             v      5         bbbbbbbb
+;              1                      ccccccccccccc   2                    3             v   ccccc      v      4             v      5         bbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              1                      ccccccccccccc   2            3             v   ccccc      v      4             v      5         bbbbbbbb
+;              111                    ccccccccccccc   222          333           vvv ccccc      vvv    444           vvv    555       bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -343,10 +343,7 @@ ___			= $ff
 ;36
 			lax $1c01				;77788888	forth read	;slow down by 2, 4, 6
 			asr #$40				;ora #$11011111 would also work, and create an offset of $1f? Unfortunatedly the tab then wraps  but okay when in ZP :-(
-			;XXX TODO use ARR to clear v?
 			;XXX TODO reuse a table lookup value for x? maybe with dex to have at least $0f set?
-								;will asr help here?
-			;bvs here?
 			tay
 
 			;XXX TODO wrap here already
@@ -405,7 +402,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .gcr_00
-			lda ($03),y				;-> reads: $f0a0,y
+			cmp ($03),y				;-> reads: $f0a0,y
 			jmp .gcr_20				;8 cycles
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
@@ -1159,7 +1156,7 @@ ___			= $ff
 			;6 cycles of 15 passed, another 9 can pass?
 			clv
 			eor $0101
-			sta .chksum2 + 1
+			sta <.chksum2 + 1
 								;checksum
 			lax $1c01				;44445555
 			bvc *
