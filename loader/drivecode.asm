@@ -51,9 +51,10 @@
 .SANCHECK_TRACK		= 1	;
 .SANCHECK_SECTOR	= 0	;
 .INTERLEAVE		= 4
+.GCR_125		= 1
 
 ;constants
-.STEPPING_SPEED		= $1a					;98 is too low for some ALPS and Sankyo-Drives
+.STEPPING_SPEED		= $18					;98 is too low for some ALPS and Sankyo-Drives
 .STEPPING_SPEED_	= $0c
 .CHECKSUM_CONST1	= $05					;%00000101 -> 4 times 01010
 .CHECKSUM_CONST2	= $29					;%00101001
@@ -262,32 +263,14 @@ ___			= $ff
                         !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08		;70
 
 
-;01010 01001 01010 01101 01010 11011 01011 10010
-;0     8     0     c     0     b     1     2
-
-;this reflects the perfect timing, it is most likely delayed by 2-3 cycles due to bvs branching before?
-
-;           cycle
-;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
-;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;                111                     .............   222                                  333           vvv            vvv    444           vvv    555     bb
-;                1                       .............   2                                    3             v              v      4        bb     v      5       bbbbbbbbbbb
-;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;                111                     .............   222                          333           vvv            vvv    444           vvv    555     bb
-;                1                       .............   2                            3             v              v      4        bb     v      5       bbbbbbbbb
-;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;                111                     .............   222                  333           vvv            vvv    444           vvv    555     bb
-;                1                       .............   2                    3             v              v      4        bb     v      5       bbbbbbb
-;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;                111                     .............   222          333           vvv            vvv    444           vvv    555     bb
-;              1                       .............   2            3             v              v      4               v      5       bbbbbbb
-
-; v = v-flag is cleared here
-; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough)
-
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
 			;XXX see if we can use bit 2 from original data, would save space in tables
 
+;this reflects the perfect timing, it is most likely delayed by 2-3 cycles due to bvs branching before?
+; in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough)
+
+;           cycle
+;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
 ;              1                      ccccccccccccc   2                                    3             v   ccccc      v      4             v      5         bbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
@@ -295,14 +278,13 @@ ___			= $ff
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
 ;              1                      ccccccccccccc   2                    3             v   ccccc      v      4             v      5         bbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              111                    ccccccccccccc   222          333           vvv ccccc      vvv    444           vvv    555       bbbbbbbb
+;                111                    ccccccccccccc   222          333           vvv ccccc      vvv    444           vvv    555     bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
 ;g = gcr slowdown
 
 .read_loop
-			ldx #$3e
 			lda $1c01				;22333334
 			sax <.threes + 1
 			asr #$c1				;lookup? -> 4 cycles
@@ -327,6 +309,9 @@ ___			= $ff
 								;sta <.fours + 1 to save tay and keep y free? if all tays are saved +0 3 cycles for 3 sta .num + 1
 			tay					;44444---		;how's about having 4444---4?
 ;13
+!if .GCR_125 = 0 {
+			ldx #$03
+}
 .gcr_slow1		lda $1c01				;56666677		third read	;slow down by 6,12,18
 			sax <.sevens + 1			;------77		;encode first 7 with sixes and by that shrink 6table? and add it with sevens?
 			asr #$fc				;-566666-		;can be shifted, but and would suffice?
@@ -347,12 +332,13 @@ ___			= $ff
 			;XXX TODO reuse a table lookup value for x? maybe with dex to have at least $0f set?
 			tay
 
-			;XXX TODO wrap here already
-
 			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and quintuple 8
 			ldx #$07				;delay upcoming adc as long as possible, as it clears the v flag
+!if .GCR_125 = 1 {
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
-;.sevens		adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
+} else {
+.sevens			adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
+}
 ;19 -> clv?
 			pha
 ;21
@@ -360,9 +346,11 @@ ___			= $ff
 			sax <.twos + 1
 			and #$f8				;XXX TODO could shift with asr and compress ones table?
 			tay
+			ldx #$3e
 								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 ;13
 			;let's check out, on real hardware slower speedzones more and more miss reads if only 4 loop runs are given
+			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
@@ -380,7 +368,7 @@ ___			= $ff
 			;10, 8, 6, 4
 			;if we run out of this loop, we have timed out and better reread, maybe the disc spins too slow yet?
 -
-			jmp .next_sector			;took too long, retry
+			jmp .read_sector			;took too long, retry
 .gcr_end
 ;29
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
@@ -404,8 +392,10 @@ ___			= $ff
 .gcr_00
 			cmp ($03),y				;-> reads: $f0a0,y
 			jmp .gcr_20				;8 cycles
+!if .GCR_125 = 1 {
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
+}
 .gcr_20
 			lda ($00,x)				;8, x = 3 -> lda ($03) = lda $f0a0
 			nop
@@ -418,9 +408,11 @@ ___			= $ff
 			sta .branch + 1
 			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 			ldx #$0f				;masking value
+!if .GCR_125 = 1 {
 			bne .preloop
 
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
+}
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -579,13 +571,18 @@ ___			= $ff
 			lda #$80				;expect a whole new byte and start with a free bus
 			sta $1800				;clear lines -> ready
 
-			ldx $1800
-			bpl *-3
+;			ldx $1800
+;			bpl *-3
 .lock
-			ldx $1800
-			bmi *-3
+-
+			lda $1800				;wait until bit 0 2 and 7 drop, bit 2 will drop last
+			ora $1800
+			ora $1800
+			bne -
+			tax
+;			ldx $1800
+;			bmi *-3
 			lda #$80
-			ldx #$00
 }
 ;-
 ;			lda $1800				;wait until bit 0 2 and 7 drop, bit 2 will drop last

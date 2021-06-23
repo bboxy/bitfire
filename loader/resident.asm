@@ -139,8 +139,8 @@ link_music_addr = * + 1
 !if CONFIG_LOADER = 1 {
 			;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 bitfire_send_byte_
-			ldx #$37
-			stx $dd02
+			;ldx #$37
+			;stx $dd02
 
 			sec
 			ror
@@ -154,8 +154,8 @@ bitfire_send_byte_
 +
 			eor #$20
 			sta $dd02 - $3f,x
-			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
-			pla
+;			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
+;			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 -
@@ -188,10 +188,10 @@ bitfire_loadraw_
 			jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
 			php				;preserve flag
 			;extract errors here:
-			asr #$7f
+			asr #$7c
 			lsr
-			adc bitfire_errors
-			sta bitfire_errors
+			adc <bitfire_errors
+			sta <bitfire_errors
 
 	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
 			jsr .ld_get_byte		;fetch barrier
@@ -200,10 +200,6 @@ bitfire_loadraw_
 .bitfire_load_block
 			jsr .ld_get_byte		;fetch blockaddr hi
 			sta .ld_store + 2		;where to place the block?
-;.sau			sta $1000
-;			inc .sau + 1
-;			ldx .sau + 1
-;			stx $0fff
 			tay				;preserve value in Y
 			jsr .ld_get_byte
 			sta .ld_store + 1
