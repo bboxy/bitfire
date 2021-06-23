@@ -309,10 +309,24 @@ jsr link_load_next_comp		;load
 
 Other possibilities are to use syncpoints in SIDs and sync to those syncpoints. There's a syncpoint.inc included to have a single file to edit with all framecounts, so that the timings are not scattered all over your project.
 
-Drive Speed / Wobble
---------------------
+Technical Limitations
+---------------------
+
+1. Drive Speed / Wobble
 
 It might be a good idea to hav a look at the rpm*.prgs at this URL:
 https://sourceforge.net/p/vice-emu/code/HEAD/tree/testprogs/drive/rpm/
 
 Please check your drive so that it is running at 300 rpm. In fact the loader can cope with floppys that are off that range by a few rounds, still it will have retries and possible read errors and hickups. Belt driven drives (which can be found in 1541, 1541C and 1541-ii) show a so called wobble, so the drive's rotation speed is drifting between a minimum and maximum in a sinus like manner. There's also 1541-ii drives out there (jpn, sankyo) that come along with a direct driven spindle. The plot-programs show a quite straight line then. On other drives, one can see howstrong the amplitude of the wobble is. I have drives that left the green area by quite a bit, and have drives with alps-mechanics, that jitter more or less randomly. They throw the most read errors in my tests. Things were better, when the disks were written with a drive, that has a direct drive. If the disks are written with the same floppy, on can assure, that the track alignment is the same, but when written with a strong wobble and read back with the same strong wobble, amplitudes can add up to twice the wobble, reading speed can increase and decrease fast and that can trip the gcr-read-loop of the loader. There are many sanity checks implemented, as the eor-checksum of a sector is a bit weak, it can happen that the chcksum is still okay, but the content of a sector is wrong. So the last trailing bytes after the checksum are also checked for being zero. Also the header is double checked, if track, sector and disk-id are correct besides the checksum. A lot of tests on all kind of hardware showed, that there's the possibility of a file being loaded with a corrupt content in very seldom cases due to this physical restrictions. The gcr-loop used in the rom takes only 19 cycles for a byte to read from disk, that might allow for more tolerance regarding that matter.
+
+2. Electromagnetic Fields
+
+During the testing, i discovered, that my screen significantly influences the floppy, that was located beneath. With the screen turned off, i had no read erroros happening, but when having the screen turned on, there's suddenly read-errors and checksum-errors. Creating a distance of around 30cm between floppy and screen, ceased all the problems and reading was error-free. Moving the floppy side by side to the screen, made it even fail completely. I first suspected a bad timing in the gcr-loop, but no matter how i shifted the timing, the errors still happened. The errors also occur on a SX64, th thas the screen and the floppy build in at a fixed distance, so not much one can change here.
+
+3. Cables
+
+Thanks to Ikwai i happened to have hands on a setup wit ha 2m unshielded iec-cable on which the 72-cacle 2bit-ATN transfer failed as it missed it's timing. A slower timing solved the problems, but also exchanging that cable.
+
+4. Buslock
+
+Banging $dd00 hard while the floppy is idle, seems to produce glitches on THCM's SX64. No matter how much i debounced or carefully i dropped line by line, things failed. There's glitchy hardware out there. Not all of those glitches can be handled in a satisfactory manner or by software.
