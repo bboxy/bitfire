@@ -37,19 +37,25 @@
 !src "config.inc"
 !src "constants.inc"
 
-;A,D,G,H,L,N,O
 ;config params
-.POSTPONED_XFER		= 0 ;ALPS drive fails if reading is started directly after stepping action
-.CACHED_SECTOR		= 0
+.POSTPONED_XFER		= 0 ;postpone xfer of block until first halfstep to cover settle time for head transport
+.CACHED_SECTOR		= 0 ;cache last sector, only makes sense of combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
+;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
+;ldy <.last_block_num
+;inc .wanted,y
+;set cached flag?
+;reenter read_sector
+;skip xfer if cached is set? eof + cached = go to idle and finally drop all lines?
+
 .FORCE_LAST_BLOCK	= 0
-.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and fails on 2 of my floppys, same as timer value below $1a
+.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys
 .DELAY_SPIN_DOWN	= 0
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
-.SANCHECK_HEADER_0F	= 0	;
-.SANCHECK_HEADER_ID	= 0	;
-.SANCHECK_TRAILING_ZERO = 1
-.SANCHECK_TRACK		= 1	;
-.SANCHECK_SECTOR	= 0	;
+.SANCHECK_HEADER_0F	= 0 ;does never trigger
+.SANCHECK_HEADER_ID	= 0 ;does never trigger
+.SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
+.SANCHECK_TRACK		= 1 ;check if on right track after header is read
+.SANCHECK_SECTOR	= 0 ;
 .INTERLEAVE		= 4
 .GCR_125		= 1
 
@@ -278,7 +284,7 @@ ___			= $ff
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
 ;              1                      ccccccccccccc   2                    3             v   ccccc      v      4             v      5         bbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;                111                    ccccccccccccc   222          333           vvv ccccc      vvv    444           vvv    555     bbbbbbbb
+;              111                    ccccccccccccc   222          333           vvv ccccc      vvv    444           vvv    555       bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
