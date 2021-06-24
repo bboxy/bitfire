@@ -327,6 +327,22 @@ During the testing, i discovered, that my screen significantly influences the fl
 
 Thanks to Ikwai i happened to have hands on a setup wit ha 2m unshielded iec-cable on which the 72-cacle 2bit-ATN transfer failed as it missed it's timing. A slower timing solved the problems, but also exchanging that cable.
 
-4. Buslock
+4. Unsettled Head
+
+Starting to read from disk directly after stepping can also lead to checksum errors, so waiting a bit is adviseable. To not waste time, data is sent directly after stepping (some even do a halftrack in between, like sparkle. Had done that too in the very early versions of bitfire, but dropped that to save code, it didn't bring much speed gain)
+
+5. Spin Up
+
+During spin up of teh drive, the gcr read might fail, as it misses the window where timing is optimal, either by spinning too slow yet, or by overshooting. This also can cause checksum errors. As one file ends on teh same sector, where a new one begins, we can force the last sector of a file to be read last. Upon loading of the next file, the sector is already cached and present and the first file chunk can be sind during spin up. This covers at least a few errors that else occur on spin up.
+
+6. Buslock
 
 Banging $dd00 hard while the floppy is idle, seems to produce glitches on THCM's SX64. No matter how much i debounced or carefully i dropped line by line, things failed. There's glitchy hardware out there. Not all of those glitches can be handled in a satisfactory manner or by software.
+
+7. Jitter
+
+The gcr read usually introduced 3 cycles jitter by using bvc * to sync on a byte_ready. Krill showed, that one can also use a bunch of bvs .loop to sync on a byte, what introduces only cycles jitter and allows for a better timing within range.
+
+8. Fast Stepping
+
+The so called shrydar-stepping that does the second half-step already $0c00 cycles after the first, works on most drives for single steps, but i also bumped in a 1541-ii that would choke and end up on a half track and failing to read any further.

@@ -47,8 +47,9 @@ dst_		= $1a
 prnt		= $1c
 prnt_		= $1e
 err		= $24
+endh		= $26
 
-accum		= $26
+accum		= $30
 
 screen		= $2000
 
@@ -384,38 +385,41 @@ checksum
 		lda #$07
 		jsr setcol
 
-		lda loads,y
-		tax
-		clc
-		adc sizes,y
-		sta endl
-		lda loads+1,y
-		sta srch
-;		sta srcd
-		adc sizes+1,y
+		lda sizes + 1,y
 		sta endh
 
+		lax sizes,y
+		clc
+		adc loads,y
+		sta srch
+		sta srcd
+		lda loads + 1 ,y
+		sbc #$00
+		sta srch + 1
+		sta srcd + 1
+
+		txa
+		eor #$ff
+		tax
+		inx
+
+		beq +
+		inc endh
++
+
 		lda #$00
+		tay
 -
 		clc
-srch = * + 2
+srch = * + 1
 		adc $1000,x
-;		tay
-;		lda #$ff
-srcd = * + 2
-;		lda $1000,x
-;		tya
+srcd = * + 1
+		sta $1000,x	;overwrite with junk
 		inx
-		bne +
-		inc srch
-;		inc srcd
-+
-endl = * + 1
-		cpx #$00
 		bne -
-		ldy srch
-endh = * + 1
-		cpy #$00
+		inc srch + 1
+		inc srcd + 1
+		dec endh
 		bne -
 		ldx numb+1
 		cmp chksums,x
