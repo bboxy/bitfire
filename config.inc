@@ -28,6 +28,8 @@ CONFIG_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resid
 ;options for drivecode
 CONFIG_MOTOR_ALWAYS_ON		= 0		;If you want to be annoying, let the motor spin during the whole demo :-D
 
+CONFIG_DEBUG			= 1		;transfer retry-counts to c64 for benchmarking
+
 CONFIG_LOADED			= 1
 
 }

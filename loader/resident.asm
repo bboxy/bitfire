@@ -188,10 +188,12 @@ bitfire_loadraw_
 			jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
 			php				;preserve flag
 			;extract errors here:
+	!if CONFIG_NMI_GAPS = 0 & CONFIG_DEBUG = 1 {
 			asr #$7c
 			lsr
 			adc <bitfire_errors
 			sta <bitfire_errors
+	}
 
 	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
 			jsr .ld_get_byte		;fetch barrier

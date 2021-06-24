@@ -278,13 +278,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;              1                       ggggggccccccccccc   2                   ggggggggg...3ggggggggg                 ccccccc   4             v      5         bbbbbbbbbbbbb
+;                1                       ggggggccccccccccc   2                   ggggggggg...3ggggggggg                 ccccccc   4             v      5       bbbbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;              1                       ggggccccccccccc   2                   gggggg...3gggggg                 ccccccc   4             v      5         bbbbbbbbbbb
+;                1                       ggggccccccccccc   2                   gggggg...3gggggg                 ccccccc   4             v      5       bbbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;              1                       ggccccccccccc   2                   ggg...3ggg                 ccccccc   4             v      5         bbbbbbbbb
+;                1                       ggccccccccccc   2                   ggg...3ggg                 ccccccc   4             v      5       bbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              1                       ccccccccccc   2                   ...3                 ccccccc   4             v      5         bbbbbbb
+;                1                       ccccccccccc   2                   ...3                 ccccccc   4             v      5       bbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -294,6 +294,7 @@ ___			= $ff
 			nop
 			nop
 .read_loop							;        -> $0100,x
+			ldx #$3e
 			lda $1c01				;22333334
 			sax <.threes + 1
 			asr #$c1				;lookup? -> 4 cycles
@@ -349,7 +350,6 @@ ___			= $ff
 			sax <.twos + 1
 			and #$f8				;XXX TODO could shift with asr and compress ones table?
 			tay
-			ldx #$3e
 								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 .gcr_slow2		bvs .read_loop
 			bvs .read_loop

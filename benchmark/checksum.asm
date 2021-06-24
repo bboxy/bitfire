@@ -387,12 +387,18 @@ checksum
 
 		lda sizes + 1,y
 		sta endh
+		inc endh
 
 		lax sizes,y
 		clc
 		adc loads,y
 		sta srch
 		sta srcd
+		txa
+		bne +
+		dec endh
+		sec
++
 		lda loads + 1 ,y
 		sbc #$00
 		sta srch + 1
@@ -402,10 +408,6 @@ checksum
 		eor #$ff
 		tax
 		inx
-
-		beq +
-		inc endh
-+
 
 		lda #$00
 		tay

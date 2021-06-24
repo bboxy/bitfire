@@ -346,3 +346,8 @@ The gcr read usually introduced 3 cycles jitter by using bvc * to sync on a byte
 8. Fast Stepping
 
 The so called shrydar-stepping that does the second half-step already $0c00 cycles after the first, works on most drives for single steps, but i also bumped in a 1541-ii that would choke and end up on a half track and failing to read any further.
+
+Testing
+-------
+
+Bitfire has been tested on various hardware, 5 1541-ii drives (Newtronics, Sankyo, JPN mechanics), 2 1541C (shortboard, Newtronics) and 1 1541 (longboard, 3 different ALPS mechanics), 11 different cables, daisychained and single drive, 4 c64 (breadbox) 1 c64c, SX64 with ALPS drive.
