@@ -394,23 +394,21 @@ checksum
 		adc loads,y
 		sta srch
 		sta srcd
-		txa
-		bne +
-		dec endh
-		sec
-+
-		lda loads + 1 ,y
-		sbc #$00
-		sta srch + 1
-		sta srcd + 1
 
 		txa
 		eor #$ff
 		tax
 		inx
+		bne +
+		dec endh
+		sec
++
+		lda loads + 1,y
+		sbc #$00
+		sta srch + 1
+		sta srcd + 1
 
 		lda #$00
-		tay
 -
 		clc
 srch = * + 1

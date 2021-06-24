@@ -199,9 +199,8 @@
 ;.free			= .zp_start + $21
 ;.free			= .zp_start + $22
 ;.free			= .zp_start + $23
-.byte			= .zp_start + $28
-.dir_entry_num		= .zp_start + $29
-.blocks 		= .zp_start + $30			;2 bytes
+.ser2bin		= .zp_start + $30			;$30,$31,$38,$39
+.blocks 		= .zp_start + $28			;2 bytes
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
@@ -222,7 +221,7 @@
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
-;.free			= .zp_start + $7a
+.dir_entry_num		= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
 
 .DT			= 18					;dir_track
@@ -231,6 +230,8 @@
 .BL			= 0					;blocks_on_list
 .WT			= $ff					;wanted list
 ___			= $ff
+.S0			= $00 xor .EOR_VAL
+.S1			= $09 xor .EOR_VAL
 
 .tab00005555_hi		= * + $00
 .tab00333330_hi		= * + $00
@@ -262,7 +263,7 @@ ___			= $ff
                         !byte ___, $b0, $80, $a0, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
                         !byte .DS, .BL, $f0, $1e, $70, $1f, $60, $17, ___, ___, $b0, $1a, $30, $1b, $20, $13	;10
                         !byte ___, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
-                        !byte ___, ___, $e0, $16, $d0, $1c, $c0, $14, ___, ___, $a0, $12, $90, $18, .WT, .WT	;30
+                        !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, .WT, .WT	;30
                         !byte .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT	;40
                         !byte .WT, .WT, .WT, $0e, ___, $0f, .DT, $07, .DT, ___, ___, $0a, ___, $0b, ___, $03	;50
                         !byte .PA, .PA, .PA, .PA, .PA, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
@@ -389,54 +390,46 @@ ___			= $ff
 
 .gcr_00
 			ldy $01
-			bne +					;9 cycles (jmp .gcr_00, ldy $00, jmp +)
+			bne +					;9 cycles (jmp .gcr_00, ldy $01, bne +)
 			nop
 !if .GCR_125 = 1 {
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 }
 +
-			;jmp
-			;ldy $00
-			;jmp
 			lda $1c01
-			ldy $01					;9 cycles (ldy $00, jmp +, jmp .gcr_slow1 + 3)
-			bne +
+			jmp +					;9 cycles (jmp +, jmp +, jmp .gcr_slow1 + 3)
 .gcr_20
-			;jmp
-			ldy $01
+			ldy $01					;6 cycles (jmp .gcr_20, ldy $01)
 			lda $1c01
-			ldy $01
 +
-			jmp .gcr_slow1 + 3
-			nop
-			nop
-			nop
+			jmp +					;6 cycles (jmp +, jmp .gcr_slow1 + 3)
+.gcr_40
+								;3 ccles (jmp .gcr_40)
+			lda $1c01
++
+			jmp .gcr_slow1 + 3			;3 cycles (jmp .gcr_slow1 + 3)
 			nop
 
 !if .GCR_125 = 1 {
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 }
-.gcr_40
-			;jmp
-			lda $1c01
-			jmp .gcr_slow1 + 3
 
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
+
 .start_send							;entered with c = 0
 			lda #.preloop - .branch - 2		;setup branch to point to preloop first
 			sta .branch + 1
 			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
-			ldx #$0f				;masking value
 .preloop
 			lda <.preamble_data,y			;meh, 16 bit, lax xx,y would be 8 bit
+			ldx #$09				;masking value
 			sbx #$00				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
-			and #$f0
-			eor .ser2bin,x				;swap bits 3 and 0
+			eor <.ser2bin,x				;swap bits 3 and 0
 			ldx #$0f				;masking value for later sax $1800 and for preamble encoding
 			bne .preamble_entry			;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
 .send_sector_data
@@ -517,14 +510,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .td_code_back
-			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
-			cmp #BITFIRE_REQ_DISC
-			bcs +
-			jmp .load_file_				;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
-+
-			eor .dir_diskside			;compare side info
-			beq *+5
-			jmp .turn_disc				;XXX TODO two times out of range :-( still wrong side
 			sta <.filenum				;reset filenum
 			top
 
@@ -557,6 +542,12 @@ ___			= $ff
 			ldy #$80				;expect a whole new byte and start with a free bus
 			tya
 			sty $1800				;clear lines -> ready
+-
+			lda $1800				;wait until bit 0 2 and 7 drop, bit 2 will drop last
+			ora $1800
+			ora $1800
+			bne -
+
 .sd_check
 			ldx $1800
 			bne .wait_bit_
@@ -870,10 +861,9 @@ ___			= $ff
 .set_bitrate
 			tay
 !if .SANCHECK_TRACK = 1 {
-			ldx #$0f
+			ldx #$09
 			sbx #$00
-			and #$f0
-			eor .ser2bin,x
+			eor <.ser2bin,x
 			sta <.track_frob			;needs to be precacled here
 }
 			ldx #$fe				;continue after max_sectors
@@ -897,11 +887,11 @@ ___			= $ff
 			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 +
 
+			sta .br_gcr + 1
 			rol					;00000xx1
 !if .SANCHECK_BVS_LOOP = 1 {
 			sax .br0 + 1				;$00,$02,$04,$06
 }
-			sax .br_gcr + 1
 			asl					;shift to right position
 			asl
 			asl
@@ -950,19 +940,17 @@ ___			= $ff
 			stx <.gcr_slow1 + 2
 
 .br_gcr			lda #$00
-			lsr
+			clc
 			sta .gcr_slow3 + 1
 			adc #.read_loop - .gcr_slow2 - 5
 			ldx #$00
 -
 			sta <.gcr_slow2 + 1,x
-			sec
-			sbc #2
+			sbc #1
 			inx
 			inx
 			cpx #.gcr_slow2_ - .gcr_slow2
 			bne -
-
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1089,10 +1077,9 @@ ___			= $ff
 }
 			;XXX TODO, can only be $1x or 0x
 			pla					;header_sector
-			ldx #$0f
+			ldx #$09
 			sbx #$00
-			and #$f0
-			eor .ser2bin,x
+			eor <.ser2bin,x
 			tax
 			stx <.is_loaded_sector
 !if .SANCHECK_SECTOR = 1 {
@@ -1148,11 +1135,15 @@ ___			= $ff
 			asr #$c1				;lookup? -> 4 cycles
 .header_t2		eor #$c0
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
-.gcr_slow3		beq +
+
+.gcr_slow3		beq +					;XXX TODO can also be moved to ZP and jmp .gcr_entry can be adopted
 			nop
 			nop
 			nop
 +
+!if >* != >.gcr_slow3 {
+	!error "gcr_sow3 branch crosses page"
+}
 			sta <.chksum + 1 - $3e,x
 			lda #.EOR_VAL
 			jmp .gcr_entry				;32 cycles until entry
@@ -1358,10 +1349,9 @@ ___			= $ff
 ;			ldy #$ff
 ;-
 ;			pla
-;			ldx #$0f
+;			ldx #$09
 ;			sbx #$00
-;			and #$f0
-;			eor .ser2bin,x
+;			eor <.ser2bin,x
 ;			sta $0700,y
 ;			dey
 ;			tsx
@@ -1412,24 +1402,15 @@ ___			= $ff
 ;                        !byte $70, ___, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, ___
 ;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
 ;                        !byte $30, ___, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, ___
-.ser2bin
-			!byte $00 xor .EOR_VAL
-			!byte $08 xor .EOR_VAL
-			!byte $02 xor .EOR_VAL
-			!byte $0a xor .EOR_VAL
-			!byte $04 xor .EOR_VAL
-			!byte $0c xor .EOR_VAL
-			!byte $06 xor .EOR_VAL
-			!byte $0e xor .EOR_VAL
 
-			!byte $01 xor .EOR_VAL	;same as above but upside down and xor $0f? or same as above but + 1 -> bit 8 adds 1
-			!byte $09 xor .EOR_VAL
-			!byte $03 xor .EOR_VAL
-			!byte $0b xor .EOR_VAL
-			!byte $05 xor .EOR_VAL
-			!byte $0d xor .EOR_VAL
-			!byte $07 xor .EOR_VAL
-			!byte $0f xor .EOR_VAL
+.td_code_
+			bcs +
+			jmp .load_file_				;XXX TODO bcc .load_file but bus_lock gets in our way, we should jmp there to keep distances short
++
+			eor .dir_diskside			;compare side info
+			beq *+5
+			jmp .turn_disc				;XXX TODO two times out of range :-( still wrong side
+			jmp .td_code_back
 
 ;                        !byte $50, $91, $92, $93, $0d, $95, $96, $97, $40, $99, $9a, $9b, $05, $9d, $9e, $9f
 ;                        !byte $a0, $a1, $a2, $a3, $a4, $a5, $a6, $a7, $80, $0e, $0f, $07, $00, $0a, $0b, $03
@@ -1441,7 +1422,6 @@ ___			= $ff
 
 			!byte $50
 .turn_disc_back
-.td_code
 			ldy #$00
 			dop
 			!byte $0d
@@ -1454,25 +1434,25 @@ ___			= $ff
 			sta .en_dis_td
 -
 			pla
-			ldx #$0f
+			ldx #$09
 			sbx #$00
 			jmp +
 
                         !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
                         !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
 +
-			and #$f0
-			eor .ser2bin,x				;swap bits 3 and 0
+			eor <.ser2bin,x				;swap bits 3 and 0
 			dey
+			sta .directory,y
 			jmp +
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 +
-			sta .directory,y
 			bne -
-			jmp .td_code_back
-			nop
+			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
+			cmp #BITFIRE_REQ_DISC
+			jmp .td_code_
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
                         !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
