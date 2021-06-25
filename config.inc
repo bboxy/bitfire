@@ -26,7 +26,7 @@ CONFIG_NMI_GAPS			= 0		;Leaves gaps @ $0200 and $0300 (if resident part is at de
 CONFIG_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resident part for later use, so upcoming parts do not need an own detection anymore but can read out that values again
 
 ;options for drivecode
-CONFIG_MOTOR_ALWAYS_ON		= 1		;If you want to be annoying, let the motor spin during the whole demo :-D
+CONFIG_MOTOR_ALWAYS_ON		= 0		;If you want to be annoying, let the motor spin during the whole demo :-D
 
 CONFIG_DEBUG			= 1		;transfer retry-counts to c64 for benchmarking
 

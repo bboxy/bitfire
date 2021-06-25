@@ -154,8 +154,10 @@ bitfire_send_byte_
 +
 			eor #$20
 			sta $dd02 - $3f,x
-;			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
-;			pla
+			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
+			pla
+			pha
+			pla
 			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 			bne .ld_loop
 -
