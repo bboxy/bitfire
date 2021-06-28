@@ -41,14 +41,16 @@ bitfire_load_addr_hi	= .filenum + 1
 bitfire_load_addr_lo	= .lz_src + 0
 bitfire_load_addr_hi	= .lz_src + 1
 	}
+	!if CONFIG_DEBUG = 1 {
 bitfire_errors		= CONFIG_ZP_ADDR + 1
+	}
 }
 
 !if CONFIG_DECOMP = 1 {
-.lz_bits		= CONFIG_ZP_ADDR + 2
-.lz_dst			= CONFIG_ZP_ADDR + 3
-.lz_src			= CONFIG_ZP_ADDR + 5
-.lz_len_hi		= CONFIG_ZP_ADDR + 7
+.lz_bits		= CONFIG_ZP_ADDR + 1 + CONFIG_DEBUG
+.lz_dst			= CONFIG_ZP_ADDR + 2 + CONFIG_DEBUG
+.lz_src			= CONFIG_ZP_ADDR + 4 + CONFIG_DEBUG
+.lz_len_hi		= CONFIG_ZP_ADDR + 6 + CONFIG_DEBUG
 }
 
 bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only aggregate labels from this file into loader_*.inc
