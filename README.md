@@ -9,7 +9,7 @@ Bitfire is a fixed interleave loadersystem for c64 with depacker, a basic framew
 The sectors on a foppy disc have 256 bytes of payload. Files consist of a chain of sectors on disc that are linked together, the first two bytes of a sectors payload are used to either point to the next track/sector or give the size of the last sector being used.
 This means, that the de facto payload per sector is 254 bytes, an awful number to calculate with easy. Also, the last sector of a file leaves quite a few bytes unused, as files always start on a new sector at position 0 within the sector.
 
-When assuming a fixed interleave for the blocks the file is located on and by knowing the filsizes beforehand, in fact each single byte on a disc can be used for files, and files can be loaded in full 256 bytes large chunks, what simplifies a few things in a loader.
+When assuming a fixed interleave for the blocks the file is located on and by knowing the filsizes beforehand, in fact each single byte on a disc can be used for files, and files can be loaded in chunks of 256 bytes, what simplifies a few things in a loader.
 So this means, with an interleave of 4, the sectors 0, 4, 8, 12, 16, 20 are used, on wrap around, 1, 5, 9, ... and so on. When the filesize is known beforehand, the size of the last sector is also known.
 Now it is possible to glue each file after another without any gaps in between. This means however that a new dir-layout is needed, as the native layout can not compensate such design changes. For that purpose 2 sectors on track 18 are spent with 63 entries each, while the native directory still exists for dir-layout, standard files and the bootloader.
 
@@ -48,13 +48,27 @@ Things are shifted and masked together, so that the read values represent the fo
 00333330
 44444000
 00005555
-05666660        note: the last bit portion of 5 is added with the 6th nibble
-77700077
-77788888	note: resulting table is big, but this saves a masking operation
+05666660        note: the last bit of 5 is added with the 6th nibble
+0700dd77	note: bit 0 and 2 can be formed to one partition, this are the remaining bits 1, 3, 4
+7d788888	note: resulting table is big, but this saves a masking operation and decodes 7 bits at once!
 ```
 
-The tables can be arranged in a away (with offsets) that many of them fit together into one area to save space.
-Read bytes are directly stored on the stack wie PHA, as this only needs 3 cycles for a written byte. This however makes it impossible to use the stack on most of the code, as JSR calls would destroy data on the stack.
+As one can see, the quintuples can be partitioned in some way, but in the gcr encoding choosen this is very restricted. Bit 2 even reflects the same bit in the gcr and raw data, bit 0 can also be clipped of and added again with ora, adc or eor. So a quintuple can be partitoned like this:
+```
+43210 -> 4321.  +  ....0
+43210 -> 43.10  +  ..2..
+43210 -> 43.1.  +  ..2.0
+```
+
+Sadly, there's no partitioning possible in those ways (only if you change the mapping for the gcr-codes):
+```
+43210 -> 432..  +  ...10
+43210 -> 43...  +  ..210
+43210 -> 4....  +  .3210
+```
+
+The tables can be arranged in a away (with offsets) that many of them fit together into one area to save space. One table is located in the zeropage, the gaps are used for variables and lists for the loader. Another table is located @ $0600 where the gaps are filled with code. The 0700dd77-table is located @ $0200, as it is very small, it can be easily interleaved into the code. If using a more strict mask on the seventh table or also other tables, the size could be reduced even more, but al this costs cycles in the gcr-loop, resulting in a less tolerant behaviour.
+Read bytes are directly stored on the stack via PHA, as this only needs 3 cycles for a written byte. This however makes it impossible to use the stack on most of the code, so most of all JSR calls need to be avoided as they would destroy data on the stack.
 
 ## zx0 packer
 
