@@ -1,3 +1,9 @@
+;/!\ ATTENTION
+;This is the depacker for the original zx0 format provided by zx0 done by Einar Saukas.
+;It will only work with the packer provided in this dir as well. It will not work with the zx0 and depacker provided with bitfire.
+;The files in this dir are just a proof of concept and provided for compatibility rasons.
+;Use loader/depacker.asm or loader/resident.asm with the packer in packer/zx0
+
 !cpu 6510
 		* = $1000
 
