@@ -49,8 +49,8 @@ Things are shifted and masked together, so that the read values represent the fo
 44444000
 00005555
 05666660        note: the last bit of 5 is added with the 6th nibble
-0700dd77	note: bit 0 and 2 can be formed to one partition, this are the remaining bits 1, 3, 4
-7d788888	note: resulting table is big, but this saves a masking operation and decodes 7 bits at once!
+0700dd77	note: bit 0, 2 can be formed to one partition, this are the remaining bits 1, 3, 4
+7d788888	note: resulting table is big, but this saves masking and decodes 7 bits at once!
 ```
 
 As one can see, the quintuples can be partitioned in some way, but in the gcr encoding choosen this is very restricted. Bit 2 even reflects the same bit in the gcr and raw data, bit 0 can also be clipped of and added again with ora, adc or eor. So a quintuple can be partitoned like this:
