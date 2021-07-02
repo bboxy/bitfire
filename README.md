@@ -77,3 +77,7 @@ Most notably changes in the encoding are the drop of the xor 0xff on the LSB of 
 Also inplace depacking was added, so that files can be directly loaded and depacked within the memory range the unpacked data would land anyway. So no more safety-margins. deltas, overlap or however you name it has to be taken care of, except, if you depack out of another location. To achieve that, the end-marker is clamped off, and encoding is interupted as soon as a match or literal would overwrite the still packed data, from there on the data is output as plain unencoded literal. It is there in memory, where it belongs anyway.
 
 Besides the adopted version there's also a compatible version for the original zx0 format, it can be found [here](https://github.com/bboxy/bitfire/tree/master/bitfire/zx0/6502) including the original zx0.
+
+## future work
+
+The tables needed for decoding could be shrunk in several ways. One mean to do so is more precise masking and not adding dont't care bits. By swapping nibbles (3 and 4), the 44444000_lo table could be replaced by the 11111000_hi table. The eor-checksum for the native d64-format would then however fail. The tables 05666660_lo and 7d788888_lo could be used in the same way if an additional bit would be added or the 7d788888 table is shifted one to the left. So far this means extra code to achieve smaller tables, and this it is not implemented. But there's quite some potential left.
