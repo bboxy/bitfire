@@ -31,10 +31,10 @@ CONFIG_ZP_ADDR		= $02
 
 .CHECK_EVEN		= 1
 
-.lz_bits		= CONFIG_ZP_ADDR + 1
-.lz_dst			= CONFIG_ZP_ADDR + 2
-.lz_src			= CONFIG_ZP_ADDR + 4
-.lz_len_hi		= CONFIG_ZP_ADDR + 6
+.lz_bits		= CONFIG_ZP_ADDR + 0
+.lz_dst			= CONFIG_ZP_ADDR + 1
+.lz_src			= CONFIG_ZP_ADDR + 3
+.lz_len_hi		= CONFIG_ZP_ADDR + 5
 
 ;---------------------------------------------------------------------------------
 ;DEPACKER STUFF
