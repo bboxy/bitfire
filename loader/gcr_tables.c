@@ -295,7 +295,7 @@ int main () {
 	create_table(gcr, NULL          ,      results11111lo, tabbbbbb000, "edcba...", 0x7f, 0x0f);	//fours
 	create_table(gcr, results11110hi_orig, NULL          , tab0000AAAA, "....EDCB", 0x7f, 0xf0);	//fives
 	create_table(gcr, results00001hi_orig, results11111lo, tab0Abbbbb0, ".Aedcba.", 0x7f, 0x1f);	//sixths
-	create_table(gcr, results11010hi_orig, results11111lo, tabAAA000AA, "..B...ED", 0x7f, 0xb0);	//sevens
+	create_table(gcr, results11010hi_orig, results11111lo, tabAAA000AA, "..B.baED", 0x7f, 0xb0);	//sevens
 	create_table(gcr, results00101hi_orig, results11111lo, tab000bbbbb, "CBAedcba", 0x7f, 0x5f);	//eigths
 
 	printf("tabAAAAA000\n");
@@ -343,7 +343,7 @@ int main () {
 	merge_table(table, tab0bb00bbb, 0x00, 0, 0, 0); //22222
 	merge_table(table, tabbbbbb000, 0x04, 0, 0, 0);	//44444
 	merge_table(table, tabAAAAA000, 0x00, 0, 0, 0);	//11111
-	for (i = 0; i < 256; i++) if (table[i] < 0) table[i] = i;
+	//for (i = 0; i < 256; i++) if (table[i] < 0) table[i] = i;
 	printf("combined\n");
 	print_table(table, 0, 255);
 	//printf("11111000\n");
