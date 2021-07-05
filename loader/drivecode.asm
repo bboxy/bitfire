@@ -50,7 +50,7 @@
 .FORCE_LAST_BLOCK	= 1
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
 .DELAY_SPIN_DOWN	= 1
-.SANCHECK_BVS_LOOP	= 1 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
+.SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
 .SANCHECK_HEADER_0F	= 0 ;does never trigger
 .SANCHECK_HEADER_ID	= 0 ;does never trigger
 .SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
@@ -842,7 +842,7 @@ ___			= $ff
 			bpl *-3
 }
 
-			lda <.to_track				;already part of set_bitrate -> load track
+			ldy <.track				;already part of set_bitrate -> load track
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -851,8 +851,8 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .set_bitrate
-			tay
-!if .SANCHECK_TRACK = 1 {
+!if .SANCHECK_TRACK = 1  & .SANCHECK_HEADER_ID = 1 {
+			tya
 			ldx #$09
 			sbx #$00
 			eor <.ser2bin,x
@@ -1059,7 +1059,14 @@ ___			= $ff
 }
 			pla					;.header_track
 !if .SANCHECK_TRACK = 1 {
-			cmp <.track_frob			;needs to be precalced, else we run out of time
+	!if .SANCHECK_HEADER_ID = 1  {
+			eor <.track_frob			;needs to be precalced, else we run out of time
+	} else {
+			ldx #$09
+			sbx #$00
+			eor <.ser2bin,x
+			eor <.track
+	}
 			bne .retry_no_count
 }
 			;XXX TODO, can only be $1x or 0x
