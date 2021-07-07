@@ -53,6 +53,7 @@ accum		= $30
 
 screen		= $2000
 
+!src "../config.inc"
 !src "../loader/loader_acme.inc"
 !src "../macros/link_macros_acme.inc"
 
@@ -73,7 +74,9 @@ screen		= $2000
 		ldx #$00
 		stx err
 		stx err + 1
+!if CONFIG_DEBUG == 1 {
 		stx bitfire_errors
+}
 -
 		lda #$20
 		sta screen + $0000,x
@@ -308,13 +311,16 @@ numb		lda #$00		;file number
 		bne +
 }
 		ldx numb + 1
+!if CONFIG_DEBUG == 1 {
 		lda accum,x
 		clc
 		adc bitfire_errors
 		sta accum,x
+}
 
 		jsr checksum
 +
+!if CONFIG_DEBUG == 1 {
 		lda err
 		clc
 		adc bitfire_errors
@@ -324,6 +330,7 @@ numb		lda #$00		;file number
 +
 		lda #$00
 		sta bitfire_errors
+}
 
 		inc numb+1
 		lda numb+1
@@ -495,6 +502,7 @@ rev
 		lda $0f03,x
 		jsr print_
 
+!if CONFIG_DEBUG == 1 {
 		iny
 		iny
 		lda bitfire_errors
@@ -505,6 +513,7 @@ rev
 		ldx numb + 1
 		lda accum,x
 		jsr print_
+}
 
 		lda prnt + 1
 		and #$03

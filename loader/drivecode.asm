@@ -354,7 +354,7 @@ ___			= $ff
 			;sta <.eigths + 1
 			;asr #$40
 			;tay
-			
+
 			;asl
 			;tax
 			;arr #$80
@@ -1040,11 +1040,13 @@ ___			= $ff
 			;lda $1c00
 			;eor #.LED_ON
 			;sta $1c00
+!if CONFIG_DEBUG = 1 {
 			lax .errors + 1
 			sbx #-4
 			bmi +
 			stx .errors + 1
 +
+}
 .next_sector
 .read_gcr_header						;read_header and do checksum, if not okay, do again
 			ldx #$07				;bytes to fetch
@@ -1343,6 +1345,7 @@ ___			= $ff
 
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sta <.preamble_data + 2			;block address high
+!if CONFIG_DEBUG = 1 {
 			tya
 .errors			ora #$00
 			;reset per block xfer
@@ -1350,6 +1353,9 @@ ___			= $ff
 			sta <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
 			lda #$00
 			sta .errors + 1
+} else {
+			sty <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
+}
 
 !if .POSTPONED_XFER = 1 {
 			lda <.end_of_file			;eof?
