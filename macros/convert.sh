@@ -12,7 +12,7 @@ sed 's/}/endm/g' | \
 #replace arg within block
 sed 's/\(.*[[:graph:]]\)\.arg/\1\{1\}/g' | \
 #remove trailing + from macros
-sed 's/\([[:space:]]*\)+\(.*\)/\1\2/g' \
+sed 's/\(^[[:space:]]*\)+\(.*\)/\1\2/g' \
 > ./link_macros_dasm.inc
 ################### 64TASS ###################
 cat ./link_macros_acme.inc | \
@@ -29,7 +29,7 @@ sed 's/\(.*[[:graph:]]\)\.arg/\1\\1/g' | \
 #replace .l
 sed 's/\.l/l/g' | \
 #remove trailing + from macros
-sed 's/\([[:space:]]*\)+\(.*\)/\1\2/g' \
+sed 's/\(^[[:space:]]*\)+\(.*\)/\1\2/g' \
 > ./link_macros_64tass.inc
 ################### CA65 ###################
 cat ./link_macros_acme.inc | \
