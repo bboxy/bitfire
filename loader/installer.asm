@@ -287,6 +287,15 @@
 
 		jsr .open_w_15
 		ldy #$00
+.fallb		lda .fallback,y
+		jsr .iecout
+		iny
+		cpy #.fallback_end - .fallback
+		bne .fallb
+		jsr .unlisten
+
+		jsr .open_w_15
+		ldy #$00
 .exec		lda .responder,y
 		jsr .iecout
 		iny
@@ -296,6 +305,7 @@
 
 ;XXX TODO keep current drive in $ba? kill all other drives beforehand, then upload code to #8
 .responder_code	= $0205
+.fallback_code  = $0440
 .atnlo_code	= $0400
 .atnhi_code	= .atnlo_code + $80
 
@@ -312,18 +322,40 @@
 		!word .responder_code
 !pseudopc .responder_code {
 		sei
-		lda #$ff
-		sta $1803
-		ldx #$04
-		stx $1801
-		lsr		;lda #$7f
-		sta $1802
-		ldy #$00
 		ldx #$10
+		ldy #$ff
+		sty $1803
+		iny
+		lda #$7f
+		sta $1802
+		lda #$04
+		sta $1801
 		sty $1800
+		cmp $1801
+		beq *+5
+		jmp .fallback_code
 		jmp ($1800)
 }
 .responder_end
+
+.fallback
+		!text "m-w"
+		!word .fallback_code
+		!byte .fallback_end - .fallback_start
+.fallback_start
+!pseudopc .fallback_code {
+		sty $1803
+.fb1
+		bit $1800
+		bpl .fb1
+		stx $1800
+.fb2
+		bit $1800
+		bmi .fb2
+		sty $1800
+		jmp .fb1
+}
+.fallback_end
 
 .atnlo		!text "m-w"
 		!word .atnlo_code
