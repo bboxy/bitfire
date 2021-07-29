@@ -908,7 +908,7 @@ ___			= $ff
 			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 +
 
-			sta .br_gcr + 1
+			sta .gcr_slow3 + 1
 			rol					;00000xx1
 !if .SANCHECK_BVS_LOOP = 1 {
 			sax .br0 + 1				;$00,$02,$04,$06
@@ -960,9 +960,7 @@ ___			= $ff
 			sta <.gcr_slow1 + 1
 			stx <.gcr_slow1 + 2
 
-.br_gcr			lda #$00
-			sta .gcr_slow3 + 1
-
+			lda .gcr_slow3 + 1
 			clc
 			adc #.read_loop - .gcr_slow2_ - 5	;target of first bvs
 			ldx #.gcr_slow2_ - .gcr_slow2		;num of bvs to fix
