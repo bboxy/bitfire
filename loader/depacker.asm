@@ -23,6 +23,25 @@
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;
 
+;---------------------------------------------------------------------------------
+;EXAMPLE FOR USAGE
+;---------------------------------------------------------------------------------
+
+;			;set up data source
+;			lda #<.packed_data
+;			sta .lz_src + 0
+;			lda #>.packed_data
+;			sta .lz_src + 1
+;			;depack
+;			jsr link_decomp
+;.packed_data
+;			;our packed data
+;			!bin "packed_data.zx0"
+
+;---------------------------------------------------------------------------------
+;VARIABLES
+;---------------------------------------------------------------------------------
+
 !convtab pet
 !cpu 6510
 
@@ -260,3 +279,4 @@ link_decomp
 			sta <.lz_len_hi			;save MSB
 			pla				;restore LSB
 			rts
+
