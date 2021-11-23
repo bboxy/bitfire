@@ -14,7 +14,7 @@ HEADER:= *.h
 all: d64write
 
 d64write: $(SOURCE) $(HEADER)
-	@echo "Buidling d64write..."
+	@echo "Building d64write..."
 	$(VR)$(CC) $(d64write_CFLAGS) -o $@ $(SOURCE)
 
 clean:
