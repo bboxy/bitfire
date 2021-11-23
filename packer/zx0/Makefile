@@ -16,7 +16,7 @@ HEADER:= zx0.h sfx.h
 all: zx0 dzx0
 
 zx0: $(SOURCE) $(HEADER)
-	@echo "Buidling zx0..."
+	@echo "Building zx0..."
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $(SOURCE)
 
 dzx0: dzx0.c
