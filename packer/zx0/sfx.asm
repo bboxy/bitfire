@@ -25,7 +25,7 @@
 
 !cpu 6510
 
-.depacker	= $02
+.depacker	= $01
 .smc_offsetd 	= .depacker - (.depacker_start - .zx0_code_start)
 ;ZX0_SRC_HI1	= .lz_src1     - .smc_offsetd + 2
 ;ZX0_SRC_HI2	= .lz_src2     - .smc_offsetd + 2
@@ -47,7 +47,6 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 
 		;/!\ ATTENTION, the depacker just fits into ZP this way, if it gets larger, the copy routine will overwrite $00, as it is a 8-bit address sta
 		sei
-		inc $01				;XXX TODO could also be copied
 		lda $ba
 		pha
 		ldx #.depacker_end - .depacker_start
@@ -78,6 +77,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		;------------------
 .depacker_start
 !pseudopc .depacker {
+		!byte $38
 .depack
 		;ldy #$00			;is already 0
 		;------------------
