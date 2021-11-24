@@ -18,4 +18,4 @@ d64write: $(SOURCE) $(HEADER)
 	$(VR)$(CC) $(d64write_CFLAGS) -o $@ $(SOURCE)
 
 clean:
-	$(VR)rm d64write
+	$(VR)-rm d64write
