@@ -133,7 +133,10 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		jsr .get_length
 						;XXX TODO encode length - 1 for rep match? but 0 can't be detected then?
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
-		sec				;need sec here if we want to forgo in the beq .lz_calc_msrc
+		;sec				;need sec here if we want to forgo in the beq .lz_calc_msrc
+		bcs +
+		dcp .lz_len_hi
++
 .lz_match_
 		eor #$ff
 		;beq .lz_calc_msrc		;just fall through on zero? $ff + sec -> addition is neutralized and carry is set, so no harm

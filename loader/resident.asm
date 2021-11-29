@@ -407,7 +407,10 @@ bitfire_loadcomp_
 .lz_repeat
 			jsr .lz_length
 			sbc #$01
-			sec				;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
+			bcs +				;fix highbyte of length in case and set carry again (a = $ff -> compare delivers carry = 1)
+			dcp .lz_len_hi
++
+			;sec				;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
