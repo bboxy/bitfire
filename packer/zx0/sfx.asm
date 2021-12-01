@@ -135,7 +135,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
 		;sec				;need sec here if we want to forgo in the beq .lz_calc_msrc
 		bcs +
-		dcp .lz_len_hi
+		dcp <.lz_len_hi
 +
 .lz_match_
 		eor #$ff
