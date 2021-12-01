@@ -107,7 +107,9 @@ ZX0_INLINE_GET_LEN	= 0
 		jsr .lz_get_len
 }
 		sbc #$01			;saves the iny later on
-		sec				;need sec here if we want to forgo in the beq .lz_calc_msrc
+		bcs +
+		dcp .lz_len_hi			;dec highbyte of length by one, a = $ff, so cmp will always set carry for free on top
++
 .lz_match_
 		eor #$ff
 		;beq .lz_calc_msrc		;just fall through on zero? $ff + sec -> addition is neutralized and carry is set, so no harm
