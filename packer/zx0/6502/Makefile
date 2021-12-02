@@ -1,5 +1,5 @@
 ACME ?= acme
-ACME_OPTs ?= -f cbm
+ACME_OPTS ?= -f cbm
 
 all: dzx0
 
