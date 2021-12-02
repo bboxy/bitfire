@@ -28,4 +28,4 @@ sfx.h: sfx.asm
 	#$(VR)rm $(basename $@).lst sfx
 
 clean:
-	$(VR)-rm bitnax sfx.h
+	$(VR)-rm bitnax sfx.h sfx sfx.lst
