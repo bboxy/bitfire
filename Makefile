@@ -10,7 +10,7 @@ else
 VR:=@
 endif
 
-all: zx0 d64write loader macros
+all: zx0 d64write loader
 
 #zx0-play: FORCE
 #	@$(MAKE) $(MAKE_OPTS) -C packer/$@
@@ -45,7 +45,7 @@ clean:
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
-	@$(MAKE) $(MAKE_OPTS) -C macros/ clean
+	#@$(MAKE) $(MAKE_OPTS) -C macros/ clean
 #	@$(MAKE) $(MAKE_OPTS) -C link/ clean
 
 FORCE:
