@@ -1,8 +1,3 @@
-/*
- * ZX0 decompressor - by Einar Saukas
- * https://github.com/einar-saukas/ZX0
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,15 +18,12 @@ typedef struct ctx {
     size_t input_index;
     size_t output_index;
     size_t input_size;
-    size_t output_size;
-    size_t reencoded_size;
     size_t reencoded_index;
     int reencoded_bit_mask;
     int reencoded_bit_value;
     int reencoded_bit_index;
     int bit_mask;
     int bit_value;
-    int backtrack;
     int last_byte;
 } ctx;
 
@@ -104,10 +96,6 @@ int read_byte(ctx* ctx) {
 }
 
 int read_bit(ctx* ctx) {
-    if (ctx->backtrack) {
-        ctx->backtrack = FALSE;
-        return ctx->last_byte & 1;
-    }
     ctx->bit_mask >>= 1;
     if (ctx->bit_mask == 0) {
         ctx->bit_mask = 128;
@@ -116,9 +104,10 @@ int read_bit(ctx* ctx) {
     return ctx->bit_value & ctx->bit_mask ? 1 : 0;
 }
 
-int read_interlaced_elias_gamma(ctx* ctx, int inverted) {
+int read_interlaced_elias_gamma(ctx* ctx, int inverted, int skip) {
     int value = 1;
-    while (!read_bit(ctx)) {
+    while (skip || !read_bit(ctx)) {
+        skip = 0;
         value = (value << 1) | (read_bit(ctx) ^ inverted);
     }
     return value;
@@ -130,8 +119,6 @@ void save_reencoded(ctx* ctx) {
             fprintf(stderr, "Error: Cannot write output file\n");
             exit(1);
         }
-        ctx->reencoded_size = ctx->reencoded_index;
-        ctx->reencoded_index = 0;
     }
 }
 
@@ -141,8 +128,6 @@ void save_output(ctx* ctx) {
             fprintf(stderr, "Error: Cannot write output file\n");
             exit(1);
         }
-        ctx->output_size = ctx->output_index;
-        ctx->output_index = 0;
     }
 }
 
@@ -179,45 +164,44 @@ void decompress(ctx* ctx) {
     ctx->output_index = 0;
 
     ctx->bit_mask = 0;
-    ctx->backtrack = FALSE;
 
     ctx->reencoded_index = 0;
-    ctx->reencoded_size = 0;
     ctx->reencoded_bit_mask = 0;
     ctx->reencoded_bit_value = 0;
     ctx->reencoded_bit_index = 0;
 
 COPY_LITERALS:
-    length = read_interlaced_elias_gamma(ctx, FALSE);
-
+    length = read_interlaced_elias_gamma(ctx, FALSE, 0);
     write_reencoded_interlaced_elias_gamma(ctx, length, 0);
+
     for (i = 0; i < length; i++) {
         byte = read_byte(ctx);
-        write_byte(ctx, byte);
         write_reencoded_byte(ctx, byte);
+        //write_byte(ctx, byte);
     }
+
     bit = read_bit(ctx);
     write_reencoded_bit(ctx, bit);
+
     if (bit) {
         goto COPY_FROM_NEW_OFFSET;
     }
 
-/*COPY_FROM_LAST_OFFSET:*/
-    length = read_interlaced_elias_gamma(ctx, FALSE);
-
+COPY_FROM_LAST_OFFSET:
+    length = read_interlaced_elias_gamma(ctx, FALSE, 0);
     write_reencoded_interlaced_elias_gamma(ctx, length, 0);
 
-    write_bytes(ctx, last_offset, length);
+    //write_bytes(ctx, last_offset, length);
 
     bit = read_bit(ctx);
     write_reencoded_bit(ctx, bit);
+
     if (!bit) {
         goto COPY_LITERALS;
     }
 
 COPY_FROM_NEW_OFFSET:
-    last_offset = read_interlaced_elias_gamma(ctx, TRUE);
-
+    last_offset = read_interlaced_elias_gamma(ctx, TRUE, 0);
     write_reencoded_interlaced_elias_gamma(ctx, last_offset, 0);
 
     if (last_offset == 256) {
@@ -227,18 +211,17 @@ COPY_FROM_NEW_OFFSET:
         }
         return;
     }
+
     byte = read_byte(ctx);
-    ctx->backtrack = TRUE;
     last_offset = last_offset * 128 - (byte >> 1);
+    if (byte & 1) length = 2;
+    else length = read_interlaced_elias_gamma(ctx, FALSE, 1) + 1;
 
-    length = read_interlaced_elias_gamma(ctx, FALSE) + 1;
-
-    write_reencoded_offset(ctx, last_offset, length);	//XXX TODO write 8 bits only
+    write_reencoded_offset(ctx, last_offset, length);
     write_reencoded_interlaced_elias_gamma(ctx, length - 1, 1);
-    write_bytes(ctx, last_offset, length);
+    //write_bytes(ctx, last_offset, length);
 
     bit = read_bit(ctx);
-
     write_reencoded_bit(ctx, bit);
 
     if (bit) {
@@ -278,6 +261,14 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    //TODO
+    //read .cbm file, clamp off load_addr and set load_addr var
+    //keep orig file data in an array to be able to do inplace depacking
+    //saved file-name ist output_name
+    //pack output-name and overwrite with self? works!
+    //load output file
+    //reencode -> also do inplace here
+    //write output file with load_addr/depack_addr and so on
     read_input(&ctx);
     decompress(&ctx);
     printf("reencoded_size: %d\n", ctx.reencoded_index);
