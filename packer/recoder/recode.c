@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "sfx.h"
 
 #define BUFFER_SIZE 65536  /* must be > MAX_OFFSET */
 #define INITIAL_OFFSET 1
@@ -31,7 +32,6 @@ typedef struct ctx {
     int bit_value;
     int last_byte;
     int inplace;
-    int reencoded_bits;
 } ctx;
 
 static int read_number(char* arg) {
@@ -71,17 +71,14 @@ static inline unsigned bit_size(unsigned value) {
 }
 
 void write_reencoded_byte(ctx* ctx, int value) {
-    ctx->reencoded_bits += 8;
     ctx->reencoded_data[ctx->reencoded_index++] = value;
 }
 
 void write_reencoded_bit(ctx* ctx, int value) {
-    ctx->reencoded_bits++;
     if (!ctx->reencoded_bit_mask) {
         ctx->reencoded_bit_mask = 128;
         ctx->reencoded_bit_index = ctx->reencoded_index;
         write_reencoded_byte(ctx, 0);
-        ctx->reencoded_bits -= 8;
     }
     if (value)
         ctx->reencoded_data[ctx->reencoded_bit_index] |= ctx->reencoded_bit_mask;
@@ -160,33 +157,6 @@ void save_reencoded(ctx* ctx, int cbm_orig_addr, int cbm_packed_addr) {
     }
 }
 
-//void save_output(ctx* ctx) {
-//    if (ctx->output_index != 0) {
-//        if (fwrite(ctx->output_data, sizeof(char), ctx->output_index, ctx->ofp) != ctx->output_index) {
-//            fprintf(stderr, "Error: Cannot write output file\n");
-//            exit(1);
-//        }
-//    }
-//}
-
-//void write_byte(ctx* ctx, int value) {
-//    ctx->output_data[ctx->output_index++] = value;
-//    //XXX TODO check for index >= BUFFER_SIZE and bail out
-//}
-
-//void write_bytes(ctx* ctx, int offset, int length) {
-//    int i;
-//
-//    if (offset > ctx->output_index) {
-//        fprintf(stderr, "Error: Invalid data in input file\n");
-//        exit(1);
-//    }
-//    while (length-- > 0) {
-//        i = ctx->output_index - offset;
-//        write_byte(ctx, ctx->output_data[i >= 0 ? i : BUFFER_SIZE + i]);
-//    }
-//}
-
 void read_packed(ctx* ctx) {
     ctx->packed_size = fread(ctx->packed_data, sizeof(char), BUFFER_SIZE, ctx->pfp);
 }
@@ -195,13 +165,12 @@ void copy_inplace_literal(ctx* ctx) {
     int i;
     for (i = ctx->unpacked_index; i < ctx->unpacked_size; i++) {
         ctx->reencoded_data[ctx->packed_index] = ctx->unpacked_data[i];
-        printf("packed: %04x  unpacked: %04x  data: $%02x\n", ctx->packed_index, i, ctx->unpacked_data[i]);
+        //printf("packed: %04x  unpacked: %04x  data: $%02x\n", ctx->packed_index, i, ctx->unpacked_data[i]);
         ctx->packed_index++;
     }
 }
 
 void find_inplace(ctx* ctx) {
-    int last_index = 0;
     int last_offset = INITIAL_OFFSET;
     int length;
     int i;
@@ -217,8 +186,6 @@ void find_inplace(ctx* ctx) {
 
     ctx->bit_mask = 0;
 
-    printf("%d %d\n", (ctx->reencoded_bits + 7) >> 3, ctx->reencoded_index);
-
 COPY_LITERALS:
     length = read_interlaced_elias_gamma(ctx, FALSE, 0);
     for (i = 0; i < length; i++) {
@@ -226,7 +193,7 @@ COPY_LITERALS:
     }
     ctx->unpacked_index += length;
 
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index) + 1;
+    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
     //printf("literal %d %d\n", length, overwrite);
     /* literal would overwrite packed src */
     if (overwrite >= 0) {
@@ -244,12 +211,12 @@ COPY_LITERALS:
         goto COPY_FROM_NEW_OFFSET;
     }
 
-COPY_FROM_LAST_OFFSET:
+//COPY_FROM_LAST_OFFSET:
     length = read_interlaced_elias_gamma(ctx, FALSE, 0);
     ctx->unpacked_index += length;
 
     /* rep would overwrite packed src */
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index) + 1;
+    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
     //printf("rep %d %d\n", length, overwrite);
     if (overwrite >= 0) {
         safe_input_index = ctx->unpacked_index;
@@ -283,7 +250,7 @@ COPY_FROM_NEW_OFFSET:
     ctx->unpacked_index += length;
 
     /* rep would overwrite packed src */
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index) + 1;
+    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
     //printf("match %d %d\n", length, overwrite);
     if (overwrite >= 0) {
         safe_input_index = ctx->unpacked_index;
@@ -318,7 +285,6 @@ void reencode(ctx* ctx) {
     ctx->reencoded_bit_mask = 0;
     ctx->reencoded_bit_value = 0;
     ctx->reencoded_bit_index = 0;
-    ctx->reencoded_bits = 0;
 
 COPY_LITERALS:
     length = read_interlaced_elias_gamma(ctx, FALSE, 0);
@@ -336,7 +302,7 @@ COPY_LITERALS:
         goto COPY_FROM_NEW_OFFSET;
     }
 
-COPY_FROM_LAST_OFFSET:
+//COPY_FROM_LAST_OFFSET:
     length = read_interlaced_elias_gamma(ctx, FALSE, 0);
     write_reencoded_bit(ctx, 0);
     write_reencoded_interlaced_elias_gamma(ctx, length, 0);
@@ -386,12 +352,10 @@ COPY_FROM_NEW_OFFSET:
 int main(int argc, char *argv[]) {
     int cbm_orig_addr = 0;
     int cbm_packed_addr = 0;
-    int cbm_use_prefix = FALSE;
     int cbm_range_from = -1;
     int cbm_range_to = -1;
     int cbm_relocate_packed_addr = -1;
     int cbm_relocate_origin_addr = -1;
-    int cbm_result_size = 0;
     int file_start_pos = 0;
 
     int sfx = FALSE;
@@ -417,8 +381,6 @@ int main(int argc, char *argv[]) {
         if (!strncmp(argv[i], "-", 1) || !strncmp(argv[i], "--", 2)) {
             if (!strcmp(argv[i], "--binfile")) {
                 cbm = FALSE;
-            } else if (!strcmp(argv[i], "--use-prefix")) {
-                cbm_use_prefix = TRUE;
             } else if (!strcmp(argv[i], "--no-inplace")) {
                 ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
@@ -437,6 +399,7 @@ int main(int argc, char *argv[]) {
                 i++;
                 sfx_addr = read_number(argv[i]);
                 sfx = TRUE;
+                ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "-x")) {
                 i++;
                 compressor_path = argv[i];
@@ -454,6 +417,8 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
     }
+
+    printf("zx0-recoder for bitfire v0.1 by Tobias Bindhammer\n");
 
     if (argc == 1) {
         fprintf(stderr, "Usage: %s [options] input\n"
@@ -483,8 +448,6 @@ int main(int argc, char *argv[]) {
         strcat(output_name, ".lz");
         printf("output name: %s\n", output_name);
     }
-
-    //clamp of 2 bytes -> to output name
 
     ctx.packed_data = (unsigned char *)malloc(BUFFER_SIZE);
     ctx.unpacked_data = (unsigned char *)malloc(BUFFER_SIZE + 2);
@@ -560,7 +523,6 @@ int main(int argc, char *argv[]) {
 
     cfp = fopen(output_name, "wb");
     if (ctx.unpacked_size != 0) {
-        printf("clamped size: $%04lx\n", ctx.unpacked_size);
         if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, cfp) != ctx.unpacked_size) {
             fprintf(stderr, "Error: Cannot write clamped file\n");
             exit(1);
@@ -570,7 +532,10 @@ int main(int argc, char *argv[]) {
 
     shell_call = (char *)malloc(strlen(output_name) + strlen(output_name) + strlen(compressor_path) + 3);
     sprintf(shell_call, "%s %s %s", compressor_path, output_name, output_name);
-    system(shell_call);
+    if (system(shell_call) == -1) {
+        fprintf(stderr, "Error: Cannot execute %s\n", shell_call);
+        exit(1);
+    }
 
     ctx.pfp = fopen(output_name, "rb");
     if (!ctx.pfp) {
@@ -580,50 +545,60 @@ int main(int argc, char *argv[]) {
     read_packed(&ctx);
     fclose(ctx.pfp);
 
-    //ctx.ofp = fopen("testfile.prg", "wb");
-    //if (!ctx.ofp) {
-    //    fprintf(stderr, "Error: Cannot create output file\n");
-    //    exit(1);
-   // }
-
     ctx.rfp = fopen(output_name, "wb");
     if (!ctx.rfp) {
         fprintf(stderr, "Error: Cannot create output file\n");
         exit(1);
     }
 
-    //TODO
-    //read .cbm file, clamp off load_addr and set load_addr var
-    //keep orig file data in an array to be able to do inplace depacking
-    //saved file-name ist output_name
-    //pack output-name and overwrite with self? works!
-    //load output file
-    //reencode -> also do inplace here
-    //write output file with load_addr/depack_addr and so on
-
     reencode(&ctx);
-    printf("reencoded_size: %ld\n", ctx.reencoded_index);
+    if (sfx) {
+        /* copy over to change values in code */
+        sfx_code = (char *)malloc(sizeof(decruncher));
+        memcpy (sfx_code, decruncher, sizeof(decruncher));
 
-    if (ctx.inplace) {
-        find_inplace(&ctx);
-        printf("ctx.output_index: %04x\n",ctx.unpacked_index + cbm_orig_addr);
-        printf("ctx.packed_index: %04x\n",cbm_range_to - ctx.reencoded_index + ctx.packed_index);
-        copy_inplace_literal(&ctx);
-    }
+        /* setup jmp target after decompression */
+        sfx_code[ZX0_SFX_ADDR + 0] = sfx_addr & 0xff;
+        sfx_code[ZX0_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
 
-    printf("load-address (packed): $%04x\n", cbm_orig_addr);
-    printf("cbm_range_to: $%04x\n", cbm_range_to);
-    printf("ctx.encoded_size: $%04x\n", ctx.packed_index);
-    if (ctx.inplace) {
-        cbm_packed_addr = cbm_range_to - ctx.packed_index - 2;
+        /* setup decompression destination */
+        sfx_code[ZX0_DST + 0] = cbm_orig_addr & 0xff;
+        sfx_code[ZX0_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
+
+        /* setup compressed data src */
+        sfx_code[ZX0_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
+        sfx_code[ZX0_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
+
+        /* setup compressed data end */
+        sfx_code[ZX0_DATA_END + 0] = (0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) & 0xff;
+        sfx_code[ZX0_DATA_END + 1] = ((0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
+
+        sfx_code[ZX0_DATA_SIZE_HI] = ((ctx.reencoded_index + 0x100) >> 8) & 0xff;
+
+        if (fwrite(sfx_code, sizeof(char), sizeof(decruncher), ctx.rfp) != sizeof(decruncher)) {
+            fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
+            exit(1);
+        }
+        if (fwrite(ctx.reencoded_data, sizeof(char), ctx.reencoded_index, ctx.rfp) != ctx.reencoded_index) {
+            fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
+            exit(1);
+        }
     } else {
-        cbm_packed_addr = cbm_orig_addr;
-    }
-    printf("load-address (packed): $%04x\n", cbm_packed_addr);
+        if (ctx.inplace) {
+            find_inplace(&ctx);
+            copy_inplace_literal(&ctx);
+        }
 
-    //save_output(&ctx);
-    save_reencoded(&ctx, cbm_orig_addr, cbm_packed_addr);
-    //fclose(ctx.ofp);
+        if (ctx.inplace) {
+            cbm_packed_addr = cbm_range_to - ctx.packed_index - 2;
+        } else {
+            cbm_packed_addr = cbm_orig_addr;
+        }
+        printf("original:     $%04x-$%04lx ($%04lx)\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
+        printf("packed:       $%04x-$%04lx ($%04lx)   % 3.2f%% saved\n", cbm_packed_addr, cbm_packed_addr + ctx.packed_index + 2, ctx.packed_index + 2, ((float)(ctx.unpacked_size - ctx.packed_index) / (float)(ctx.unpacked_size) * 100.0));
+
+        save_reencoded(&ctx, cbm_orig_addr, cbm_packed_addr);
+    }
     fclose(ctx.rfp);
 
     return 0;
