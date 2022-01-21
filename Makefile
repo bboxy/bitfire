@@ -33,6 +33,9 @@ macros: FORCE
 benchmark-lz: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ benchmark-lz
 
+benchmark-reencode: FORCE
+	@$(MAKE) $(MAKE_OPTS) -C benchmark/ benchmark-reencode
+
 benchmark: FORCE zx0 d64write loader
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ benchmark
 
