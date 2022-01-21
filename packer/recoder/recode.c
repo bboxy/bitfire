@@ -16,7 +16,6 @@ typedef struct ctx {
     FILE *ufp;
     FILE *cfp;
     unsigned char *packed_data;
-    //unsigned char *output_data;
     unsigned char *reencoded_data;
     unsigned char *unpacked_data;
     size_t packed_index;
@@ -164,7 +163,6 @@ void copy_inplace_literal(ctx* ctx) {
     int i;
     for (i = ctx->unpacked_index; i < ctx->unpacked_size; i++) {
         ctx->reencoded_data[ctx->packed_index] = ctx->unpacked_data[i];
-        //printf("packed: %04x  unpacked: %04x  data: $%02x\n", ctx->packed_index, i, ctx->unpacked_data[i]);
         ctx->packed_index++;
     }
 }
@@ -193,7 +191,6 @@ COPY_LITERALS:
     ctx->unpacked_index += length;
 
     overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
-    //printf("literal %d %d\n", length, overwrite);
     /* literal would overwrite packed src */
     if (overwrite >= 0) {
         /* go back to previous index */
@@ -214,9 +211,8 @@ COPY_LITERALS:
     length = read_interlaced_elias_gamma(ctx, FALSE, 0);
     ctx->unpacked_index += length;
 
-    /* rep would overwrite packed src */
     overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
-    //printf("rep %d %d\n", length, overwrite);
+    /* rep would overwrite packed src */
     if (overwrite >= 0) {
         safe_input_index = ctx->unpacked_index;
         safe_output_index = ctx->packed_index;
@@ -248,9 +244,8 @@ COPY_FROM_NEW_OFFSET:
 
     ctx->unpacked_index += length;
 
-    /* rep would overwrite packed src */
     overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
-    //printf("match %d %d\n", length, overwrite);
+    /* rep would overwrite packed src */
     if (overwrite >= 0) {
         safe_input_index = ctx->unpacked_index;
         safe_output_index = ctx->packed_index;
@@ -574,6 +569,9 @@ int main(int argc, char *argv[]) {
 
         sfx_code[ZX0_DATA_SIZE_HI] = ((ctx.reencoded_index + 0x100) >> 8) & 0xff;
 
+        printf("original:     $%04x-$%04lx ($%04lx)\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
+        printf("packed:       $%04x-$%04lx ($%04lx)   % 3.2f%% saved\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.unpacked_size - ctx.packed_index - (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));
+
         if (fwrite(sfx_code, sizeof(char), sizeof(decruncher), ctx.rfp) != sizeof(decruncher)) {
             fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
             exit(1);
@@ -584,6 +582,7 @@ int main(int argc, char *argv[]) {
         }
     } else {
         if (ctx.inplace) {
+            /* now as we know the packed-size from first pass, do a second pass to find out where src- and dst-streams meet */
             find_inplace(&ctx);
             copy_inplace_literal(&ctx);
         }
