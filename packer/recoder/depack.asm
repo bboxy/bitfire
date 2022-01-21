@@ -108,6 +108,4 @@ depack
 !warn "depacker size: ", * - depack
 
 data_start
-!byte $40
-!byte $00
-!bin "testfile.bitfire"
+!bin "testfile.bitfire",,2
