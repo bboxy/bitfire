@@ -142,7 +142,6 @@ int read_interlaced_elias_gamma(ctx* ctx, int inverted, int skip) {
 
 void save_reencoded(ctx* ctx, int cbm_orig_addr, int cbm_packed_addr) {
     if (ctx->packed_index != 0) {
-
         /* little endian */
         file_write_byte(cbm_packed_addr & 255, ctx->rfp);
         file_write_byte((cbm_packed_addr >> 8) & 255, ctx->rfp);
@@ -367,7 +366,7 @@ int main(int argc, char *argv[]) {
     char *compressor_path = NULL;
     char *shell_call = NULL;
 
-    int cbm;
+    int cbm = TRUE;
 
     int i;
 
@@ -469,7 +468,11 @@ int main(int argc, char *argv[]) {
     fclose(ctx.ufp);
 
     /* load unpacked file */
-    cbm_orig_addr = ctx.unpacked_data[0] + (ctx.unpacked_data[1] << 8);
+    if (cbm_relocate_origin_addr >= 0) {
+        cbm_orig_addr = cbm_relocate_origin_addr;
+    } else {
+        cbm_orig_addr = ctx.unpacked_data[0] + (ctx.unpacked_data[1] << 8);
+    }
 
     file_start_pos = 2;
     ctx.unpacked_size -= 2;
@@ -505,10 +508,6 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Compressing from $%04x to $%04x = $%04lx bytes\n", cbm_range_from, cbm_range_to, ctx.unpacked_size);
-
-    if (cbm_relocate_origin_addr >= 0) {
-        cbm_orig_addr = cbm_relocate_origin_addr;
-    }
 
     if (cbm_relocate_packed_addr >= 0) {
         ctx.inplace = FALSE;
@@ -589,13 +588,30 @@ int main(int argc, char *argv[]) {
             copy_inplace_literal(&ctx);
         }
 
+        if (cbm_relocate_origin_addr >= 0) {
+            cbm_orig_addr = cbm_relocate_origin_addr;
+            cbm = TRUE;
+        }
+
         if (ctx.inplace) {
             cbm_packed_addr = cbm_range_to - ctx.packed_index - 2;
         } else {
-            cbm_packed_addr = cbm_orig_addr;
+            if (cbm_relocate_packed_addr >= 0) {
+                cbm_packed_addr = cbm_relocate_packed_addr;
+            } else {
+                cbm_packed_addr = cbm_orig_addr;
+            }
         }
+
         printf("original:     $%04x-$%04lx ($%04lx)\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
         printf("packed:       $%04x-$%04lx ($%04lx)   % 3.2f%% saved\n", cbm_packed_addr, cbm_packed_addr + ctx.packed_index + 2, ctx.packed_index + 2, ((float)(ctx.unpacked_size - ctx.packed_index) / (float)(ctx.unpacked_size) * 100.0));
+
+        if (cbm) {
+            if ((cbm_packed_addr >= 0xd000 && cbm_packed_addr < 0xe000) || (cbm_packed_addr < 0xd000 && cbm_packed_addr + ctx.packed_index + 2 > 0xd000)) {
+                fprintf(stderr, "Error: Packed file lies in I/O-range from $d000-$dfff\n");
+                exit(1);
+            }
+        }
 
         save_reencoded(&ctx, cbm_orig_addr, cbm_packed_addr);
     }
