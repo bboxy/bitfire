@@ -10,7 +10,7 @@ else
 VR:=@
 endif
 
-all: zx0 d64write loader
+all: zx0 salvador d64write loader
 
 #zx0-play: FORCE
 #	@$(MAKE) $(MAKE_OPTS) -C packer/$@
@@ -19,6 +19,10 @@ zx0: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 bitnax: FORCE
+	@$(MAKE) $(MAKE_OPTS) -C packer/$@
+
+salvador: FORCE
+	@echo "Building salvador..."
 	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 d64write: FORCE
@@ -44,6 +48,7 @@ benchmark: FORCE zx0 d64write loader
 
 clean:
 	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
+	@$(MAKE) $(MAKE_OPTS) -C packer/salvador/ clean
 	@$(MAKE) $(MAKE_OPTS) -C packer/bitnax/ clean
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
