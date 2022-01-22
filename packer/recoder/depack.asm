@@ -108,4 +108,4 @@ depack
 !warn "depacker size: ", * - depack
 
 data_start
-!bin "testfile.bitfire",,2
+!bin "../../benchmark/files/a.lz",,2

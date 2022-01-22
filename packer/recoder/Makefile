@@ -16,7 +16,7 @@ recode: recode.c sfx.h
 	@echo "zx0-reencoder..."
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
 
-depack.prg: depack.asm bitfire.asm testfile.bitfire
+depack.prg: depack.asm bitfire.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
 
 sfx.h: sfx.asm

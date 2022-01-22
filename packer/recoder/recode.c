@@ -23,7 +23,6 @@ typedef struct ctx {
     size_t unpacked_index;
     size_t unpacked_size;
     size_t reencoded_index;
-    size_t reencoded_size;
     int reencoded_bit_mask;
     int reencoded_bit_value;
     int reencoded_bit_index;
@@ -111,11 +110,6 @@ void write_reencoded_interlaced_elias_gamma(ctx* ctx, int value, int skip) {
     if (!skip) write_reencoded_bit(ctx, 1);
 }
 
-//XXX TODO aggregate write_*_byte by handing over correct buffer?
-void write_reencoded_offset(ctx* ctx, int offset, int length) {
-    write_reencoded_byte(ctx, (((offset - 1) % 128) << 1) | (length == 2));
-}
-
 int read_byte(ctx* ctx) {
     ctx->last_byte = ctx->packed_data[ctx->packed_index++];
     return ctx->last_byte;
@@ -155,10 +149,6 @@ void save_reencoded(ctx* ctx, int cbm_orig_addr, int cbm_packed_addr) {
     }
 }
 
-void read_packed(ctx* ctx) {
-    ctx->packed_size = fread(ctx->packed_data, sizeof(char), BUFFER_SIZE, ctx->pfp);
-}
-
 void copy_inplace_literal(ctx* ctx) {
     int i;
     for (i = ctx->unpacked_index; i < ctx->unpacked_size; i++) {
@@ -167,10 +157,30 @@ void copy_inplace_literal(ctx* ctx) {
     }
 }
 
-void find_inplace(ctx* ctx) {
+void encode_literal(ctx* ctx, int length, int first) {
+    int i;
+    if (!first) write_reencoded_bit(ctx, 0);
+    write_reencoded_interlaced_elias_gamma(ctx, length, 0);
+    for (i = 0; i < length; i++) {
+        write_reencoded_byte(ctx, read_byte(ctx));
+    }
+}
+
+void encode_rep(ctx* ctx, int length) {
+    write_reencoded_bit(ctx, 0);
+    write_reencoded_interlaced_elias_gamma(ctx, length, 0);
+}
+
+void encode_match(ctx* ctx, int length, int offset) {
+    write_reencoded_bit(ctx, 1);
+    write_reencoded_interlaced_elias_gamma(ctx, ((offset - 1) >> 7) + 1, 0);
+    write_reencoded_byte(ctx, (((offset - 1) % 128) << 1) | (length == 2));
+    write_reencoded_interlaced_elias_gamma(ctx, length - 1, 1);
+}
+
+void reencode(ctx* ctx) {
     int last_offset = INITIAL_OFFSET;
     int length;
-    int i;
     int overwrite;
 
     int bit, byte;
@@ -178,98 +188,6 @@ void find_inplace(ctx* ctx) {
     int safe_input_index = 0;
     int safe_output_index = 0;
 
-    ctx->packed_index = 0;
-    ctx->unpacked_index = 0;
-
-    ctx->bit_mask = 0;
-
-COPY_LITERALS:
-    length = read_interlaced_elias_gamma(ctx, FALSE, 0);
-    for (i = 0; i < length; i++) {
-        byte = read_byte(ctx);
-    }
-    ctx->unpacked_index += length;
-
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
-    /* literal would overwrite packed src */
-    if (overwrite >= 0) {
-        /* go back to previous index */
-        ctx->unpacked_index = safe_input_index;
-        ctx->packed_index = safe_output_index;
-        return;
-    }
-    /* do remember last safe position */
-    safe_input_index = ctx->unpacked_index;
-    safe_output_index = ctx->packed_index;
-
-    bit = read_bit(ctx);
-    if (bit) {
-        goto COPY_FROM_NEW_OFFSET;
-    }
-
-//COPY_FROM_LAST_OFFSET:
-    length = read_interlaced_elias_gamma(ctx, FALSE, 0);
-    ctx->unpacked_index += length;
-
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
-    /* rep would overwrite packed src */
-    if (overwrite >= 0) {
-        safe_input_index = ctx->unpacked_index;
-        safe_output_index = ctx->packed_index;
-        ctx->unpacked_index = safe_input_index;
-        ctx->packed_index = safe_output_index;
-        return;
-    }
-    safe_input_index = ctx->unpacked_index;
-    safe_output_index = ctx->packed_index;
-
-    bit = read_bit(ctx);
-    if (!bit) {
-        goto COPY_LITERALS;
-    }
-
-COPY_FROM_NEW_OFFSET:
-    last_offset = read_interlaced_elias_gamma(ctx, TRUE, 0);
-    if (last_offset == 256) {
-        if (ctx->packed_index != ctx->packed_size) {
-            fprintf(stderr, "Error: Input file too long\n");
-            exit(1);
-        }
-        return;
-    }
-    byte = read_byte(ctx);
-    last_offset = last_offset * 128 - (byte >> 1);
-    if (byte & 1) length = 2;
-    else length = read_interlaced_elias_gamma(ctx, FALSE, 1) + 1;
-
-    ctx->unpacked_index += length;
-
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->reencoded_index + ctx->packed_index);
-    /* rep would overwrite packed src */
-    if (overwrite >= 0) {
-        safe_input_index = ctx->unpacked_index;
-        safe_output_index = ctx->packed_index;
-        ctx->unpacked_index = safe_input_index;
-        ctx->packed_index = safe_output_index;
-        return;
-    }
-    safe_input_index = ctx->unpacked_index;
-    safe_output_index = ctx->packed_index;
-
-    bit = read_bit(ctx);
-    if (bit) {
-        goto COPY_FROM_NEW_OFFSET;
-    } else {
-        goto COPY_LITERALS;
-    }
-}
-
-void reencode(ctx* ctx) {
-    int last_offset = INITIAL_OFFSET;
-    int length;
-    int i;
-
-    int bit, byte;
     int first = 1;
 
     ctx->packed_index = 0;
@@ -280,66 +198,87 @@ void reencode(ctx* ctx) {
     ctx->reencoded_bit_value = 0;
     ctx->reencoded_bit_index = 0;
 
-COPY_LITERALS:
+    ctx->packed_index = 0;
+    ctx->unpacked_index = 0;
+
+    ctx->bit_mask = 0;
+
+COPY_LITERAL:
     length = read_interlaced_elias_gamma(ctx, FALSE, 0);
-    if (!first) write_reencoded_bit(ctx, 0);
+    encode_literal(ctx, length, first);
     first = 0;
-    write_reencoded_interlaced_elias_gamma(ctx, length, 0);
-    for (i = 0; i < length; i++) {
-        byte = read_byte(ctx);
-        write_reencoded_byte(ctx, byte);
+
+    ctx->unpacked_index += length;
+
+    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
+    /* literal would overwrite packed src */
+    if (ctx->inplace && overwrite >= 0) {
+        /* go back to previous index */
+        ctx->unpacked_index = safe_input_index;
+        ctx->packed_index = safe_output_index;
+        copy_inplace_literal(ctx);
+        return;
     }
+    /* do remember last safe position */
+    safe_input_index = ctx->unpacked_index;
+    safe_output_index = ctx->packed_index;
 
     bit = read_bit(ctx);
-
     if (bit) {
-        goto COPY_FROM_NEW_OFFSET;
+        goto COPY_MATCH;
     }
 
-//COPY_FROM_LAST_OFFSET:
+//COPY_REP:
     length = read_interlaced_elias_gamma(ctx, FALSE, 0);
-    write_reencoded_bit(ctx, 0);
-    write_reencoded_interlaced_elias_gamma(ctx, length, 0);
+    encode_rep(ctx, length);
+
+    ctx->unpacked_index += length;
+
+    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
+    /* rep would overwrite packed src */
+    if (ctx->inplace && overwrite >= 0) {
+        copy_inplace_literal(ctx);
+        return;
+    }
+    safe_input_index = ctx->unpacked_index;
+    safe_output_index = ctx->packed_index;
 
     bit = read_bit(ctx);
-
     if (!bit) {
-        goto COPY_LITERALS;
+        goto COPY_LITERAL;
     }
 
-COPY_FROM_NEW_OFFSET:
+COPY_MATCH:
     last_offset = read_interlaced_elias_gamma(ctx, TRUE, 0);
-
     if (last_offset == 256) {
-        /* omit end-marker when packing inplace */
         if (!ctx->inplace) {
             write_reencoded_bit(ctx, 1);
             write_reencoded_interlaced_elias_gamma(ctx, last_offset, 0);
         }
-        if (ctx->packed_index != ctx->packed_size) {
-            fprintf(stderr, "Error: Input file too long\n");
-            exit(1);
-        }
         return;
     }
-
-    write_reencoded_bit(ctx, 1);
-    write_reencoded_interlaced_elias_gamma(ctx, last_offset, 0);
-
     byte = read_byte(ctx);
-    last_offset = last_offset * 128 - (byte >> 1);
     if (byte & 1) length = 2;
     else length = read_interlaced_elias_gamma(ctx, FALSE, 1) + 1;
+    last_offset = (last_offset << 7) - (byte >> 1);
+    encode_match(ctx, length, last_offset);
 
-    write_reencoded_offset(ctx, last_offset, length);
-    write_reencoded_interlaced_elias_gamma(ctx, length - 1, 1);
+    ctx->unpacked_index += length;
+
+    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
+    /* rep would overwrite packed src */
+    if (ctx->inplace && overwrite >= 0) {
+        copy_inplace_literal(ctx);
+        return;
+    }
+    safe_input_index = ctx->unpacked_index;
+    safe_output_index = ctx->packed_index;
 
     bit = read_bit(ctx);
-
     if (bit) {
-        goto COPY_FROM_NEW_OFFSET;
+        goto COPY_MATCH;
     } else {
-        goto COPY_LITERALS;
+        goto COPY_LITERAL;
     }
 }
 
@@ -350,7 +289,6 @@ int main(int argc, char *argv[]) {
     int cbm_range_to = -1;
     int cbm_relocate_packed_addr = -1;
     int cbm_relocate_origin_addr = -1;
-    int file_start_pos = 0;
 
     int sfx = FALSE;
     int sfx_addr = -1;
@@ -445,7 +383,6 @@ int main(int argc, char *argv[]) {
 
     ctx.packed_data = (unsigned char *)malloc(BUFFER_SIZE);
     ctx.unpacked_data = (unsigned char *)malloc(BUFFER_SIZE + 2);
-    //ctx.output_data = (unsigned char *)malloc(BUFFER_SIZE);
     ctx.reencoded_data = (unsigned char *)malloc(BUFFER_SIZE);
 
     if (!ctx.packed_data || !ctx.unpacked_data || !ctx.reencoded_data) {
@@ -470,7 +407,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (cbm) {
-      file_start_pos = 2;
+      ctx.unpacked_data += 2;
       ctx.unpacked_size -= 2;
     }
 
@@ -489,9 +426,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Warning: File starts at $%04x, adopting --from value\n", cbm_range_from);
     }
     /* load file from start_pos on only, so skip bytes on input */
-    file_start_pos += (cbm_range_from - cbm_orig_addr);
+    ctx.unpacked_data += (cbm_range_from - cbm_orig_addr);
     /* also adopt ctx.unpacked_size */
     ctx.unpacked_size -= (cbm_range_from - cbm_orig_addr);
+
     cbm_orig_addr = cbm_range_from;
 
     if (cbm_range_from > cbm_range_to) {
@@ -515,8 +453,6 @@ int main(int argc, char *argv[]) {
         printf("Creating sfx with start-address $%04x\n", sfx_addr);
     }
 
-    ctx.unpacked_data += file_start_pos;
-
     cfp = fopen(output_name, "wb");
     if (ctx.unpacked_size != 0) {
         if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, cfp) != ctx.unpacked_size) {
@@ -538,8 +474,14 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error: Cannot access input file\n");
         exit(1);
     }
-    read_packed(&ctx);
+
+    /* read packed data */
+    ctx.packed_size = fread(ctx.packed_data, sizeof(char), BUFFER_SIZE, ctx.pfp);
     fclose(ctx.pfp);
+
+    /* determin size withozt eof-marker -> remove 18 bits, either 2 byte or three byte depending on position of last bitpair */
+    if (ctx.packed_data[ctx.packed_size - 1] & 0x80) ctx.packed_size -= 3;
+    else ctx.packed_size -= 2;
 
     ctx.rfp = fopen(output_name, "wb");
     if (!ctx.rfp) {
@@ -548,6 +490,7 @@ int main(int argc, char *argv[]) {
     }
 
     reencode(&ctx);
+
     if (sfx) {
         /* copy over to change values in code */
         sfx_code = (char *)malloc(sizeof(decruncher));
@@ -583,11 +526,6 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
     } else {
-        if (ctx.inplace) {
-            /* now as we know the packed-size from first pass, do a second pass to find out where src- and dst-streams meet */
-            find_inplace(&ctx);
-            copy_inplace_literal(&ctx);
-        }
 
         if (cbm_relocate_origin_addr >= 0) {
             cbm_orig_addr = cbm_relocate_origin_addr;
