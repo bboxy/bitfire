@@ -569,8 +569,8 @@ int main(int argc, char *argv[]) {
 
         sfx_code[ZX0_DATA_SIZE_HI] = ((ctx.reencoded_index + 0x100) >> 8) & 0xff;
 
-        printf("original:     $%04x-$%04lx ($%04lx)\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
-        printf("packed:       $%04x-$%04lx ($%04lx)   % 3.2f%% saved\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.unpacked_size - ctx.packed_index - (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));
+        printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
+        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.packed_index + (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));
 
         if (fwrite(sfx_code, sizeof(char), sizeof(decruncher), ctx.rfp) != sizeof(decruncher)) {
             fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
@@ -602,8 +602,8 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        printf("original:     $%04x-$%04lx ($%04lx)\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
-        printf("packed:       $%04x-$%04lx ($%04lx)   % 3.2f%% saved\n", cbm_packed_addr, cbm_packed_addr + ctx.packed_index + 2, ctx.packed_index + 2, ((float)(ctx.unpacked_size - ctx.packed_index) / (float)(ctx.unpacked_size) * 100.0));
+        printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
+        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", cbm_packed_addr, cbm_packed_addr + ctx.packed_index + 2, ctx.packed_index + 2, ((float)(ctx.packed_index) / (float)(ctx.unpacked_size) * 100.0));
 
         if (cbm) {
             if ((cbm_packed_addr >= 0xd000 && cbm_packed_addr < 0xe000) || (cbm_packed_addr < 0xd000 && cbm_packed_addr + ctx.packed_index + 2 > 0xd000)) {
