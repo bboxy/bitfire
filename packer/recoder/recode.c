@@ -459,18 +459,20 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    /* load unpacked file */
     ctx.unpacked_size = fread(ctx.unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx.ufp);
     fclose(ctx.ufp);
 
-    /* load unpacked file */
     if (cbm_relocate_origin_addr >= 0) {
         cbm_orig_addr = cbm_relocate_origin_addr;
     } else {
         cbm_orig_addr = ctx.unpacked_data[0] + (ctx.unpacked_data[1] << 8);
     }
 
-    file_start_pos = 2;
-    ctx.unpacked_size -= 2;
+    if (cbm) {
+      file_start_pos = 2;
+      ctx.unpacked_size -= 2;
+    }
 
     if (cbm_range_from < 0) cbm_range_from = cbm_orig_addr;
     if (cbm_range_to < 0) cbm_range_to = cbm_orig_addr + ctx.unpacked_size;
