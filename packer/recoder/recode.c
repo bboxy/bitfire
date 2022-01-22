@@ -348,6 +348,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("zx0-recoder for bitfire v0.1 by Tobias Bindhammer\n");
+    printf("underlying zx0-packer salvador by Emmanuel Marty\n");
 
     if (argc == 1) {
         fprintf(stderr, "Usage: %s [options] input\n"
