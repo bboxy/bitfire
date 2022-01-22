@@ -1,0 +1,3 @@
+[submodule "packer/salvador"]
+	path = packer/salvador
+	url = https://github.com/emmanuel-marty/salvador.git
