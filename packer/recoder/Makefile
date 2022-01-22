@@ -17,7 +17,7 @@ recode: recode.c sfx.h salvador.a
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
 
 salvador.a:
-	$(VR)make -C ../salvador/
+	$(VR)make CFLAGS='-O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIE' -C ../salvador/
 	$(VR)ar rcs salvador.a ../salvador/obj/src/*.o ../salvador/obj/src/libdivsufsort/lib/*.o
 	$(VR)objcopy --redefine-sym main=salvador_main salvador.a
 
