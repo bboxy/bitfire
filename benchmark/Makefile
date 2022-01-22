@@ -11,7 +11,7 @@ ZX0_OPTS = -f
 ZX0PLAY = ../packer/zx0/zx0
 ZX0PLAY_OPTS = -f
 
-REENCODE = ../packer/recoder/dzx0 -x
+REENCODE = ../packer/recoder/recode -x
 #REENCODE_OPTS = '../packer/zx0/6502/zx0-original-encoding/src/zx0 -f'
 REENCODE_OPTS = '../packer/salvador/salvador'
 
@@ -21,6 +21,8 @@ benchmark-lz:
 	rm files/*.lz; for i in files/*; do $(ZX0PLAY) $(ZX0PLAY_OPTS) -o $$i.lz $$i; done
 benchmark-reencode:
 	rm files/*.lz; for i in files/*; do $(REENCODE) $(REENCODE_OPTS) -o $$i.lz $$i; done
+benchmark-exomizer:
+	rm files/*.lz; for i in files/*; do exomizer level -o $$i.lz $$i; done
 
 benchmark: checksum.asm Makefile ../loader/installer
 	-rm side*.d64
