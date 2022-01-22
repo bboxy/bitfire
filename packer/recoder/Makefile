@@ -10,16 +10,18 @@ else
 VR:=@
 endif
 
-all: recode
+all: echo recode
+
+echo:
+	@echo "Building zx0-reencoder..."
 
 recode: recode.c sfx.h salvador.a
-	@echo "Building zx0-reencoder..."
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
 
 salvador.a:
 	$(VR)make CFLAGS='-O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIE' -C ../salvador/
-	$(VR)ar rcs salvador.a ../salvador/obj/src/*.o ../salvador/obj/src/libdivsufsort/lib/*.o
-	$(VR)objcopy --redefine-sym main=salvador_main salvador.a
+	$(VR)ar rcs $@ ../salvador/obj/src/*.o ../salvador/obj/src/libdivsufsort/lib/*.o
+	$(VR)objcopy --redefine-sym main=salvador_main $@
 
 depack.prg: depack.asm bitfire.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<

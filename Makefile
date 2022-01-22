@@ -10,7 +10,7 @@ else
 VR:=@
 endif
 
-all: recoder zx0 salvador d64write loader
+all: recoder zx0 d64write loader
 
 #zx0-play: FORCE
 #	@$(MAKE) $(MAKE_OPTS) -C packer/$@
@@ -22,10 +22,6 @@ bitnax: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 recoder: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C packer/$@
-
-salvador: FORCE
-	@echo "Building salvador..."
 	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 d64write: FORCE
