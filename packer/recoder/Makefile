@@ -1,7 +1,7 @@
 ACME ?= acme
 ACME_OPTS ?= -f cbm
 zx0_CFLAGS ?= $(CFLAGS) -Ofast -Wall
-CC ?= cc
+CC ?= gcc
 
 V ?= 0
 ifeq ($(V),1)
@@ -12,9 +12,14 @@ endif
 
 all: recode
 
-recode: recode.c sfx.h
-	@echo "zx0-reencoder..."
+recode: recode.c sfx.h salvador.a
+	@echo "Building zx0-reencoder..."
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
+
+salvador.a:
+	$(VR)make -C ../salvador/
+	$(VR)ar rcs salvador.a ../salvador/obj/src/*.o ../salvador/obj/src/libdivsufsort/lib/*.o
+	$(VR)objcopy --redefine-sym main=salvador_main salvador.a
 
 depack.prg: depack.asm bitfire.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
@@ -31,4 +36,5 @@ sfx.h: sfx.asm
 	$(VR)rm $(basename $@).lst sfx
 
 clean:
-	$(VR)-rm recode sfx.h depack.prg
+	$(VR)-rm recode sfx.h depack.prg salvador.a
+	$(VR)make -C ../salvador clean

@@ -11,9 +11,9 @@ ZX0_OPTS = -f
 ZX0PLAY = ../packer/zx0/zx0
 ZX0PLAY_OPTS = -f
 
-REENCODE = ../packer/recoder/recode -x
-#REENCODE_OPTS = '../packer/zx0/6502/zx0-original-encoding/src/zx0 -f'
-REENCODE_OPTS = '../packer/salvador/salvador'
+REENCODE = ../packer/recoder/recode
+#REENCODE_OPTS = -x '../packer/zx0/6502/zx0-original-encoding/src/zx0 -f'
+#REENCODE_OPTS = -x '../packer/salvador/salvador'
 
 all: benchmark
 

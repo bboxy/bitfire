@@ -28,9 +28,10 @@ typedef struct ctx {
     int reencoded_bit_index;
     int bit_mask;
     int bit_value;
-    int last_byte;
     int inplace;
 } ctx;
+
+void salvador_main();
 
 static int read_number(char* arg) {
     int number;
@@ -74,7 +75,7 @@ void write_reencoded_byte(ctx* ctx, int value) {
 
 void write_reencoded_bit(ctx* ctx, int value) {
     if (!ctx->reencoded_bit_mask) {
-        ctx->reencoded_bit_mask = 128;
+        ctx->reencoded_bit_mask = 0x80;
         ctx->reencoded_bit_index = ctx->reencoded_index;
         write_reencoded_byte(ctx, 0);
     }
@@ -111,17 +112,15 @@ void write_reencoded_interlaced_elias_gamma(ctx* ctx, int value, int skip) {
 }
 
 int read_byte(ctx* ctx) {
-    ctx->last_byte = ctx->packed_data[ctx->packed_index++];
-    return ctx->last_byte;
+    return ctx->packed_data[ctx->packed_index++];
 }
 
 int read_bit(ctx* ctx) {
-    ctx->bit_mask >>= 1;
-    if (ctx->bit_mask == 0) {
-        ctx->bit_mask = 128;
+    if ((ctx->bit_mask >>= 1) == 0) {
+        ctx->bit_mask = 0x80;
         ctx->bit_value = read_byte(ctx);
     }
-    return ctx->bit_value & ctx->bit_mask ? 1 : 0;
+    return (ctx->bit_value & ctx->bit_mask) != 0;
 }
 
 int read_interlaced_elias_gamma(ctx* ctx, int inverted, int skip) {
@@ -162,7 +161,7 @@ void encode_literal(ctx* ctx, int length, int first) {
     if (!first) write_reencoded_bit(ctx, 0);
     write_reencoded_interlaced_elias_gamma(ctx, length, 0);
     for (i = 0; i < length; i++) {
-        write_reencoded_byte(ctx, read_byte(ctx));
+        write_reencoded_byte(ctx, ctx->unpacked_data[ctx->unpacked_index + i]);
     }
 }
 
@@ -174,7 +173,7 @@ void encode_rep(ctx* ctx, int length) {
 void encode_match(ctx* ctx, int length, int offset) {
     write_reencoded_bit(ctx, 1);
     write_reencoded_interlaced_elias_gamma(ctx, ((offset - 1) >> 7) + 1, 0);
-    write_reencoded_byte(ctx, (((offset - 1) % 128) << 1) | (length == 2));
+    write_reencoded_byte(ctx, (((offset - 1) & 0x7f) << 1) | (length == 2));
     write_reencoded_interlaced_elias_gamma(ctx, length - 1, 1);
 }
 
@@ -184,6 +183,7 @@ void reencode(ctx* ctx) {
     int overwrite;
 
     int bit, byte;
+    int i;
 
     int safe_input_index = 0;
     int safe_output_index = 0;
@@ -203,82 +203,78 @@ void reencode(ctx* ctx) {
 
     ctx->bit_mask = 0;
 
-COPY_LITERAL:
-    length = read_interlaced_elias_gamma(ctx, FALSE, 0);
-    encode_literal(ctx, length, first);
-    first = 0;
+    while (1) {
+        /* literal */
+        length = read_interlaced_elias_gamma(ctx, FALSE, 0);
+        for (i = 0; i < length; i++) read_byte(ctx);
+        encode_literal(ctx, length, first);
+        first = 0;
 
-    ctx->unpacked_index += length;
+        ctx->unpacked_index += length;
 
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
-    /* literal would overwrite packed src */
-    if (ctx->inplace && overwrite >= 0) {
-        /* go back to previous index */
-        ctx->unpacked_index = safe_input_index;
-        ctx->packed_index = safe_output_index;
-        copy_inplace_literal(ctx);
-        return;
-    }
-    /* do remember last safe position */
-    safe_input_index = ctx->unpacked_index;
-    safe_output_index = ctx->packed_index;
-
-    bit = read_bit(ctx);
-    if (bit) {
-        goto COPY_MATCH;
-    }
-
-//COPY_REP:
-    length = read_interlaced_elias_gamma(ctx, FALSE, 0);
-    encode_rep(ctx, length);
-
-    ctx->unpacked_index += length;
-
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
-    /* rep would overwrite packed src */
-    if (ctx->inplace && overwrite >= 0) {
-        copy_inplace_literal(ctx);
-        return;
-    }
-    safe_input_index = ctx->unpacked_index;
-    safe_output_index = ctx->packed_index;
-
-    bit = read_bit(ctx);
-    if (!bit) {
-        goto COPY_LITERAL;
-    }
-
-COPY_MATCH:
-    last_offset = read_interlaced_elias_gamma(ctx, TRUE, 0);
-    if (last_offset == 256) {
-        if (!ctx->inplace) {
-            write_reencoded_bit(ctx, 1);
-            write_reencoded_interlaced_elias_gamma(ctx, last_offset, 0);
+        overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
+        /* literal would overwrite packed src */
+        if (ctx->inplace && overwrite >= 0) {
+            /* go back to previous index */
+            ctx->unpacked_index = safe_input_index;
+            ctx->packed_index = safe_output_index;
+            copy_inplace_literal(ctx);
+            return;
         }
-        return;
-    }
-    byte = read_byte(ctx);
-    if (byte & 1) length = 2;
-    else length = read_interlaced_elias_gamma(ctx, FALSE, 1) + 1;
-    last_offset = (last_offset << 7) - (byte >> 1);
-    encode_match(ctx, length, last_offset);
+        /* do remember last safe position */
+        safe_input_index = ctx->unpacked_index;
+        safe_output_index = ctx->packed_index;
 
-    ctx->unpacked_index += length;
+        /* copy from new or last offset? */
+        bit = read_bit(ctx);
+        if (!bit) {
+            /* copy from last_offset */
+            length = read_interlaced_elias_gamma(ctx, FALSE, 0);
+            encode_rep(ctx, length);
 
-    overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
-    /* rep would overwrite packed src */
-    if (ctx->inplace && overwrite >= 0) {
-        copy_inplace_literal(ctx);
-        return;
-    }
-    safe_input_index = ctx->unpacked_index;
-    safe_output_index = ctx->packed_index;
+            ctx->unpacked_index += length;
 
-    bit = read_bit(ctx);
-    if (bit) {
-        goto COPY_MATCH;
-    } else {
-        goto COPY_LITERAL;
+            overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
+            /* rep would overwrite packed src */
+            if (ctx->inplace && overwrite >= 0) {
+                copy_inplace_literal(ctx);
+                return;
+            }
+            safe_input_index = ctx->unpacked_index;
+            safe_output_index = ctx->packed_index;
+
+            bit = read_bit(ctx);
+        }
+
+        while (bit) {
+            /* copy from new_offset */
+            last_offset = read_interlaced_elias_gamma(ctx, TRUE, 0);
+            if (last_offset == 256) {
+                if (!ctx->inplace) {
+                    write_reencoded_bit(ctx, 1);
+                    write_reencoded_interlaced_elias_gamma(ctx, last_offset, 0);
+                }
+                return;
+            }
+            byte = read_byte(ctx);
+            if (byte & 1) length = 2;
+            else length = read_interlaced_elias_gamma(ctx, FALSE, 1) + 1;
+            last_offset = (last_offset << 7) - (byte >> 1);
+            encode_match(ctx, length, last_offset);
+
+            ctx->unpacked_index += length;
+
+            overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
+            /* rep would overwrite packed src */
+            if (ctx->inplace && overwrite >= 0) {
+                copy_inplace_literal(ctx);
+                return;
+            }
+            safe_input_index = ctx->unpacked_index;
+            safe_output_index = ctx->packed_index;
+
+            bit = read_bit(ctx);
+        }
     }
 }
 
@@ -296,14 +292,15 @@ int main(int argc, char *argv[]) {
 
     char *output_name = NULL;
     char *input_name = NULL;
-    char *compressor_path = NULL;
-    char *shell_call = NULL;
+    //char *compressor_path = NULL;
+    //char *shell_call = NULL;
 
     int cbm = TRUE;
 
     int i;
 
     FILE *cfp;
+    char *salvador_argv[4];
 
     ctx ctx;
 
@@ -332,9 +329,9 @@ int main(int argc, char *argv[]) {
                 sfx_addr = read_number(argv[i]);
                 sfx = TRUE;
                 ctx.inplace = FALSE;
-            } else if (!strcmp(argv[i], "-x")) {
-                i++;
-                compressor_path = argv[i];
+     //       } else if (!strcmp(argv[i], "-x")) {
+     //           i++;
+     //           compressor_path = argv[i];
             } else if (!strcmp(argv[i], "-o")) {
                 i++;
                 output_name = argv[i];
@@ -354,7 +351,7 @@ int main(int argc, char *argv[]) {
 
     if (argc == 1) {
         fprintf(stderr, "Usage: %s [options] input\n"
-                        "  -x [path]                  Path to zx0/salvador executeable\n"
+     //                   "  -x [path]                  Path to zx0/salvador executeable\n"
                         "  -o [filename]              Set output filename\n"
                         "  --sfx [num]                Create a c64 compatible sfx-executable\n"
                         "  --no-inplace               Disable inplace-decompression\n"
@@ -367,6 +364,11 @@ int main(int argc, char *argv[]) {
                         ,argv[0]);
         exit(1);
     }
+
+    //if (compressor_path == NULL) {
+    //    fprintf(stderr, "Error: No compressor path given\n");
+    //    exit(1);
+   // }
 
     if (input_name == NULL) {
         fprintf(stderr, "Error: No input-filename given\n");
@@ -462,12 +464,16 @@ int main(int argc, char *argv[]) {
     }
     fclose(cfp);
 
-    shell_call = (char *)malloc(strlen(output_name) + strlen(output_name) + strlen(compressor_path) + 3);
-    sprintf(shell_call, "%s %s %s", compressor_path, output_name, output_name);
-    if (system(shell_call) == -1) {
-        fprintf(stderr, "Error: Cannot execute %s\n", shell_call);
-        exit(1);
-    }
+    salvador_argv[0] = "salvador";
+    salvador_argv[1] = output_name;
+    salvador_argv[2] = output_name;
+    salvador_main(3, salvador_argv);
+    //shell_call = (char *)malloc(strlen(output_name) + strlen(output_name) + strlen(compressor_path) + 3);
+    //sprintf(shell_call, "%s %s %s", compressor_path, output_name, output_name);
+    //if (system(shell_call) == -1) {
+    //    fprintf(stderr, "Error: Cannot execute %s\n", shell_call);
+    //    exit(1);
+    //}
 
     ctx.pfp = fopen(output_name, "rb");
     if (!ctx.pfp) {
