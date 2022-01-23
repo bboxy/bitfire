@@ -108,4 +108,4 @@ depack
 !warn "depacker size: ", * - depack
 
 data_start
-!bin "../../benchmark/files/a.lz",,2
+!bin "testfile.lz",,2
