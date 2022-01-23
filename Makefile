@@ -52,6 +52,7 @@ clean:
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
+	@$(MAKE) $(MAKE_OPTS) -C example/loadertest/ clean
 	#@$(MAKE) $(MAKE_OPTS) -C macros/ clean
 #	@$(MAKE) $(MAKE_OPTS) -C link/ clean
 

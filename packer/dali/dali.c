@@ -20,14 +20,14 @@ typedef struct ctx {
     unsigned char *unpacked_data;
     size_t packed_index;
     size_t packed_size;
-    size_t unpacked_index;
-    size_t unpacked_size;
+    int packed_bit_mask;
+    int packed_bit_value;
     size_t reencoded_index;
     int reencoded_bit_mask;
     int reencoded_bit_value;
     int reencoded_bit_index;
-    int bit_mask;
-    int bit_value;
+    size_t unpacked_index;
+    size_t unpacked_size;
     int inplace;
 } ctx;
 
@@ -76,6 +76,7 @@ void write_reencoded_byte(ctx* ctx, int value) {
 void write_reencoded_bit(ctx* ctx, int value) {
     if (!ctx->reencoded_bit_mask) {
         ctx->reencoded_bit_mask = 0x80;
+        /* remember position of bit-buffer */
         ctx->reencoded_bit_index = ctx->reencoded_index;
         write_reencoded_byte(ctx, 0);
     }
@@ -87,10 +88,8 @@ void write_reencoded_bit(ctx* ctx, int value) {
 void write_reencoded_interlaced_elias_gamma(ctx* ctx, int value, int skip) {
     int bits = bit_size(value);
     int i;
-    int count = 0;
 
-    for (i = 2; i <= value; i <<= 1)
-        ;
+    for (i = 2; i <= value; i <<= 1);
     i >>= 1;
 
     if (bits >= 8) {
@@ -102,11 +101,9 @@ void write_reencoded_interlaced_elias_gamma(ctx* ctx, int value, int skip) {
     }
 
     while ((i >>= 1) > 0) {
-        //if (count >= 8) invert = 0;
-        count++;
         if (!skip) write_reencoded_bit(ctx, 0);
         skip = 0;
-        if (!skip) write_reencoded_bit(ctx, ((value & i) > 0));
+        write_reencoded_bit(ctx, ((value & i) > 0));
     }
     if (!skip) write_reencoded_bit(ctx, 1);
 }
@@ -116,15 +113,16 @@ int read_byte(ctx* ctx) {
 }
 
 int read_bit(ctx* ctx) {
-    if ((ctx->bit_mask >>= 1) == 0) {
-        ctx->bit_mask = 0x80;
-        ctx->bit_value = read_byte(ctx);
+    if ((ctx->packed_bit_mask >>= 1) == 0) {
+        ctx->packed_bit_mask = 0x80;
+        ctx->packed_bit_value = read_byte(ctx);
     }
-    return (ctx->bit_value & ctx->bit_mask) != 0;
+    return (ctx->packed_bit_value & ctx->packed_bit_mask) != 0;
 }
 
 int read_interlaced_elias_gamma(ctx* ctx, int inverted, int skip) {
     int value = 1;
+    /* skip first read bit if skip != 0 */
     while (skip || !read_bit(ctx)) {
         skip = 0;
         value = (value << 1) | (read_bit(ctx) ^ inverted);
@@ -191,7 +189,7 @@ void reencode(ctx* ctx) {
     int first = 1;
 
     ctx->packed_index = 0;
-    ctx->bit_mask = 0;
+    ctx->packed_bit_mask = 0;
 
     ctx->reencoded_index = 0;
     ctx->reencoded_bit_mask = 0;
@@ -201,7 +199,7 @@ void reencode(ctx* ctx) {
     ctx->packed_index = 0;
     ctx->unpacked_index = 0;
 
-    ctx->bit_mask = 0;
+    ctx->packed_bit_mask = 0;
 
     while (1) {
         /* literal */
@@ -456,7 +454,12 @@ int main(int argc, char *argv[]) {
         printf("Creating sfx with start-address $%04x\n", sfx_addr);
     }
 
+    /* load raw data */
     cfp = fopen(output_name, "wb");
+    if (!ctx.cfp) {
+        fprintf(stderr, "Error: Cannot create output file\n");
+        exit(1);
+    }
     if (ctx.unpacked_size != 0) {
         if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, cfp) != ctx.unpacked_size) {
             fprintf(stderr, "Error: Cannot write clamped file\n");
@@ -465,6 +468,7 @@ int main(int argc, char *argv[]) {
     }
     fclose(cfp);
 
+    /* compress data with salvador */
     salvador_argv[0] = "salvador";
     salvador_argv[1] = output_name;
     salvador_argv[2] = output_name;
@@ -476,28 +480,28 @@ int main(int argc, char *argv[]) {
     //    exit(1);
     //}
 
+    /* read packed data */
     ctx.pfp = fopen(output_name, "rb");
     if (!ctx.pfp) {
         fprintf(stderr, "Error: Cannot access input file\n");
         exit(1);
     }
-
-    /* read packed data */
     ctx.packed_size = fread(ctx.packed_data, sizeof(char), BUFFER_SIZE, ctx.pfp);
     fclose(ctx.pfp);
 
-    /* determin size withozt eof-marker -> remove 18 bits, either 2 byte or three byte depending on position of last bitpair */
+    /* determine size without eof-marker -> remove 18 bits, either 2 byte or three byte depending on position of last bitpair */
     if (ctx.packed_data[ctx.packed_size - 1] & 0x80) ctx.packed_size -= 3;
     else ctx.packed_size -= 2;
 
+    /* write reencoded output file */
     ctx.rfp = fopen(output_name, "wb");
     if (!ctx.rfp) {
         fprintf(stderr, "Error: Cannot create output file\n");
         exit(1);
     }
-
     reencode(&ctx);
 
+    /* as sfx */
     if (sfx) {
         /* copy over to change values in code */
         sfx_code = (char *)malloc(sizeof(decruncher));
@@ -532,8 +536,8 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
             exit(1);
         }
+    /* or standard compressed */
     } else {
-
         if (cbm_relocate_origin_addr >= 0) {
             cbm_orig_addr = cbm_relocate_origin_addr;
             cbm = TRUE;
@@ -558,7 +562,6 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
         }
-
         save_reencoded(&ctx, cbm_orig_addr, cbm_packed_addr);
     }
     fclose(ctx.rfp);
