@@ -2,6 +2,9 @@ ACME ?= acme
 ACME_OPTS ?= -f cbm
 zx0_CFLAGS ?= $(CFLAGS) -Ofast -Wall
 CC ?= gcc
+SALVADOR_PATH = salvador
+SALVADOR_CFLAGS = -O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIE
+SALVADOR_OBJS = $(SALVADOR_PATH)/obj/src/*.o $(SALVADOR_PATH)/obj/src/libdivsufsort/lib/*.o
 
 V ?= 0
 ifeq ($(V),1)
@@ -10,17 +13,17 @@ else
 VR:=@
 endif
 
-all: echo recode
+all: echo dali
 
 echo:
-	@echo "Building zx0-reencoder..."
+	@echo "Building dali..."
 
-recode: recode.c sfx.h salvador.a
+dali: dali.c sfx.h salvador.a
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
 
 salvador.a:
-	$(VR)make CFLAGS='-O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIE' -C ../salvador/
-	$(VR)ar rcs $@ ../salvador/obj/src/*.o ../salvador/obj/src/libdivsufsort/lib/*.o
+	$(VR)make CFLAGS='$(SALVADOR_CFLAGS)' -C $(SALVADOR_PATH)
+	$(VR)ar rcs $@ $(SALVADOR_OBJS)
 	$(VR)objcopy --redefine-sym main=salvador_main $@
 
 depack.prg: depack.asm bitfire.asm ../../benchmark/files/a.lz
@@ -38,5 +41,5 @@ sfx.h: sfx.asm
 	$(VR)rm $(basename $@).lst sfx
 
 clean:
-	$(VR)-rm recode sfx.h depack.prg salvador.a
-	$(VR)make -C ../salvador clean
+	$(VR)-rm dali sfx.h depack.prg salvador.a
+	$(VR)make -C salvador clean

@@ -8,19 +8,14 @@ ACME_OPTS = -f cbm
 ZX0 = ../packer/zx0/zx0
 ZX0_OPTS = -f
 
-ZX0PLAY = ../packer/zx0/zx0
-ZX0PLAY_OPTS = -f
-
-REENCODE = ../packer/recoder/recode
-#REENCODE_OPTS = -x '../packer/zx0/6502/zx0-original-encoding/src/zx0 -f'
-#REENCODE_OPTS = -x '../packer/salvador/salvador'
+PACKER = ../packer/dali/dali
 
 all: benchmark
 
 benchmark-lz:
-	rm files/*.lz; for i in files/*; do $(ZX0PLAY) $(ZX0PLAY_OPTS) -o $$i.lz $$i; done
-benchmark-reencode:
-	rm files/*.lz; for i in files/*; do $(REENCODE) $(REENCODE_OPTS) -o $$i.lz $$i; done
+	rm files/*.lz; for i in files/*; do $(ZX0) $(ZX0_OPTS) -o $$i.lz $$i; done
+benchmark-dali:
+	rm files/*.lz; for i in files/*; do $(PACKER) $(PACKER_OPTS) -o $$i.lz $$i; done
 benchmark-exomizer:
 	rm files/*.lz; for i in files/*; do exomizer level -o $$i.lz $$i; done
 
@@ -30,7 +25,7 @@ benchmark: checksum.asm Makefile ../loader/installer
 	$(MAKE) -C ../
 	$(ACME) $(ACME_OPTS) -o $@ $<
 	#exomizer sfx 0x0900 -o $@.prg $@
-	$(ZX0) $(ZX0_OPTS) --sfx 0x0900 -o $@.prg $@
+	$(PACKER) $(PACKER_OPTS) --sfx 0x0900 -o $@.prg $@
 	cp benchmark.prg installer$(TIMESTAMP).prg
 	$(D64WRITE) $(D64WRITE_OPTS) -c side$(TIMESTAMP).d64 --free 1337 -h oxyron -i \<3 --side 1 \
 			--boot $@.prg \
