@@ -102,7 +102,7 @@ CONFIG_ZP_ADDR		= $f0
 .lz_repeat
 			jsr .lz_length
 			sbc #$01
-			sec				;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
+			bcc .lz_dcp			;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
@@ -146,6 +146,9 @@ CONFIG_ZP_ADDR		= $f0
 }
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			rts				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+.lz_dcp
+			dcp .lz_len_hi
+			bcs .lz_match_big
 
 			;------------------
 			;FETCH A NEW OFFSET
