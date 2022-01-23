@@ -26,7 +26,7 @@ salvador.a:
 	$(VR)ar rcs $@ $(SALVADOR_OBJS)
 	$(VR)objcopy --redefine-sym main=salvador_main $@
 
-depack.prg: depack.asm bitfire.asm ../../benchmark/files/a.lz
+depack.prg: depack.asm dzx0.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
 
 sfx.h: sfx.asm

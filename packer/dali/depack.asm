@@ -104,7 +104,7 @@
 
 !align 255,0
 depack
-!src "bitfire.asm"
+!src "dzx0.asm"
 !warn "depacker size: ", * - depack
 
 data_start
