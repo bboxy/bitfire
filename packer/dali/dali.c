@@ -298,7 +298,7 @@ int main(int argc, char *argv[]) {
     int i;
 
     FILE *cfp;
-    char *salvador_argv[4];
+    char *salvador_argv[3];
 
     ctx ctx;
 
