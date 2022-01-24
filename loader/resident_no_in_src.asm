@@ -30,6 +30,7 @@
 !src "constants.inc"
 
 .CHECK_EVEN		= 1
+.SRC_INC		= 0
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -530,14 +531,21 @@ bitfire_loadcomp_
 			lda #$01
 			ldy #$fe
 			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
--
-			asl <.lz_bits
-			rol
-			asl <.lz_bits
-			bcc -
-			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
-			jsr .lz_refill_bits		;fetch remaining bits
+			jsr .lz_get_loop
+;-
+;			asl <.lz_bits			;fetch first payload bit
+;							;XXX TODO we could check bit 7 before further asl?
+;			rol				;can also moved to front and executed once on start
+;			asl <.lz_bits
+;			bcc -
+;			bne .lz_match_big		;XXX TODO start with $fe and shift in inverted bits? but would not be compatible with lz_length's check on 8/16 bits with bcs -> would be bcc then
+;			ldy #$00			;only now y = 0 is needed
+;			jsr .lz_refill_bits		;fetch remaining bits
+							;XXX TODO jmp to refill bits and determin target after refill by an param given on jmp? -> 6 instead of 12 + 3 cycles!
+							;x + jmp (xxxx) + stx ? -> 11
+							;length 16 as target as well? needs to be done in full then? therefore save on the unrolled stuff and directly call refill_bits to save cycles?
+							;16er code muss dann rts setzen und resetten um sauber nochmal lz_length zu rufen? oder wie rekursion da reinbringen? paar bytes werden gespart wenn nur noch calls (11 bytes?)
 			bcs .lz_match_big
 
 			;------------------
@@ -570,6 +578,8 @@ bitfire_loadcomp_
 			txa
 			bcs .lz_lend
 
+			;lda #$00
+			;slo <.lz_bits
 .lz_get_loop
 			asl <.lz_bits			;fetch payload bit
 .lz_length_16_
@@ -593,6 +603,8 @@ bitfire_loadcomp_
 }
 
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
+
+;set end_address for inplace to real end of file if not inplaced? so nothing can go wrong? or set it to $ffff? also sane
 
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
