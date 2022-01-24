@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +49,7 @@ static int read_number(char* arg) {
 static void file_write_byte(int byte, FILE *ofp) {
     if (fputc(byte, ofp) != byte) {
         fprintf(stderr, "Error: Cannot write output file\n");
+        perror("fputc");
         exit(1);
     }
     return;
@@ -141,6 +143,7 @@ void save_reencoded(ctx* ctx, int cbm_orig_addr, int cbm_packed_addr) {
 
         if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, ctx->rfp) != ctx->packed_index) {
             fprintf(stderr, "Error: Cannot write output file\n");
+            perror("fwrite");
             exit(1);
         }
     }
@@ -297,7 +300,6 @@ int main(int argc, char *argv[]) {
 
     int i;
 
-    FILE *cfp;
     char *salvador_argv[3];
 
     ctx ctx;
@@ -391,13 +393,13 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    /* load unpacked file */
     ctx.ufp = fopen(input_name, "rb");
     if (!ctx.ufp) {
         fprintf(stderr, "Error: Cannot access input file\n");
+        perror("fopen");
         exit(1);
     }
-
-    /* load unpacked file */
     ctx.unpacked_size = fread(ctx.unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx.ufp);
     fclose(ctx.ufp);
 
@@ -454,19 +456,21 @@ int main(int argc, char *argv[]) {
         printf("Creating sfx with start-address $%04x\n", sfx_addr);
     }
 
-    /* load raw data */
-    cfp = fopen(output_name, "wb");
+    /* write clamped raw data */
+    ctx.cfp = fopen(output_name, "wb");
     if (!ctx.cfp) {
-        fprintf(stderr, "Error: Cannot create output file\n");
+        fprintf(stderr, "Error: Cannot create clamped file (%s)\n", output_name);
+        perror("fopen");
         exit(1);
     }
     if (ctx.unpacked_size != 0) {
-        if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, cfp) != ctx.unpacked_size) {
+        if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, ctx.cfp) != ctx.unpacked_size) {
             fprintf(stderr, "Error: Cannot write clamped file\n");
+            perror("fwrite");
             exit(1);
         }
     }
-    fclose(cfp);
+    fclose(ctx.cfp);
 
     /* compress data with salvador */
     salvador_argv[0] = "salvador";
@@ -484,6 +488,7 @@ int main(int argc, char *argv[]) {
     ctx.pfp = fopen(output_name, "rb");
     if (!ctx.pfp) {
         fprintf(stderr, "Error: Cannot access input file\n");
+        perror("fopen");
         exit(1);
     }
     ctx.packed_size = fread(ctx.packed_data, sizeof(char), BUFFER_SIZE, ctx.pfp);
@@ -496,7 +501,8 @@ int main(int argc, char *argv[]) {
     /* write reencoded output file */
     ctx.rfp = fopen(output_name, "wb");
     if (!ctx.rfp) {
-        fprintf(stderr, "Error: Cannot create output file\n");
+        fprintf(stderr, "Error: Cannot create reencoded file (%s)\n", output_name);
+        perror("fopen");
         exit(1);
     }
     reencode(&ctx);
