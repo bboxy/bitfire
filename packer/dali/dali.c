@@ -11,11 +11,10 @@
 #define TRUE 1
 
 typedef struct ctx {
-    FILE *pfp;
-    //FILE *ofp;
-    FILE *rfp;
-    FILE *ufp;
-    FILE *cfp;
+    FILE *packed_fp;
+    FILE *reencoded_fp;
+    FILE *unpacked_fp;
+    FILE *clamped_fp;
     unsigned char *packed_data;
     unsigned char *reencoded_data;
     unsigned char *unpacked_data;
@@ -135,13 +134,13 @@ int read_interlaced_elias_gamma(ctx* ctx, int inverted, int skip) {
 void save_reencoded(ctx* ctx, int cbm_orig_addr, int cbm_packed_addr) {
     if (ctx->packed_index != 0) {
         /* little endian */
-        file_write_byte(cbm_packed_addr & 255, ctx->rfp);
-        file_write_byte((cbm_packed_addr >> 8) & 255, ctx->rfp);
+        file_write_byte(cbm_packed_addr & 255, ctx->reencoded_fp);
+        file_write_byte((cbm_packed_addr >> 8) & 255, ctx->reencoded_fp);
         /* big endian, as read backwards by depacker */
-        file_write_byte((cbm_orig_addr >> 8) & 255, ctx->rfp);
-        file_write_byte(cbm_orig_addr & 255, ctx->rfp);
+        file_write_byte((cbm_orig_addr >> 8) & 255, ctx->reencoded_fp);
+        file_write_byte(cbm_orig_addr & 255, ctx->reencoded_fp);
 
-        if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, ctx->rfp) != ctx->packed_index) {
+        if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, ctx->reencoded_fp) != ctx->packed_index) {
             fprintf(stderr, "Error: Cannot write output file\n");
             perror("fwrite");
             exit(1);
@@ -287,7 +286,9 @@ int main(int argc, char *argv[]) {
     int cbm_relocate_packed_addr = -1;
     int cbm_relocate_origin_addr = -1;
 
-    int sfx = FALSE;
+    int cbm;
+
+    int sfx;
     int sfx_addr = -1;
     char *sfx_code = NULL;
 
@@ -296,15 +297,15 @@ int main(int argc, char *argv[]) {
     //char *compressor_path = NULL;
     //char *shell_call = NULL;
 
-    int cbm = TRUE;
-
     int i;
 
     char *salvador_argv[3];
 
-    ctx ctx;
+    ctx ctx = { 0 };
 
     ctx.inplace = TRUE;
+    cbm = TRUE;
+    sfx = FALSE;
 
     for (i = 1; i < argc; i++) {
         if (!strncmp(argv[i], "-", 1) || !strncmp(argv[i], "--", 2)) {
@@ -394,14 +395,14 @@ int main(int argc, char *argv[]) {
     }
 
     /* load unpacked file */
-    ctx.ufp = fopen(input_name, "rb");
-    if (!ctx.ufp) {
+    ctx.unpacked_fp = fopen(input_name, "rb");
+    if (!ctx.unpacked_fp) {
         fprintf(stderr, "Error: Cannot access input file\n");
         perror("fopen");
         exit(1);
     }
-    ctx.unpacked_size = fread(ctx.unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx.ufp);
-    fclose(ctx.ufp);
+    ctx.unpacked_size = fread(ctx.unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx.unpacked_fp);
+    fclose(ctx.unpacked_fp);
 
     if (cbm_relocate_origin_addr >= 0) {
         cbm_orig_addr = cbm_relocate_origin_addr;
@@ -457,20 +458,20 @@ int main(int argc, char *argv[]) {
     }
 
     /* write clamped raw data */
-    ctx.cfp = fopen(output_name, "wb");
-    if (!ctx.cfp) {
+    ctx.clamped_fp = fopen(output_name, "wb");
+    if (!ctx.clamped_fp) {
         fprintf(stderr, "Error: Cannot create clamped file (%s)\n", output_name);
         perror("fopen");
         exit(1);
     }
     if (ctx.unpacked_size != 0) {
-        if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, ctx.cfp) != ctx.unpacked_size) {
+        if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, ctx.clamped_fp) != ctx.unpacked_size) {
             fprintf(stderr, "Error: Cannot write clamped file\n");
             perror("fwrite");
             exit(1);
         }
     }
-    fclose(ctx.cfp);
+    fclose(ctx.clamped_fp);
 
     /* compress data with salvador */
     salvador_argv[0] = "salvador";
@@ -485,22 +486,22 @@ int main(int argc, char *argv[]) {
     //}
 
     /* read packed data */
-    ctx.pfp = fopen(output_name, "rb");
-    if (!ctx.pfp) {
+    ctx.packed_fp = fopen(output_name, "rb");
+    if (!ctx.packed_fp) {
         fprintf(stderr, "Error: Cannot access input file\n");
         perror("fopen");
         exit(1);
     }
-    ctx.packed_size = fread(ctx.packed_data, sizeof(char), BUFFER_SIZE, ctx.pfp);
-    fclose(ctx.pfp);
+    ctx.packed_size = fread(ctx.packed_data, sizeof(char), BUFFER_SIZE, ctx.packed_fp);
+    fclose(ctx.packed_fp);
 
     /* determine size without eof-marker -> remove 18 bits, either 2 byte or three byte depending on position of last bitpair */
     if (ctx.packed_data[ctx.packed_size - 1] & 0x80) ctx.packed_size -= 3;
     else ctx.packed_size -= 2;
 
     /* write reencoded output file */
-    ctx.rfp = fopen(output_name, "wb");
-    if (!ctx.rfp) {
+    ctx.reencoded_fp = fopen(output_name, "wb");
+    if (!ctx.reencoded_fp) {
         fprintf(stderr, "Error: Cannot create reencoded file (%s)\n", output_name);
         perror("fopen");
         exit(1);
@@ -534,11 +535,11 @@ int main(int argc, char *argv[]) {
         printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
         printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.packed_index + (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));
 
-        if (fwrite(sfx_code, sizeof(char), sizeof(decruncher), ctx.rfp) != sizeof(decruncher)) {
+        if (fwrite(sfx_code, sizeof(char), sizeof(decruncher), ctx.reencoded_fp) != sizeof(decruncher)) {
             fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
             exit(1);
         }
-        if (fwrite(ctx.reencoded_data, sizeof(char), ctx.reencoded_index, ctx.rfp) != ctx.reencoded_index) {
+        if (fwrite(ctx.reencoded_data, sizeof(char), ctx.reencoded_index, ctx.reencoded_fp) != ctx.reencoded_index) {
             fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
             exit(1);
         }
@@ -570,7 +571,7 @@ int main(int argc, char *argv[]) {
         }
         save_reencoded(&ctx, cbm_orig_addr, cbm_packed_addr);
     }
-    fclose(ctx.rfp);
+    fclose(ctx.reencoded_fp);
 
     return 0;
 }

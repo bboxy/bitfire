@@ -1,6 +1,6 @@
 ACME ?= acme
 ACME_OPTS ?= -f cbm
-DALI_CFLAGS ?= $(CFLAGS) -Ofast -Wall
+DALI_CFLAGS ?= $(CFLAGS) -Os -Wall
 CC ?= gcc
 SALVADOR_PATH = salvador
 SALVADOR_CFLAGS = -O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIC
@@ -21,6 +21,7 @@ echo:
 
 dali: dali.c sfx.h salvador.a
 	$(VR)$(CC) $(DALI_CFLAGS) -o $@ $^
+	strip $@
 
 salvador.a:
 	$(VR)make CFLAGS='$(SALVADOR_CFLAGS)' CC='$(SALVADOR_CC)' -C $(SALVADOR_PATH)
