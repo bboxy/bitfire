@@ -527,9 +527,13 @@ bitfire_loadcomp_
 			rol				;can also moved to front and executed once on start
 			asl <.lz_bits
 			bcc -
-			bne .lz_match_big
+			bne .lz_match_big		;XXX TODO start with $fe and shift in inverted bits? but would not be compatible with lz_length's check on 8/16 bits with bcs -> would be bcc then
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
+							;XXX TODO jmp to refill bits and determin target after refill by an param given on jmp? -> 6 instead of 12 + 3 cycles!
+							;x + jmp (xxxx) + stx ? -> 11
+							;length 16 as target as well? needs to be done in full then? therefore save on the unrolled stuff and directly call refill_bits to save cycles?
+							;16er code muss dann rts setzen und resetten um sauber nochmal lz_length zu rufen? oder wie rekursion da reinbringen? paar bytes werden gespart wenn nur noch calls (11 bytes?)
 			bcs .lz_match_big
 
 			;------------------
