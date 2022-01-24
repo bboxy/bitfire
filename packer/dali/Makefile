@@ -3,7 +3,8 @@ ACME_OPTS ?= -f cbm
 zx0_CFLAGS ?= $(CFLAGS) -Ofast -Wall
 CC ?= gcc
 SALVADOR_PATH = salvador
-SALVADOR_CFLAGS = -O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIE
+SALVADOR_CFLAGS = -O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIC
+SALVADOR_CC = gcc
 SALVADOR_OBJS = $(SALVADOR_PATH)/obj/src/*.o $(SALVADOR_PATH)/obj/src/libdivsufsort/lib/*.o
 
 V ?= 0
@@ -22,7 +23,7 @@ dali: dali.c sfx.h salvador.a
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
 
 salvador.a:
-	$(VR)make CFLAGS='$(SALVADOR_CFLAGS)' -C $(SALVADOR_PATH)
+	$(VR)make CFLAGS='$(SALVADOR_CFLAGS)' CC='$(SALVADOR_CC)' -C $(SALVADOR_PATH)
 	$(VR)ar rcs $@ $(SALVADOR_OBJS)
 	$(VR)objcopy --redefine-sym main=salvador_main $@
 

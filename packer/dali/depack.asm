@@ -107,6 +107,6 @@ depack
 !src "dzx0.asm"
 !warn "depacker size: ", * - depack
 
-		* = $6a61
+;		* = $6a61
 data_start
 !bin "testfile.lz",,2
