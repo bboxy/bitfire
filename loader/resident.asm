@@ -55,32 +55,10 @@ bitfire_errors		= CONFIG_ZP_ADDR + 1
 bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only aggregate labels from this file into loader_*.inc
 
 			* = CONFIG_RESIDENT_ADDR
-
-!if CONFIG_FRAMEWORK = 1 & CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
-link_frame_count
-			!word 0
-}
-
-!if CONFIG_NMI_GAPS = 1 {
-!align 255,2
 .lz_gap1
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-}
-
-!if CONFIG_AUTODETECT = 1 {
-link_chip_types
-link_sid_type			;%00000001		;bit set = new, bit cleared = old
-link_cia1_type			;%00000010
-link_cia2_type			;%00000100
-			!byte $00
-}
 !if CONFIG_FRAMEWORK = 1 {
 
+;XXX TODO move away frameworkstuff to $0105 onwards
 	!if CONFIG_FRAMEWORK_BASEIRQ = 1 {
 link_player
 			pha
@@ -104,16 +82,8 @@ link_player
 			pla
 			rti
 	}
+}
 
-link_music_play
-	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
-			inc link_frame_count + 0
-			bne +
-			inc link_frame_count + 1
-+
-link_music_addr = * + 1
-			jmp link_music_play_side1
-	}
 			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 			;and advances the frame counter if needed
 
@@ -135,8 +105,19 @@ link_music_addr = * + 1
 ;			inc $01				;bank in again
 ;			rts
 ;	}
+
+!if CONFIG_FRAMEWORK = 1 & CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
+link_frame_count
+			!word 0
 }
 
+!if CONFIG_AUTODETECT = 1 {
+link_chip_types
+link_sid_type			;%00000001		;bit set = new, bit cleared = old
+link_cia1_type			;%00000010
+link_cia2_type			;%00000100
+			!byte $00
+}
 !if CONFIG_LOADER = 1 {
 			;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 bitfire_send_byte_
@@ -335,9 +316,6 @@ bitfire_loadcomp_
 			dcp .lz_len_hi
 			bcs .lz_match_big
 .lz_l_page
-			sec
-			ldy #$00
-.lz_l_page_
 			dec <.lz_len_hi
 			bcs .lz_cp_lit
 
@@ -348,19 +326,6 @@ bitfire_loadcomp_
 			inc <.lz_dst + 1
 			bcs .lz_dst_inc_
 
-	!if CONFIG_NMI_GAPS = 1 {
-			!ifdef .lz_gap2 {
-				!warn .lz_gap2 - *, " bytes left until gap2"
-			}
-!align 255,2
-.lz_gap2
-!if .lz_gap2 - .lz_gap1 > $0100 {
-		!error "code on first page too big, second gap does not fit!"
-}
-			nop
-			nop
-			nop
-	}
 .lz_src_inc
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;sets X = 0, so all sane
@@ -378,6 +343,25 @@ bitfire_loadcomp_
 			beq .lz_next_page
 			rts
 
+			!ifdef .lz_gap2 {
+				!warn .lz_gap2 - *, " bytes left until gap2"
+			}
+!align 255,0
+.lz_gap2
+!if CONFIG_FRAMEWORK = 1 {
+link_music_play
+	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
+			inc link_frame_count + 0
+			bne +
+			inc link_frame_count + 1
++
+link_music_addr = * + 1
+			jmp link_music_play_side1
+	}
+}
+!if .lz_gap2 - .lz_gap1 > $0100 {
+		!error "code on first page too big, second gap does not fit!"
+}
 			;------------------
 			;POLLING
 			;------------------
@@ -397,35 +381,28 @@ bitfire_loadcomp_
 .lz_literal
 			jsr .lz_length
 			tax
-			beq .lz_l_page_			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
+			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
 			lda (.lz_src),y			;Need to copy this way, or wie copy from area that is blocked by barrier
 			sta (.lz_dst),y
-			iny
+
+			inc <.lz_src + 0
+			beq .lz_src_inc
+.lz_src_inc_
+			inc <.lz_dst + 0
+			beq .lz_dst_inc
+.lz_dst_inc_
 			dex
 			bne .lz_cp_lit
 
-			dey
-			tya
-			adc <.lz_dst + 0
-			sta <.lz_dst + 0
-			bcs .lz_dst_inc
-.lz_dst_inc_
-			tya
-			sec
-			adc <.lz_src + 0
-			sta <.lz_src + 0
-			bcs .lz_src_inc
-.lz_src_inc_
-			ldy <.lz_len_hi			;more pages to copy?
+			lda <.lz_len_hi			;more pages to copy?
 			bne .lz_l_page			;happens very seldom
 
 			;------------------
 			;NEW OR OLD OFFSET
 			;------------------
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
-			;rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
-			lda #$01
+			rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
 			asl <.lz_bits
 			bcs .lz_match			;either match with new offset or old offset
 
