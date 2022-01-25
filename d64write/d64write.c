@@ -660,9 +660,9 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
 
             if (t_dbg != d64->track_link) {
                 if (t_dbg >= 0) {
-                    printf("t%02d:", t_dbg);
-                    for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
-                    printf("\n");
+                    //printf("t%02d:", t_dbg);
+                    //for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
+                    //printf("\n");
                     for (i = 0; i < 32; i++) s_dbg[i] = 0;
                 }
                 t_dbg = d64->track_link;
@@ -719,9 +719,9 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     d64->track_link = start_track;
     d64->sector_link = start_sector;
 
-    printf("t%02d:", t_dbg);
-    for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
-    printf("\n");
+    //printf("t%02d:", t_dbg);
+    //for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
+    //printf("\n");
     for (i = 0; i < 32; i++) s_dbg[i] = 0;
 
     /* create direntry */

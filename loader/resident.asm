@@ -141,32 +141,51 @@ link_music_addr = * + 1
 !if CONFIG_LOADER = 1 {
 			;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 bitfire_send_byte_
-			;ldx #$37
-			;stx $dd02
-
 			sec
 			ror
-			sta .filenum
-			ldx #$3f
-			txa
+			sta <.filenum
+			lda #$3f
 .ld_loop
+			eor #$20
 			and #$2f
 			bcs +
 			eor #$10
 +
-			eor #$20
-			sta $dd02 - $3f,x
-			pha				;/!\ ATTENTION needed more than ever with spin down and turn disc, do never remove again
-			pla
+			jsr .ld_set_dd02
 			pha
 			pla
-			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
+			lsr <.filenum
 			bne .ld_loop
+			lda #$3f
 -
 			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
 			bmi -
-			stx $dd02			;restore $dd02
+.ld_set_dd02
+			sta $dd02			;restore $dd02
+.ld_pend
 			rts
+
+;			sec
+;			ror
+;			sta .filenum
+;			ldx #$3f
+;			txa
+;.ld_loop
+;			and #$2f
+;			bcs +
+;			eor #$10
+;+
+;			eor #$20
+;			sta $dd02 - $3f,x
+;			jsr .waste
+;			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
+;			bne .ld_loop
+;-
+;			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
+;			bmi -
+;			stx $dd02			;restore $dd02
+;.waste
+;			rts
 
 	!if CONFIG_FRAMEWORK = 1 {
 link_load_next_raw
@@ -180,8 +199,7 @@ bitfire_loadraw_
 .ld_load_raw
 			jsr .ld_pblock			;fetch all blocks until eof
 			bcc -
-.ld_pend
-			rts				;XXX TODO can be omitted, maybe as we would skip blockloading on eof?
+			;rts				;XXX TODO can be omitted, maybe as we would skip blockloading on eof?
 							;just run into ld_pblock code again that will then jump to .ld_pend and rts
 .ld_pblock
 			lda $dd00			;bit 6 is always set if not ready or idle/EOF so no problem with just an ASL
@@ -597,3 +615,16 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;XXX TODO
 ;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
+
+
+;set jump to init depacker
+;jsr send_filename
+;load block
+;until barrier is okay
+;jmp init depacker -> change to jump back? how to preserve entry? and depack
+;whenever new block is needed: jmp load block
+
+
+;-> lda #$entry
+;-> jmp back -> setup jump
+;

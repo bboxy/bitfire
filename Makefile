@@ -10,7 +10,7 @@ else
 VR:=@
 endif
 
-all: dali zx0 d64write loader
+all: loader dali zx0 d64write
 
 #zx0-play: FORCE
 #	@$(MAKE) $(MAKE_OPTS) -C packer/$@
