@@ -141,6 +141,14 @@
 			sta bitfire_load_addr_hi
 		endm
 
+		mac link_music_update  
+			inc link_frame_count + 0
+			bne .l
+			inc link_frame_count + 1
+.l
+			jmp (link_music_addr)
+		endm
+
 		mac start_music_nmi  
 			ldx #<link_player
 			lda #>link_player

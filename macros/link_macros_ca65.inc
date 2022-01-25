@@ -158,6 +158,15 @@ l
 			sta bitfire_load_addr_hi
 		.endmacro
 
+		.macro link_music_update 
+		.local l
+			inc link_frame_count + 0
+			bne l
+			inc link_frame_count + 1
+l
+			jmp (link_music_addr)
+		.endmacro
+
 		.macro start_music_nmi 
 		.local l
 			ldx #<link_player
