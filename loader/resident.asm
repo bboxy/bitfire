@@ -334,13 +334,19 @@ bitfire_loadcomp_
 .lz_dcp
 			dcp .lz_len_hi
 			bcs .lz_match_big
-
 .lz_l_page
 			sec
 			ldy #$00
 .lz_l_page_
 			dec <.lz_len_hi
 			bcs .lz_cp_lit
+
+			;------------------
+			;POINTER HANDLING LITERAL COPY
+			;------------------
+.lz_dst_inc
+			inc <.lz_dst + 1
+			bcs .lz_dst_inc_
 
 	!if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -355,6 +361,14 @@ bitfire_loadcomp_
 			nop
 			nop
 	}
+.lz_src_inc
+	!if CONFIG_LOADER = 1 {
+			jsr .lz_next_page		;sets X = 0, so all sane
+	} else {
+			inc <.lz_src + 1
+	}
+			bcs .lz_src_inc_
+
 			;------------------
 			;GET BYTE FROM STREAM
 			;------------------
@@ -363,20 +377,6 @@ bitfire_loadcomp_
 			inc <.lz_src + 0
 			beq .lz_next_page
 			rts
-
-			;------------------
-			;POINTER HANDLING LITERAL COPY
-			;------------------
-.lz_dst_inc
-			inc <.lz_dst + 1
-			bcs .lz_dst_inc_
-.lz_src_inc
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;sets X = 0, so all sane
-	} else {
-			inc <.lz_src + 1
-	}
-			bcs .lz_src_inc_
 
 			;------------------
 			;POLLING
@@ -549,7 +549,7 @@ bitfire_loadcomp_
 			bcs .lz_match_big
 
 			;------------------
-			;SELDOM STUFF
+			;MORE SELDOM STUFF
 			;------------------
 .lz_m_page
 			dec <.lz_len_hi
