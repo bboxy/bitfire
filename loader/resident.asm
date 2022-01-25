@@ -29,7 +29,6 @@
 !src "config.inc"
 !src "constants.inc"
 
-.CHECK_EVEN		= 1
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
 .filenum		= CONFIG_ZP_ADDR + 0
@@ -312,17 +311,18 @@ bitfire_loadcomp_
 			stx .lz_skip_fetch
 
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with Y = 0, X = 0
-	}
+	} else {
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
+        }
+			sty .lz_offset_lo + 1		;initialize offset with $0000
+			sty .lz_offset_hi + 1
+			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
+
 			jsr .lz_get_byte		;y will stay 0
 			sta <.lz_dst + 1
 			jsr .lz_get_byte		;y will stay 0
 			sta <.lz_dst + 0
-
-			sty .lz_offset_lo + 1		;initialize offset with $0000
-			sty .lz_offset_hi + 1
-			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 
 			lda #$40			;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
 			sta <.lz_bits
@@ -424,12 +424,9 @@ bitfire_loadcomp_
 			;NEW OR OLD OFFSET
 			;------------------
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
-			lda #$01				;A = 0, C = 1 -> A = 1
+			;rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
+			lda #$01
 			asl <.lz_bits
-			;rol
-			;bne .lz_match
-			;else A = 0
-			;but only for lowbyte?!
 			bcs .lz_match			;either match with new offset or old offset
 
 			;------------------
@@ -439,12 +436,11 @@ bitfire_loadcomp_
 			jsr .lz_length
 			sbc #$01
 			bcc .lz_dcp			;fix highbyte of length in case and set carry again (a = $ff -> compare delivers carry = 1)
-			;sec				;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
-							;XXX TODO save on eor #$ff and do sbc lz_dst + 0?
 			eor #$ff			;restore A
+.lz_m_page_
 .lz_match_len2						;entry from new_offset handling
 			adc <.lz_dst + 0
 			sta <.lz_dst + 0
@@ -457,7 +453,7 @@ bitfire_loadcomp_
 			lda <.lz_dst + 1
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
-			;				;XXX TODO would have dst + 0 and + 1 in X and A here, of any use?
+			;				;XXX TODO would have dst + 0 and + 1 in X and A here, of any use? x is reused later on cpx
 .lz_cp_match
 			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
@@ -471,16 +467,10 @@ bitfire_loadcomp_
 			bne .lz_m_page			;do more page runs? Yes? Fall through
 .lz_check_poll
 			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
-!if .CHECK_EVEN = 1 {
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
-}
 			lda <.lz_dst + 1
 			sbc <.lz_src + 1
-!if .CHECK_EVEN = 1 {
 			bne .lz_start_over
-} else {
-.lz_skip_poll		bcc .lz_start_over
-}
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
 							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
@@ -561,13 +551,13 @@ bitfire_loadcomp_
 			;------------------
 			;SELDOM STUFF
 			;------------------
+.lz_m_page
+			dec <.lz_len_hi
+			lda #$ff
+			bne .lz_m_page_			;if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else buggy!
 .lz_clc
 			clc
 			bcc .lz_clc_back
-.lz_m_page
-			dec <.lz_len_hi
-			inc .lz_msrcr + 1		;XXX TODO only needed if more pages follow
-			bne .lz_cp_match
 
 			;------------------
 			;ELIAS FETCH
