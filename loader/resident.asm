@@ -292,10 +292,9 @@ bitfire_loadcomp_
 			stx .lz_skip_fetch
 
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with Y = 0, X = 0
-	} else {
+	}
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
-        }
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
 			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
@@ -313,7 +312,7 @@ bitfire_loadcomp_
 			;SELDOM STUFF
 			;------------------
 .lz_dcp
-			dcp .lz_len_hi
+			dcp <.lz_len_hi
 			bcs .lz_match_big
 .lz_l_page
 			dec <.lz_len_hi
@@ -334,20 +333,14 @@ bitfire_loadcomp_
 	}
 			bcs .lz_src_inc_
 
-			;------------------
-			;GET BYTE FROM STREAM
-			;------------------
-.lz_get_byte
-			lda (.lz_src),y
-			inc <.lz_src + 0
-			beq .lz_next_page
-			rts
-
 			!ifdef .lz_gap2 {
 				!warn .lz_gap2 - *, " bytes left until gap2"
 			}
 !align 255,0
 .lz_gap2
+!if .lz_gap2 - .lz_gap1 > $0100 {
+		!error "code on first page too big, second gap does not fit!"
+}
 !if CONFIG_FRAMEWORK = 1 {
 link_music_play
 	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
@@ -359,9 +352,15 @@ link_music_addr = * + 1
 			jmp link_music_play_side1
 	}
 }
-!if .lz_gap2 - .lz_gap1 > $0100 {
-		!error "code on first page too big, second gap does not fit!"
-}
+			;------------------
+			;GET BYTE FROM STREAM
+			;------------------
+.lz_get_byte
+			lda (.lz_src),y
+			inc <.lz_src + 0
+			beq .lz_next_page
+			rts
+
 			;------------------
 			;POLLING
 			;------------------
