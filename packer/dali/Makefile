@@ -14,16 +14,15 @@ else
 VR:=@
 endif
 
-all: echo dali
-
-echo:
-	@echo "Building dali..."
+all: dali
 
 dali: dali.c sfx.h salvador.a
+	@echo "Building dali..."
 	$(VR)$(CC) $(DALI_CFLAGS) -o $@ $^
 	$(VR)strip $@
 
 salvador.a:
+	@echo "Creating salvador library..."
 	$(VR)make CFLAGS='$(SALVADOR_CFLAGS)' CC='$(SALVADOR_CC)' -C $(SALVADOR_PATH)
 	$(VR)ar rcs $@ $(SALVADOR_OBJS)
 	$(VR)objcopy --redefine-sym main=salvador_main $@
@@ -32,6 +31,7 @@ depack.prg: depack.asm dzx0.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
 
 sfx.h: sfx.asm
+	@echo "Compiling sfx code for dali..."
 	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'ZX0' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
 	$(VR)echo 'static const char decruncher[] = {' >> $@

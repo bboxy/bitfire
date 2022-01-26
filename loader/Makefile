@@ -18,9 +18,9 @@ gcr_tables: gcr_tables.c
 	$(VR)$(CC) $< -o $@ $(loader_CFLAGS)
 
 resident: resident.asm ../config.inc constants.inc Makefile
-	@echo -n "Buidling resident part ->"
+	@echo "Buidling resident part..."
 	$(VR)$(ACME) $(ACME_OPTS) -I ../../ -I ../ -o resident -l resident_labels.txt resident.asm
-	@printf " Size: $$%04x\n" $$((`wc -c < resident` - 2))
+	@printf "Resident size: $$%04x\n" $$((`wc -c < resident` - 2))
 	@echo "Creating loader_acme.inc..."
 	@#fetch all global labels for resident part
 	$(VR)grep "bitfire_*" resident_labels.txt | sed "s/[[:space:]]*;[[:space:]]*.*//g" | tr -d "\t" | sed -e 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' -e "s/\= / \= /" > loader_acme.inc

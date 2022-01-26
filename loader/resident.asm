@@ -333,9 +333,9 @@ bitfire_loadcomp_
 	}
 			bcs .lz_src_inc_
 
-			!ifdef .lz_gap2 {
-				!warn .lz_gap2 - *, " bytes left until gap2"
-			}
+			;!ifdef .lz_gap2 {
+			;	!warn .lz_gap2 - *, " bytes left until gap2"
+			;}
 !align 255,0
 .lz_gap2
 !if .lz_gap2 - .lz_gap1 > $0100 {
