@@ -573,5 +573,10 @@ int main(int argc, char *argv[]) {
     }
     fclose(ctx.reencoded_fp);
 
+    if (ctx.packed_index + 2 > ctx.unpacked_size) {
+        fprintf(stderr, "Error: Packed file larger than original\n");
+        exit(1);
+    }
+
     return 0;
 }
