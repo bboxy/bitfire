@@ -21,7 +21,7 @@ echo:
 
 dali: dali.c sfx.h salvador.a
 	$(VR)$(CC) $(DALI_CFLAGS) -o $@ $^
-	strip $@
+	$(VR)strip $@
 
 salvador.a:
 	$(VR)make CFLAGS='$(SALVADOR_CFLAGS)' CC='$(SALVADOR_CC)' -C $(SALVADOR_PATH)
@@ -32,8 +32,6 @@ depack.prg: depack.asm dzx0.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
 
 sfx.h: sfx.asm
-	@#$(VR)$(ACME) $(ACME_OPTS) -l sau.lst --vicelabels $(basename $@).lst -o $(basename $@) $<
-	@#$(VR)grep 'ZX0' $(basename $@).lst | sed -E 's/al C:([0-9a-f]+)[[:space:]]\.(.*)/#define \2 0x\1/' >> $@
 	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'ZX0' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
 	$(VR)echo 'static const char decruncher[] = {' >> $@
