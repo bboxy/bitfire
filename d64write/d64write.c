@@ -572,13 +572,13 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     int loadaddr = 0;
     int startpos = d64->sectpos;
 
-    int s_dbg[32];
-    int t_dbg = -1;
+    //int s_dbg[32];
+    //int t_dbg = -1;
     int filepos;
     int blocksize = 0;
-    int i;
+    //int i;
 
-    for (i = 0; i < 32; i++) s_dbg[i] = 0;
+    //for (i = 0; i < 32; i++) s_dbg[i] = 0;
 
     /* at which sector on track do we start? */
     int sectnum = sectors[d64->track] - d64_get_free_track_blocks(d64, d64->track);
@@ -643,7 +643,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     d64->track    = d64->track_link;
     d64->sector   = d64->sector_link;
 
-    s_dbg[d64->sector_link] = filepos;
+    //s_dbg[d64->sector_link] = filepos;
 
     while((data = fgetc(file)) != EOF) {
         d64->checksum += (unsigned char)data;
@@ -658,15 +658,15 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             /* count blocks up */
             size++;
 
-            if (t_dbg != d64->track_link) {
-                if (t_dbg >= 0) {
+            //if (t_dbg != d64->track_link) {
+                //if (t_dbg >= 0) {
                     //printf("t%02d:", t_dbg);
                     //for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
                     //printf("\n");
-                    for (i = 0; i < 32; i++) s_dbg[i] = 0;
-                }
-                t_dbg = d64->track_link;
-            }
+                    //for (i = 0; i < 32; i++) s_dbg[i] = 0;
+                //}
+                //t_dbg = d64->track_link;
+            //}
             //s_dbg[d64->sector] = filepos;
 
             if (type != FILETYPE_BITFIRE) {
@@ -691,7 +691,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
                 d64->sectpos  = 2;
             }
             d64->sectsize = SECTOR_SIZE;
-            s_dbg[d64->sector_link] = filepos;
+            //s_dbg[d64->sector_link] = filepos;
         }
 
         d64->sectbuf[d64->sectpos] = data;
@@ -722,7 +722,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     //printf("t%02d:", t_dbg);
     //for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
     //printf("\n");
-    for (i = 0; i < 32; i++) s_dbg[i] = 0;
+    //for (i = 0; i < 32; i++) s_dbg[i] = 0;
 
     /* create direntry */
     if (type != FILETYPE_BITFIRE) {
