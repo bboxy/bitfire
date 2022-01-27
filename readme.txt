@@ -242,7 +242,7 @@ If you split a file and load both parts one after another, you can add this swit
 NMI-gaps
 --------
 
-What is this? This option leaves 6 bytes @ $0202 and 3 bytes @ $0302 free of code. This way THCM can let his NMI pointer point to those locations to achieve a stable NMI when he is doing some of his hot sample shit :-D So as soon as you need stable NMIs and do it the Ninja way, you might be glad for this option.
+What is this? If you need a few free bytes at $0200 and $0300 for a ninja-style NMI handler, just add your nops at .lz_gap1 and .lz_gap2 in resident.asm to accomodate your handler, up to 15 bytes per page are still free for that..
 
 Zero-Overlap
 ------------

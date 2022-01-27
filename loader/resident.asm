@@ -520,8 +520,8 @@ bitfire_loadcomp_
 			;------------------
 .lz_m_page
 			dec <.lz_len_hi
-			lda #$ff
-			bne .lz_m_page_			;if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else buggy!
+			lda #$ff			;shorter this way, but costs a few more cycles per page, happens super seldom
+			bne .lz_m_page_			;if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
 .lz_clc
 			clc
 			bcc .lz_clc_back
