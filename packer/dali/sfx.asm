@@ -27,15 +27,11 @@
 
 .depacker	= $01
 .smc_offsetd 	= .depacker - (.depacker_start - .zx0_code_start)
-;ZX0_SRC_HI1	= .lz_src1     - .smc_offsetd + 2
-;ZX0_SRC_HI2	= .lz_src2     - .smc_offsetd + 2
-;ZX0_SRC_HI3	= .lz_src3     - .smc_offsetd + 2
-;ZX0_SRC_LO	= .lz_src_lo   - .smc_offsetd + 2
 ZX0_SRC		= .lz_src - .smc_offsetd + 2
 ZX0_DST		= .lz_dst      - .smc_offsetd + 2
 ZX0_SFX_ADDR	= .lz_sfx_addr - .smc_offsetd + 2
-ZX0_DATA_END 	= .lz_data_end      - .zx0_code_start + 2
-ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
+ZX0_DATA_END 	= .lz_data_end      - .smc_offsetd + 2
+ZX0_DATA_SIZE_HI = .lz_data_size_hi - .smc_offsetd + 2
 
 		* = $0801
 .zx0_code_start
@@ -56,6 +52,15 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		dex
 		bne -
 
+                jmp .depack
+
+		;------------------
+		;depacker starts here
+		;------------------
+.depacker_start
+!pseudopc .depacker {
+		!byte $38
+.depack
 .lz_data_size_hi = * + 1
                 ldy #>(.data_end - .data) + 1
 -
@@ -66,19 +71,10 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
                 txa
                 bne -
 
-                dec .src + 2
-                dec .dst + 2
+                dec <.src + 2
+                dec <.dst + 2
                 dey
                 bne -
-                jmp .depack
-
-		;------------------
-		;depacker starts here
-		;------------------
-.depacker_start
-!pseudopc .depacker {
-		!byte $38
-.depack
 		;ldy #$00			;is already 0
 		;------------------
 		;LITERAL
@@ -267,7 +263,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		jmp $0000
 }
 .depacker_end
-;!warn "sfx size: ", .depacker_end - .depacker_start
+!warn "sfx size: ", .depacker_end - .depacker_start
 .data
 		;!bin "test.lz"
 .data_end
