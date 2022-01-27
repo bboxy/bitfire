@@ -17,20 +17,23 @@ CONFIG_ZP_ADDR		= $f0
 			sta <.lz_src + 1
 			stx <.lz_src + 0
 
-							;copy over end_pos and lz_dst from stream
-			ldy #$00			;needs to be set in any case, also plain decomp enters here
-			jsr .lz_get_byte		;y will stay 0
-			sta <.lz_dst + 1
-			jsr .lz_get_byte		;y will stay 0
-			sta <.lz_dst + 0
-
-			sty .lz_offset_lo + 1		;initialize offset with $0000
-			sty .lz_offset_hi + 1
-			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
-
-			lda #$40			;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
-			sta <.lz_bits
-			bne .lz_start_over		;start with a literal
+                        ldy #$00                        ;needs to be set in any case, also plain decomp enters here
+                        ldx #$02
+			lda #$40
+                        sta <.lz_bits                   ;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
+-
+                        lda (.lz_src),y
+                        sta <.lz_dst + 0 - 1, x
+                        inc <.lz_src + 0
+                        bne +
+                        inc <.lz_src + 1
++
+                        dex
+                        bne -
+                        stx .lz_offset_lo + 1           ;initialize offset with $0000
+                        stx .lz_offset_hi + 1
+                        stx <.lz_len_hi
+			beq .lz_start_over		;start with a literal
 
 			;------------------
 			;SELDOM STUFF
@@ -41,17 +44,6 @@ CONFIG_ZP_ADDR		= $f0
 .lz_l_page_
 			dec <.lz_len_hi
 			bcs .lz_cp_lit
-
-			;------------------
-			;GET BYTE FROM STREAM
-			;------------------
-.lz_get_byte
-			lda (.lz_src),y
-			inc <.lz_src + 0
-			bne +
-			inc <.lz_src + 1
-+
-			rts
 
 			;------------------
 			;LITERAL
@@ -71,6 +63,7 @@ CONFIG_ZP_ADDR		= $f0
 			dex
 			bne .lz_cp_lit
 
+							;works only as standalone depacker, not if we do a loadcompd, as the literal copy might read data not yet loaded, due to missing checks
 			dey				;this way we force increment of lz_src + 1 if y = 0
 			tya				;carry is still set on first round
 			adc <.lz_dst + 0
@@ -199,8 +192,8 @@ CONFIG_ZP_ADDR		= $f0
 			bcc .lz_clc_back
 .lz_m_page
 			dec <.lz_len_hi
-			inc .lz_msrcr + 1		;XXX TODO only needed if more pages follow
-			bne .lz_cp_match
+			lda #$ff
+			bne .lz_match_len2
 
 			;------------------
 			;ELIAS FETCH

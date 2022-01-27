@@ -85,7 +85,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		;------------------
 .lz_start_over
 		lda #$01			;we fall through this check on entry and start with literal
-		lsr <.lz_bits
+		asl <.lz_bits
 		bcs .lz_new_offset		;after each match check for another match or literal?
 .literal
 		jsr .get_length
@@ -123,7 +123,7 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 
 .cp_literal_done
 		lda #$01
-		lsr <.lz_bits
+		asl <.lz_bits
 		bcs .lz_new_offset		;either match with new offset or old offset
 
 		;------------------
@@ -182,10 +182,10 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		;FETCH A NEW OFFSET
 		;------------------
 -						;get_length as inline
-		lsr <.lz_bits			;fetch payload bit
+		asl <.lz_bits			;fetch payload bit
 		rol				;can also moved to front and executed once on start
 .lz_new_offset
-		lsr <.lz_bits
+		asl <.lz_bits
 		bcc -
 +
 		bne +
@@ -211,20 +211,20 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 		ldy #$fe
 		bcs .lz_match__			;length = 2 ^ $ff, do it the very short way :-)
 -
-		lsr <.lz_bits			;fetch first payload bit
+		asl <.lz_bits			;fetch first payload bit
 
 		rol				;can also moved to front and executed once on start
-		lsr <.lz_bits
+		asl <.lz_bits
 		bcc -
 		bne .lz_match_
 		ldy #$00
 		jsr .lz_refill_bits		;fetch remaining bits
 		bcs .lz_match_
-.lz_bits	!byte $02
+.lz_bits	!byte $40
 .lz_refill_bits
 		tax
 		lda (.lz_src),y
-		ror
+		rol
 		sta <.lz_bits
 		inc <.lz_src + 0
 		bne +
@@ -235,12 +235,12 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .zx0_code_start + 2
 
 		;fetch up to 8 bits first, if first byte overflows, stash away byte and fetch more bits as MSB
 .lz_get_loop
-		lsr <.lz_bits			;fetch payload bit
+		asl <.lz_bits			;fetch payload bit
 .get_length_
 		rol				;can also moved to front and executed once on start
 		bcs .get_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .get_length
-		lsr <.lz_bits
+		asl <.lz_bits
 		bcc .lz_get_loop
 		beq .lz_refill_bits
 		rts

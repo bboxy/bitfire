@@ -304,7 +304,8 @@ bitfire_loadcomp_
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
 			ldx #$02
-			stx <.lz_bits			;start with an empty lz_bits, first lsr <.lz_bits leads to literal this way and bits are refilled upon next shift
+			lda #$40
+			sta <.lz_bits			;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
 -
 			lda (.lz_src),y
 			sta <.lz_dst + 0 - 1, x
@@ -366,7 +367,7 @@ bitfire_loadcomp_
 			;------------------
 .lz_start_over
 			lda #$01			;we fall through this check on entry and start with literal
-			lsr <.lz_bits
+			asl <.lz_bits
 			bcs .lz_match			;after each match check for another match or literal?
 .lz_literal
 			jsr .lz_length
@@ -393,7 +394,7 @@ bitfire_loadcomp_
 			;------------------
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
 			rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
-			lsr <.lz_bits
+			asl <.lz_bits
 			bcs .lz_match			;either match with new offset or old offset
 
 			;------------------
@@ -475,10 +476,10 @@ bitfire_loadcomp_
 			;FETCH A NEW OFFSET
 			;------------------
 -							;lz_length as inline
-			lsr <.lz_bits			;fetch payload bit
+			asl <.lz_bits			;fetch payload bit
 			rol				;can also moved to front and executed once on start
 .lz_match
-			lsr <.lz_bits
+			asl <.lz_bits
 			bcc -
 
 			bne +
@@ -506,9 +507,9 @@ bitfire_loadcomp_
 			ldy #$fe
 			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
 -
-			lsr <.lz_bits
+			asl <.lz_bits
 			rol
-			lsr <.lz_bits
+			asl <.lz_bits
 			bcc -
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
@@ -532,7 +533,7 @@ bitfire_loadcomp_
 .lz_refill_bits
 			tax
 			lda (.lz_src),y
-			ror
+			rol
 			sta <.lz_bits
 			inc <.lz_src + 0 		;postponed, so no need to save A on next_page call
 			bne +				;XXX TODO if we would prefer beq, 0,2% saving
@@ -546,12 +547,12 @@ bitfire_loadcomp_
 			bcs .lz_lend
 
 .lz_get_loop
-			lsr <.lz_bits			;fetch payload bit
+			asl <.lz_bits			;fetch payload bit
 .lz_length_16_
 			rol				;can also moved to front and executed once on start
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .lz_length
-			lsr <.lz_bits
+			asl <.lz_bits
 
 			bcc .lz_get_loop
 			beq .lz_refill_bits

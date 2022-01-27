@@ -76,14 +76,14 @@ void write_reencoded_byte(ctx* ctx, int value) {
 
 void write_reencoded_bit(ctx* ctx, int value) {
     if (!(ctx->reencoded_bit_mask & 255)) {
-        ctx->reencoded_bit_mask = 0x1;
+        ctx->reencoded_bit_mask = 0x80;
         /* remember position of bit-buffer */
         ctx->reencoded_bit_index = ctx->reencoded_index;
         write_reencoded_byte(ctx, 0);
     }
     if (value)
         ctx->reencoded_data[ctx->reencoded_bit_index] |= ctx->reencoded_bit_mask;
-    ctx->reencoded_bit_mask <<= 1;
+    ctx->reencoded_bit_mask >>= 1;
 }
 
 void write_reencoded_interlaced_elias_gamma(ctx* ctx, int value, int skip) {
