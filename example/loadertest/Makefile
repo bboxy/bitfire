@@ -1,14 +1,14 @@
 BITNAX_OPTS = -v --bitfire
 D64WRITE_OPTS = -v
-ZX0 = ../../packer/dali/dali
-ZX0_OPTS =
+PACKER = ../../packer/dali/dali
+PACKER_OPTS =
 D64WRITE = ../../d64write/d64write
 
 all: example
 
 example: example.asm Makefile ../../loader/installer files/pic1.bin.lz files/pic2.bin.lz
 	acme -f cbm -o $@ $<
-	$(ZX0) $(ZX0_OPTS) --sfx 0x0800 -o $@.prg $@
+	$(PACKER) $(PACKER_OPTS) --sfx 0x0800 -o $@.prg $@
 	$(D64WRITE) $(D64WRITE_OPTS) -c side1.d64 -h performers -i \<3 --side 1 \
 			--boot $@.prg \
 			-b files/pic1.bin.lz \
@@ -20,10 +20,10 @@ example: example.asm Makefile ../../loader/installer files/pic1.bin.lz files/pic
 	x64 side1.d64
 
 files/pic1.bin.lz: files/pic1.bin
-	$(ZX0) $(ZX0_OPTS) -o $@ $<
+	$(PACKER) $(PACKER_OPTS) -o $@ $<
 
 files/pic2.bin.lz: files/pic2.bin
-	$(ZX0) $(ZX0_OPTS) -o $@ $<
+	$(PACKER) $(PACKER_OPTS) -o $@ $<
 
 clean:
 	-rm side1.d64 example example.prg

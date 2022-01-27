@@ -12,12 +12,10 @@ PACKER = ../packer/dali/dali
 
 all: benchmark
 
-benchmark-lz:
+benchmark-zx0:
 	rm files/*.lz; for i in files/*; do $(ZX0) $(ZX0_OPTS) -o $$i.lz $$i; done
 benchmark-dali:
 	rm files/*.lz; for i in files/*; do $(PACKER) $(PACKER_OPTS) -o $$i.lz $$i; done
-benchmark-exomizer:
-	rm files/*.lz; for i in files/*; do exomizer level -o $$i.lz $$i; done
 
 benchmark: checksum.asm Makefile ../loader/installer
 	-rm side*.d64
