@@ -33,12 +33,12 @@ typedef struct ctx {
 
 void salvador_main();
 
-static int read_number(char* arg) {
+static int read_number(char* arg, int limit) {
     int number;
     if(arg[0] == '$') number = strtoul(arg + 1, NULL, 16);
     else if(arg[0] == '0' && arg[1] == 'x') number = strtoul(arg + 2, NULL, 16);
     else number = strtoul(arg, NULL, 10);
-    if (number < 0 || number > 65535) {
+    if (number < 0 || number > limit) {
         fprintf(stderr, "Error: Number '%s' out of range (0 - 65536)\n", arg);
         exit(1);
     }
@@ -290,6 +290,7 @@ int main(int argc, char *argv[]) {
 
     int sfx;
     int sfx_addr = -1;
+    int sfx_01 = 0x37;
     char *sfx_code = NULL;
 
     char *output_name = NULL;
@@ -315,19 +316,22 @@ int main(int argc, char *argv[]) {
                 ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
                 i++;
-                cbm_relocate_packed_addr = read_number(argv[i]);
+                cbm_relocate_packed_addr = read_number(argv[i], 65536);
             } else if (!strcmp(argv[i], "--relocate-origin")) {
                 i++;
-                cbm_relocate_origin_addr = read_number(argv[i]);
+                cbm_relocate_origin_addr = read_number(argv[i], 65536);
             } else if (!strcmp(argv[i], "--from")) {
                 i++;
-                cbm_range_from = read_number(argv[i]);
+                cbm_range_from = read_number(argv[i], 65536);
             } else if (!strcmp(argv[i], "--to")) {
                 i++;
-                cbm_range_to = read_number(argv[i]);
+                cbm_range_to = read_number(argv[i], 65536);
+            } else if (!strcmp(argv[i], "--01")) {
+                i++;
+                sfx_01 = read_number(argv[i], 256);
             } else if (!strcmp(argv[i], "--sfx")) {
                 i++;
-                sfx_addr = read_number(argv[i]);
+                sfx_addr = read_number(argv[i], 65536);
                 sfx = TRUE;
                 ctx.inplace = FALSE;
      //       } else if (!strcmp(argv[i], "-x")) {
@@ -348,6 +352,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+
     printf("dali v0.2 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
     printf("underlying zx0-packer salvador by Emmanuel Marty\n");
 
@@ -356,6 +361,7 @@ int main(int argc, char *argv[]) {
      //                   "  -x [path]                  Path to zx0/salvador executeable\n"
                         "  -o [filename]              Set output filename\n"
                         "  --sfx [num]                Create a c64 compatible sfx-executable\n"
+                        "  --01 [num]                 Set $01 to [num] after sfx\n"
                         "  --no-inplace               Disable inplace-decompression\n"
                         "  --binfile                  Input file is a raw binary without load-address\n"
                         "  --from [$num]              Compress file from [num] on\n"
@@ -530,7 +536,9 @@ int main(int argc, char *argv[]) {
         sfx_code[ZX0_DATA_END + 0] = (0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) & 0xff;
         sfx_code[ZX0_DATA_END + 1] = ((0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
 
-        sfx_code[ZX0_DATA_SIZE_HI] = ((ctx.reencoded_index + 0x100) >> 8) & 0xff;
+        sfx_code[ZX0_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
+
+        sfx_code[ZX0_01] = sfx_01;
 
         printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
         printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.packed_index + (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));

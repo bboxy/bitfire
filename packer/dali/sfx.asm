@@ -26,12 +26,13 @@
 !cpu 6510
 
 .depacker	= $01
-.smc_offsetd 	= .depacker - (.depacker_start - .zx0_code_start)
+.smc_offsetd 	= .depacker - (.zx0_code_end - .zx0_code_start)
 ZX0_SRC		= .lz_src - .smc_offsetd + 2
 ZX0_DST		= .lz_dst      - .smc_offsetd + 2
 ZX0_SFX_ADDR	= .lz_sfx_addr - .smc_offsetd + 2
 ZX0_DATA_END 	= .lz_data_end      - .smc_offsetd + 2
 ZX0_DATA_SIZE_HI = .lz_data_size_hi - .smc_offsetd + 2
+ZX0_01		= .lz_01 - .smc_offsetd + 2
 
 		* = $0801
 .zx0_code_start
@@ -43,37 +44,40 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .smc_offsetd + 2
 
 		;/!\ ATTENTION, the depacker just fits into ZP this way, if it gets larger, the copy routine will overwrite $00, as it is a 8-bit address sta
 		sei
-		lda $ba
-		pha
-		ldx #.depacker_end - .depacker_start
--
-		lda .depacker_start - 1,x
-		sta .depacker - 1,x
-		dex
-		bne -
 
+		;XXX TODO copy $0100 on stack, wrap zp by that
+		;copy back with wrapping zp too
+		ldy #.depacker_end - .depacker_start
+-
+		lda .depacker - 1,y
+		ldx .depacker_code - 1,y
+		stx .depacker - 1,y
+		pha
+		dey
+		bne -
                 jmp .depack
 
 		;------------------
 		;depacker starts here
 		;------------------
-.depacker_start
+.zx0_code_end
+.depacker_code
 !pseudopc .depacker {
+.depacker_start
 		!byte $38
 .depack
-.lz_data_size_hi = * + 1
-                ldy #>(.data_end - .data) + 1
 -
-                dex
+                dey
 .lz_data_end = * + 1
-.src		lda .data_end - $100,x
-.dst		sta $ff00,x
-                txa
+.src		lda .data_end - $100,y
+.dst		sta $ff00,y
+                tya				;annoying, but need to copy from $ff ... $00
                 bne -
 
                 dec <.src + 2
-                dec <.dst + 2
-                dey
+.lz_data_size_hi = * + 1
+                lda #>(.data_end - .data) + 1
+                dcp <.dst + 2
                 bne -
 		;ldy #$00			;is already 0
 		;------------------
@@ -254,16 +258,28 @@ ZX0_DATA_SIZE_HI = .lz_data_size_hi - .smc_offsetd + 2
 		;exit code for sfx only
 		;------------------
 
-		dec $01
-		;cli
-		sty $98
+.restore_end
+		;restore zp up to $dc
+-
 		pla
-		sta $ba
+		sta <.depacker,y
+		iny
+		cpy #.restore_end - .depacker_start - (.depacker_end - .restore_end)
+!warn .restore_end - .depacker
+		bne -
+.lz_01 = * + 1
+		lda #$37
+		sta $01
+		ldx #$ff
+		txs
+.lz_cli
+		;sei
 .lz_sfx_addr = * + 1
 		jmp $0000
-}
 .depacker_end
-!warn "sfx size: ", .depacker_end - .depacker_start
+}
+!warn "sfx zp size: ", .depacker_end - .depacker_start
+!warn "sfx size: ", * - .zx0_code_start
 .data
 		;!bin "test.lz"
 .data_end
