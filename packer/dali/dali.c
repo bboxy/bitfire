@@ -290,7 +290,8 @@ int main(int argc, char *argv[]) {
 
     int sfx;
     int sfx_addr = -1;
-    int sfx_01 = 0x37;
+    int sfx_01 = -1;
+    int sfx_cli = FALSE;
     char *sfx_code = NULL;
 
     char *output_name = NULL;
@@ -329,6 +330,8 @@ int main(int argc, char *argv[]) {
             } else if (!strcmp(argv[i], "--01")) {
                 i++;
                 sfx_01 = read_number(argv[i], 256);
+            } else if (!strcmp(argv[i], "--cli")) {
+                sfx_cli = TRUE;
             } else if (!strcmp(argv[i], "--sfx")) {
                 i++;
                 sfx_addr = read_number(argv[i], 65536);
@@ -352,7 +355,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-
     printf("dali v0.2 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
     printf("underlying zx0-packer salvador by Emmanuel Marty\n");
 
@@ -362,6 +364,7 @@ int main(int argc, char *argv[]) {
                         "  -o [filename]              Set output filename\n"
                         "  --sfx [num]                Create a c64 compatible sfx-executable\n"
                         "  --01 [num]                 Set $01 to [num] after sfx\n"
+                        "  --cli [num]                Do a CLI after sfx, default is SEI\n"
                         "  --no-inplace               Disable inplace-decompression\n"
                         "  --binfile                  Input file is a raw binary without load-address\n"
                         "  --from [$num]              Compress file from [num] on\n"
@@ -371,6 +374,13 @@ int main(int argc, char *argv[]) {
                         "  --relocate-origin [num]    Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
                         ,argv[0]);
         exit(1);
+    }
+
+    if (!sfx && sfx_01 >= 0) {
+        fprintf(stderr, "Info: No sfx, ignoring --01 option\n");
+    }
+    if (!sfx && sfx_cli) {
+        fprintf(stderr, "Info: No sfx, ignoring --cli option\n");
     }
 
     //if (compressor_path == NULL) {
@@ -516,6 +526,7 @@ int main(int argc, char *argv[]) {
 
     /* as sfx */
     if (sfx) {
+        if (sfx_01 < 0) sfx_01 = 0x37;
         /* copy over to change values in code */
         sfx_code = (char *)malloc(sizeof(decruncher));
         memcpy (sfx_code, decruncher, sizeof(decruncher));
@@ -539,6 +550,7 @@ int main(int argc, char *argv[]) {
         sfx_code[ZX0_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
 
         sfx_code[ZX0_01] = sfx_01;
+        if (sfx_cli) sfx_code[ZX0_CLI] = 0x58;
 
         printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
         printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.packed_index + (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));

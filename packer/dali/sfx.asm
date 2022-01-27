@@ -33,6 +33,7 @@ ZX0_SFX_ADDR	= .lz_sfx_addr - .smc_offsetd + 2
 ZX0_DATA_END 	= .lz_data_end      - .smc_offsetd + 2
 ZX0_DATA_SIZE_HI = .lz_data_size_hi - .smc_offsetd + 2
 ZX0_01		= .lz_01 - .smc_offsetd + 2
+ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 
 		* = $0801
 .zx0_code_start
@@ -270,10 +271,11 @@ ZX0_01		= .lz_01 - .smc_offsetd + 2
 .lz_01 = * + 1
 		lda #$37
 		sta $01
-		ldx #$ff
+
+		ldx #$ff			;be nice and fix stackpointer :-)
 		txs
 .lz_cli
-		;sei
+		sei
 .lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
