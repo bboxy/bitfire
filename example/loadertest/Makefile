@@ -1,7 +1,7 @@
 BITNAX_OPTS = -v --bitfire
 D64WRITE_OPTS = -v
-ZX0 = ../../packer/recoder/recode
-ZX0_OPTS = -x '../../packer/salvador/salvador'
+ZX0 = ../../packer/dali/dali
+ZX0_OPTS =
 D64WRITE = ../../d64write/d64write
 
 all: example

@@ -3,16 +3,14 @@ What is it
 
 Bitfire is a fixed interleave loadersystem with depacker, a basic framework and an image writing tool. Aim was to make the loader as fast as possible while being as tiny as possible. So at some points size and speed had to be traded against each other. An own, however d64-compatible (bam copy is sufficient), file format is introduced to make the code less complex and loading faster. Also, functions that are not used regularly (like turn disk detection) are available as statically linkable functions and thus make the resident part on c64 side even smaller. Being that tiny ($8b to $1ea bytes, depending on configuration) and still fast, makes it perfect for being used in demos. The imaging-tool creates diskimages with all demofiles and a dirart on it. Also it is accompanied by a lz-packer based on doynamite, however smaller in code and a bit faster than that, while yielding nearly the same results. The packer supports a lot of functionality and thus makes other tools obsolete, as it can split files, reference data in previous files, write in several formats, create sfx and much more. The framework supports a base irq and safe loading hooks, as well as a loadnext functionality (but this feature is also available without framework, see examples), however loading by filenumber is still supported if your demo is in need of random file access (like the comaland endpart)
 
-zx0
----
+dali
+----
 
 The packer supports output of both, sfx as well as levelpacked files suitable for Bitfire
 
 -o						Name of oputput file
--f						Force overwrite of output file
--q						Compress faster, but with a slightly worse ratio, you might prefer that option during development, but remove it for the final build
 --sfx startaddr					Spit out an executable for c64
---use-prefix					Reference also the stuff that is cut off the file when using --cut-input-addr. The referenced part must be in c64-memory however to make this work upon depacking. It saves a few bytes on splitted files, as more matches can be found
+#--use-prefix					Reference also the stuff that is cut off the file when using --cut-input-addr. The referenced part must be in c64-memory however to make this work upon depacking. It saves a few bytes on splitted files, as more matches can be found
 --relocate-packed				Force packed file to be loaded to a differnet location (for e.g. if it starts/ends in IO range)
 --relocate-origin				Move file to alternative address, prior to packing
 --binfile					Given file is without 2 byte .prg header, --relocate-origin can help out
@@ -62,7 +60,7 @@ create all necessary files in the bitfire directory (including d64write) with th
 make
 
 After building you will get a couple of files:
-zx0			The packer ported to c64, based on zx0 by Einar Saukas, details see above
+dali			The salvador packer ported to c64, based on salvador by Emmanuel Marty, details see above
 d64write		The d64-tool, Described already above
 installer		The installer that must be called beforehand. File is in .prg format. It includes already the resident part and copies it to the final destination in mem if called.
 loader-acme.inc		All necessary labels to call the functions of the loader, acme-style (also works for dasm and dreamass).
@@ -227,11 +225,11 @@ When sending $ff (bitfire_send_byte_), the floppy resets itself, this is handy w
 Depacker/Packer
 ---------------
 
-To create a packed files, there is a packer derived from zx0 written by Einar Saukas. It will pack and adjust the load-address accordingly.
-The commandline might look like: ./zx0 -o file.lz file.prg
+To create a packed files, there is a packer derived from salvador written by Emmanuel Marty. It will pack and adjust the load-address accordingly.
+The commandline might look like: dali -o file.lz file.prg
 If a file is going under IO it is best to split it somewhere before the IO range starts, for e.g.:
-zx0 -o part1.lz --from 0x0801 --to 0xd000 mypart
-zx0 -o part2.lz --from 0xd000 --to 0xffff mypart
+dali -o part1.lz --from 0x0801 --to 0xd000 mypart
+dali -o part2.lz --from 0xd000 --to 0xffff mypart
 
 This will result in two files that can be loaded/depacked in one go by link_load_next_double. If the resulting part2.lz happens to be that small that it has a load-address below $e000, just move it further upwards with --relocate-packed 0xe000 to avoid it being loaded under IO and crash. However be careful with the --relocate-packed flag, the file will be slightly bigger as it can't be depacked in place anymore.
 Basically the load_next_double call is loading the first part and decrunching it on the fly, then loading the next part raw, switching off the IO, depacking that and turning on IO again.
@@ -249,7 +247,7 @@ What is this? This option leaves 6 bytes @ $0202 and 3 bytes @ $0302 free of cod
 Zero-Overlap
 ------------
 
-zx0 creates files that have no overlap at its end and thus can be completely depacked in place within its strict barriers.
+dali creates files that have no overlap at its end and thus can be completely depacked in place within its strict barriers.
 
 Zeropage usage
 --------------

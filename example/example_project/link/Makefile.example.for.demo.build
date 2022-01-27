@@ -1,5 +1,5 @@
 SHELL = /bin/bash
-ZX0 = ../packer/zx0/zx0
+ZX0 = ../packer/dali/dali
 D64WRITE = ../d64write/d64write
 X64 = x64
 MAKE_FLAGS = RELEASE=1

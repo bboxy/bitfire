@@ -84,6 +84,18 @@ link_player
 	}
 }
 
+!if CONFIG_FRAMEWORK = 1 {
+link_music_play
+	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
+			inc link_frame_count + 0
+			bne +
+			inc link_frame_count + 1
++
+link_music_addr = * + 1
+			jmp link_music_play_side1
+	}
+}
+
 			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 			;and advances the frame counter if needed
 
@@ -131,9 +143,7 @@ bitfire_send_byte_
 			bcs +
 			eor #$10
 +
-			jsr .ld_set_dd02
-			pha
-			pla
+			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive to fast @floppy
 			lsr <.filenum
 			bne .ld_loop
 			lda #$3f
@@ -190,7 +200,7 @@ bitfire_loadraw_
 			jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
 			php				;preserve flag
 			;extract errors here:
-	!if CONFIG_NMI_GAPS = 0 & CONFIG_DEBUG = 1 {
+	!if CONFIG_DEBUG = 1 {
 			asr #$7c
 			lsr
 			adc <bitfire_errors
@@ -228,12 +238,10 @@ bitfire_loadraw_
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
 			bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
 bitfire_ntsc5
-;.ld_gloop
-			bmi .ld_gentry
+			bmi .ld_gentry			;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
 .ld_gloop
 			ldx #$3f
 bitfire_ntsc0		ora $dd00 - $3f,x
-;bitfire_ntsc0		ora $dd00
 			stx $dd02
 			lsr				;%xxxxx111
 			lsr				;%xxxxxx11 1
@@ -295,19 +303,30 @@ bitfire_loadcomp_
 	}
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
-			sty .lz_offset_lo + 1		;initialize offset with $0000
-			sty .lz_offset_hi + 1
-			sty <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
+			ldx #$02
+			stx <.lz_bits			;start with an empty lz_bits, first lsr <.lz_bits leads to literal this way and bits are refilled upon next shift
+-
+			lda (.lz_src),y
+			sta <.lz_dst + 0 - 1, x
+			inc <.lz_src + 0
+			bne +
+			jsr .lz_next_page
++
+			dex
+			bne -
+			stx .lz_offset_lo + 1		;initialize offset with $0000
+			stx .lz_offset_hi + 1
+			stx <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
+			beq .lz_start_over		;start with a literal, X = 0
 
-			jsr .lz_get_byte		;y will stay 0
-			sta <.lz_dst + 1
-			jsr .lz_get_byte		;y will stay 0
-			sta <.lz_dst + 0
-
-			lda #$40			;start with an empty lz_bits, first asl <.lz_bits leads to literal this way and bits are refilled upon next shift
-			sta <.lz_bits
-			bne .lz_start_over		;start with a literal
-
+			!ifdef .lz_gap2 {
+				!warn .lz_gap2 - *, " bytes left until gap2"
+			}
+!align 255,0
+.lz_gap2
+!if .lz_gap2 - .lz_gap1 > $0100 {
+		!error "code on first page too big, second gap does not fit!"
+}
 			;------------------
 			;SELDOM STUFF
 			;------------------
@@ -321,10 +340,6 @@ bitfire_loadcomp_
 			;------------------
 			;POINTER HANDLING LITERAL COPY
 			;------------------
-.lz_dst_inc
-			inc <.lz_dst + 1
-			bcs .lz_dst_inc_
-
 .lz_src_inc
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;sets X = 0, so all sane
@@ -333,33 +348,9 @@ bitfire_loadcomp_
 	}
 			bcs .lz_src_inc_
 
-			;!ifdef .lz_gap2 {
-			;	!warn .lz_gap2 - *, " bytes left until gap2"
-			;}
-!align 255,0
-.lz_gap2
-!if .lz_gap2 - .lz_gap1 > $0100 {
-		!error "code on first page too big, second gap does not fit!"
-}
-!if CONFIG_FRAMEWORK = 1 {
-link_music_play
-	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
-			inc link_frame_count + 0
-			bne +
-			inc link_frame_count + 1
-+
-link_music_addr = * + 1
-			jmp link_music_play_side1
-	}
-}
-			;------------------
-			;GET BYTE FROM STREAM
-			;------------------
-.lz_get_byte
-			lda (.lz_src),y
-			inc <.lz_src + 0
-			beq .lz_next_page
-			rts
+.lz_dst_inc
+			inc <.lz_dst + 1
+			bcs .lz_dst_inc_
 
 			;------------------
 			;POLLING
@@ -375,7 +366,7 @@ link_music_addr = * + 1
 			;------------------
 .lz_start_over
 			lda #$01			;we fall through this check on entry and start with literal
-			asl <.lz_bits
+			lsr <.lz_bits
 			bcs .lz_match			;after each match check for another match or literal?
 .lz_literal
 			jsr .lz_length
@@ -402,7 +393,7 @@ link_music_addr = * + 1
 			;------------------
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
 			rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
-			asl <.lz_bits
+			lsr <.lz_bits
 			bcs .lz_match			;either match with new offset or old offset
 
 			;------------------
@@ -484,10 +475,10 @@ link_music_addr = * + 1
 			;FETCH A NEW OFFSET
 			;------------------
 -							;lz_length as inline
-			asl <.lz_bits			;fetch payload bit
+			lsr <.lz_bits			;fetch payload bit
 			rol				;can also moved to front and executed once on start
 .lz_match
-			asl <.lz_bits
+			lsr <.lz_bits
 			bcc -
 
 			bne +
@@ -515,9 +506,9 @@ link_music_addr = * + 1
 			ldy #$fe
 			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
 -
-			asl <.lz_bits
+			lsr <.lz_bits
 			rol
-			asl <.lz_bits
+			lsr <.lz_bits
 			bcc -
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
@@ -541,7 +532,7 @@ link_music_addr = * + 1
 .lz_refill_bits
 			tax
 			lda (.lz_src),y
-			rol
+			ror
 			sta <.lz_bits
 			inc <.lz_src + 0 		;postponed, so no need to save A on next_page call
 			bne +				;XXX TODO if we would prefer beq, 0,2% saving
@@ -555,12 +546,12 @@ link_music_addr = * + 1
 			bcs .lz_lend
 
 .lz_get_loop
-			asl <.lz_bits			;fetch payload bit
+			lsr <.lz_bits			;fetch payload bit
 .lz_length_16_
 			rol				;can also moved to front and executed once on start
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .lz_length
-			asl <.lz_bits
+			lsr <.lz_bits
 
 			bcc .lz_get_loop
 			beq .lz_refill_bits
