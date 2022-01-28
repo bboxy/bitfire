@@ -29,7 +29,7 @@
 !src "config.inc"
 !src "constants.inc"
 
-LZ_BITS_LEFT		= 1
+LZ_BITS_LEFT		= 0
 
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
