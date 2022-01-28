@@ -38,7 +38,7 @@ ZX0_01		= lz_01 - .smc_offsetd + 2
 ZX0_CLI		= lz_cli - .smc_offsetd + 2
 
 !macro get_lz_bit {
-	!if LZ_BITS_LEFT {
+	!if LZ_BITS_LEFT = 1 {
 		asl <lz_bits
 	} else {
 		lsr <lz_bits
@@ -46,7 +46,7 @@ ZX0_CLI		= lz_cli - .smc_offsetd + 2
 }
 
 !macro set_lz_bit_marker {
-	!if LZ_BITS_LEFT {
+	!if LZ_BITS_LEFT = 1 {
 		rol
 	} else {
 		ror

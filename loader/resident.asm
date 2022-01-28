@@ -33,14 +33,14 @@ LZ_BITS_LEFT		= 1
 
 !if CONFIG_LOADER = 1 {
 ;loader zp-addresses
-.filenum		= CONFIG_ZP_ADDR + 0
-.barrier		= .filenum
+filenum			= CONFIG_ZP_ADDR + 0
+barrier			= filenum
 	!if CONFIG_DECOMP = 0 {
-bitfire_load_addr_lo	= .filenum			;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
-bitfire_load_addr_hi	= .filenum + 1
+bitfire_load_addr_lo	= filenum			;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
+bitfire_load_addr_hi	= filenum + 1
 	} else {
-bitfire_load_addr_lo	= .lz_src + 0
-bitfire_load_addr_hi	= .lz_src + 1
+bitfire_load_addr_lo	= lz_src + 0
+bitfire_load_addr_hi	= lz_src + 1
 	}
 	!if CONFIG_DEBUG = 1 {
 bitfire_errors		= CONFIG_ZP_ADDR + 1
@@ -48,25 +48,34 @@ bitfire_errors		= CONFIG_ZP_ADDR + 1
 }
 
 !if CONFIG_DECOMP = 1 {
-.lz_bits		= CONFIG_ZP_ADDR + 1 + CONFIG_DEBUG
-.lz_dst			= CONFIG_ZP_ADDR + 2 + CONFIG_DEBUG
-.lz_src			= CONFIG_ZP_ADDR + 4 + CONFIG_DEBUG
-.lz_len_hi		= CONFIG_ZP_ADDR + 6 + CONFIG_DEBUG
+lz_bits			= CONFIG_ZP_ADDR + 1 + CONFIG_DEBUG
+lz_dst			= CONFIG_ZP_ADDR + 2 + CONFIG_DEBUG
+lz_src			= CONFIG_ZP_ADDR + 4 + CONFIG_DEBUG
+lz_len_hi		= CONFIG_ZP_ADDR + 6 + CONFIG_DEBUG
 
 !macro get_lz_bit {
-        !if LZ_BITS_LEFT {
-                asl+1 <(CONFIG_ZP_ADDR + 1 + CONFIG_DEBUG)
+        !if LZ_BITS_LEFT = 1 {
+			asl <lz_bits
         } else {
-                lsr+1 <(CONFIG_ZP_ADDR + 1 + CONFIG_DEBUG)
+			lsr <lz_bits
         }
 }
 
 !macro set_lz_bit_marker {
-        !if LZ_BITS_LEFT {
-                rol
+        !if LZ_BITS_LEFT = 1 {
+        	        rol
         } else {
-                ror
+	                ror
         }
+}
+
+!macro init_lz_bits {
+	!if LZ_BITS_LEFT = 1 {
+			lda #$40
+			sta <lz_bits			;start with an empty lz_bits, first +get_lz_bit leads to literal this way and bits are refilled upon next shift
+	} else {
+			stx <lz_bits
+	}
 }
 }
 
@@ -153,7 +162,7 @@ link_cia2_type			;%00000100
 bitfire_send_byte_
 			sec
 			ror
-			sta <.filenum
+			sta <filenum
 			lda #$3f
 .ld_loop
 			eor #$20
@@ -162,7 +171,7 @@ bitfire_send_byte_
 			eor #$10
 +
 			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive to fast @floppy
-			lsr <.filenum
+			lsr <filenum
 			bne .ld_loop
 			lda #$3f
 -
@@ -175,7 +184,7 @@ bitfire_send_byte_
 
 ;			sec
 ;			ror
-;			sta .filenum
+;			sta filenum
 ;			ldx #$3f
 ;			txa
 ;.ld_loop
@@ -186,7 +195,7 @@ bitfire_send_byte_
 ;			eor #$20
 ;			sta $dd02 - $3f,x
 ;			jsr .waste
-;			lsr <(.filenum - $3f),x		;fetch next bit from filenumber and waste cycles
+;			lsr <(filenum - $3f),x		;fetch next bit from filenumber and waste cycles
 ;			bne .ld_loop
 ;-
 ;			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
@@ -227,7 +236,7 @@ bitfire_loadraw_
 
 	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
 			jsr .ld_get_byte		;fetch barrier
-			sta .barrier
+			sta <barrier
 	}
 .bitfire_load_block
 			jsr .ld_get_byte		;fetch blockaddr hi
@@ -322,12 +331,11 @@ bitfire_loadcomp_
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
 			ldx #$02
-			lda #$40
-			sta <.lz_bits			;start with an empty lz_bits, first +get_lz_bit leads to literal this way and bits are refilled upon next shift
+			+init_lz_bits
 -
-			lda (.lz_src),y
-			sta <.lz_dst + 0 - 1, x
-			inc <.lz_src + 0
+			lda (lz_src),y
+			sta <lz_dst + 0 - 1, x
+			inc <lz_src + 0
 			bne +
 			jsr .lz_next_page
 +
@@ -335,7 +343,7 @@ bitfire_loadcomp_
 			bne -
 			stx .lz_offset_lo + 1		;initialize offset with $0000
 			stx .lz_offset_hi + 1
-			stx <.lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
+			stx <lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 			beq .lz_start_over		;start with a literal, X = 0
 
 			!ifdef .lz_gap2 {
@@ -350,10 +358,10 @@ bitfire_loadcomp_
 			;SELDOM STUFF
 			;------------------
 .lz_dcp
-			dcp <.lz_len_hi
+			dcp <lz_len_hi
 			bcs .lz_match_big
 .lz_l_page
-			dec <.lz_len_hi
+			dec <lz_len_hi
 			bcs .lz_cp_lit
 
 			;------------------
@@ -363,12 +371,12 @@ bitfire_loadcomp_
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;sets X = 0, so all sane
 	} else {
-			inc <.lz_src + 1
+			inc <lz_src + 1
 	}
 			bcs .lz_src_inc_
 
 .lz_dst_inc
-			inc <.lz_dst + 1
+			inc <lz_dst + 1
 			bcs .lz_dst_inc_
 
 			;------------------
@@ -392,19 +400,19 @@ bitfire_loadcomp_
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
-			lda (.lz_src),y			;Need to copy this way, or wie copy from area that is blocked by barrier
-			sta (.lz_dst),y
+			lda (lz_src),y			;Need to copy this way, or wie copy from area that is blocked by barrier
+			sta (lz_dst),y
 
-			inc <.lz_src + 0
+			inc <lz_src + 0
 			beq .lz_src_inc
 .lz_src_inc_
-			inc <.lz_dst + 0
+			inc <lz_dst + 0
 			beq .lz_dst_inc
 .lz_dst_inc_
 			dex
 			bne .lz_cp_lit
 
-			lda <.lz_len_hi			;more pages to copy?
+			lda <lz_len_hi			;more pages to copy?
 			bne .lz_l_page			;happens very seldom
 
 			;------------------
@@ -428,15 +436,15 @@ bitfire_loadcomp_
 			eor #$ff			;restore A
 .lz_m_page_
 .lz_match_len2						;entry from new_offset handling
-			adc <.lz_dst + 0
-			sta <.lz_dst + 0
+			adc <lz_dst + 0
+			sta <lz_dst + 0
 			tax				;remember for later end check, cheaper this way
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
-			dec <.lz_dst + 1		;subtract one more in this case
+			dec <lz_dst + 1			;subtract one more in this case
 .lz_clc_back
 .lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1) in fact we could use sbx here, but would not respect carry, but a and x are same, but need x later anyway for other purpose
 			sta .lz_msrcr + 0
-			lda <.lz_dst + 1
+			lda <lz_dst + 1
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
 			;				;XXX TODO would have dst + 0 and + 1 in X and A here, of any use? x is reused later on cpx
@@ -444,18 +452,18 @@ bitfire_loadcomp_
 			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
 			lda $beef,y
-			sta (.lz_dst),y
+			sta (lz_dst),y
 			iny
 			bne .lz_cp_match
-			inc <.lz_dst + 1
+			inc <lz_dst + 1
 
-			lda <.lz_len_hi			;check for more loop runs
+			lda <lz_len_hi			;check for more loop runs
 			bne .lz_m_page			;do more page runs? Yes? Fall through
 .lz_check_poll
-			cpx <.lz_src + 0		;check for end condition when depacking inplace, .lz_dst + 0 still in X
+			cpx <lz_src + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
-			lda <.lz_dst + 1
-			sbc <.lz_src + 1
+			lda <lz_dst + 1
+			sbc <lz_src + 1
 			bne .lz_start_over
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
@@ -465,7 +473,7 @@ bitfire_loadcomp_
 			;NEXT PAGE IN STREAM
 			;------------------
 .lz_next_page
-			inc <.lz_src + 1
+			inc <lz_src + 1
 .lz_next_page_
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
@@ -477,8 +485,8 @@ bitfire_loadcomp_
 			jsr .ld_pblock			;fetch another block
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 							;XXX TODO send a high enough barrier on last block being sent
-			lda <.lz_src + 1		;get current depack position
-			cmp <.barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
+			lda <lz_src + 1			;get current depack position
+			cmp <barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
 							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking
@@ -509,16 +517,16 @@ bitfire_loadcomp_
 			lsr
 			sta .lz_offset_hi + 1		;hibyte of offset
 
-			lda (.lz_src),y			;fetch another byte directly
+			lda (lz_src),y			;fetch another byte directly
 			ror
 			sta .lz_offset_lo + 1
 
-			inc <.lz_src + 0		;postponed, so no need to save A on next_page call
+			inc <lz_src + 0			;postponed, so no need to save A on next_page call
 			bne +
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;preserves carry, all sane
 	} else {
-			inc <.lz_src + 1
+			inc <lz_src + 1
 	}
 +
 			lda #$01
@@ -538,7 +546,7 @@ bitfire_loadcomp_
 			;MORE SELDOM STUFF
 			;------------------
 .lz_m_page
-			dec <.lz_len_hi
+			dec <lz_len_hi
 			lda #$ff			;shorter this way, but costs a few more cycles per page, happens super seldom
 			bne .lz_m_page_			;if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
 .lz_clc
@@ -550,15 +558,15 @@ bitfire_loadcomp_
 			;------------------
 .lz_refill_bits
 			tax
-			lda (.lz_src),y
+			lda (lz_src),y
 			+set_lz_bit_marker
-			sta <.lz_bits
-			inc <.lz_src + 0 		;postponed, so no need to save A on next_page call
+			sta <lz_bits
+			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
 			bne +				;XXX TODO if we would prefer beq, 0,2% saving
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;preserves carry and A, clears X, Y, all sane
 	} else {
-			inc <.lz_src + 1
+			inc <lz_src + 1
 	}
 +
 			txa
@@ -581,7 +589,7 @@ bitfire_loadcomp_
 			pha				;save LSB
 			tya				;was lda #$01, but A = 0 + rol makes this also start with MSB = 1
 			jsr .lz_length_16_		;get up to 7 more bits
-			sta <.lz_len_hi			;save MSB
+			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
 			rts
 }
@@ -589,7 +597,7 @@ bitfire_loadcomp_
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
 ;XXX TODO
-;decide upon 2 bits with bit <.lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
+;decide upon 2 bits with bit <lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
 
 
