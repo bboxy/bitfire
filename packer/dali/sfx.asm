@@ -34,7 +34,7 @@ DALI_DST	= lz_dst      - .smc_offsetd + 2
 DALI_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
 DALI_DATA_END 	= lz_data_end      - .smc_offsetd + 2
 DALI_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
-DALI_01		= lz_01 - .dali_code_start + 2
+DALI_01		= lz_01 - .smc_offsetd + 2
 DALI_CLI	= lz_cli - .smc_offsetd + 2
 
 !macro get_lz_bit {
@@ -70,15 +70,12 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 
 		ldy #.depacker_end - .depacker_start
 -
-		pha
+		pha				;saved zp to stack down to $02
 		lax <.depacker - 1,y		;saves a byte
 		ldx .depacker_code - 1,y
 		stx <.depacker - 1,y
 		dey
 		bne -
-lz_01 = * + 1
-		lda #$37			;replace value for $01 in saved stack
-		pha
                 jmp .depack
 
 		;------------------
@@ -97,7 +94,10 @@ lz_bits
 }
 
 .depack
--
+lz_01 = * + 1
+		lda #$37			;replace value for $01 in saved ZP on stack
+		pha
+-						;copy data to end of ram ($ffff)
                 dey
 lz_data_end = * + 1
 .src		lda .data_end - $100,y
@@ -112,6 +112,7 @@ lz_data_size_hi = * + 1
                 bne -
 
 		;ldy #$00			;is already 0
+
 		;------------------
 		;LITERAL
 		;------------------
@@ -123,7 +124,6 @@ lz_data_size_hi = * + 1
 		jsr .get_length
 		tax
 		beq .lz_l_page_
-;		dec <.lz_len_hi			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it sets carry and resets Y, what is unnecessary, but happens so seldom it doesn't hurt
 .cp_literal
 lz_src = * + 1
 		lda .data,y			;looks expensive, but is cheaper than loop
@@ -135,7 +135,7 @@ lz_src = * + 1
 		dey				;this way we force increment of lz_dst + 1 if y = 0
 		tya
 		adc <lz_dst + 0
-		sta <lz_dst + 0		;XXX TODO final add of y, coudl be combined with next add? -> postpone until match that will happen necessarily later on?
+		sta <lz_dst + 0			;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on?
 		bcc +
 		inc <lz_dst + 1
 +
@@ -165,7 +165,6 @@ lz_src = * + 1
 		jsr .get_length
 						;XXX TODO encode length - 1 for rep match? but 0 can't be detected then?
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
-		;sec				;need sec here if we want to forgo in the beq .lz_calc_msrc
 		bcs +
 		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
 +
@@ -177,10 +176,9 @@ lz_src = * + 1
 .lz_match__					;entry from new_offset handling
 		adc <lz_dst + 0
 		sta <lz_dst + 0
-		bcs +				;/!\ branch happens less than fall through, only in case of branch carry needs to be cleared :-(
+		bcs .lz_clc			;/!\ branch happens less than fall through, only in case of branch carry needs to be cleared :-(
 		dec <lz_dst + 1
-+
-		clc				;can this be avoided by receiving offset - 1 from stream?
+.lz_clc_
 .lz_offset_lo = * + 1
 		sbc #$00
 		sta <.lz_msrcr + 0
@@ -252,6 +250,10 @@ lz_dst = * + 1
 		ldy #$00
 		jsr .lz_refill_bits		;fetch remaining bits
 		bcs .lz_match_
+.lz_clc
+		clc
+		bcc .lz_clc_
+
 .lz_refill_bits
 		tax
 		lda (lz_src),y
@@ -304,7 +306,7 @@ lz_sfx_addr = * + 1
 .depacker_end
 }
 ;!warn "fixup size: ",.depacker_end - .restore_end
-;!warn "zp saved up to: ",.restore_end - .depacker
+!warn "zp saved up to: ",.restore_end - .depacker
 ;!warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start
 .data
