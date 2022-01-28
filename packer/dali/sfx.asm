@@ -34,7 +34,7 @@ DALI_DST	= lz_dst      - .smc_offsetd + 2
 DALI_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
 DALI_DATA_END 	= lz_data_end      - .smc_offsetd + 2
 DALI_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
-DALI_01		= lz_01 - .smc_offsetd + 2
+DALI_01		= lz_01 - .dali_code_start + 2
 DALI_CLI	= lz_cli - .smc_offsetd + 2
 
 !macro get_lz_bit {
@@ -64,16 +64,21 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 		;/!\ ATTENTION, the depacker just fits into ZP this way, if it gets larger, the copy routine will overwrite $00, as it is a 8-bit address sta
 		sei
 
-		;XXX TODO copy $0100 on stack, wrap zp by that
-		;copy back with wrapping zp too
+		;full zp code will be copied, but later less bytes will be copied back
+		ldx #<($100 + (.depacker_end - .restore_end))
+		txs
+
 		ldy #.depacker_end - .depacker_start
 -
-		lda .depacker - 1,y
-		ldx .depacker_code - 1,y
-		stx .depacker - 1,y
 		pha
+		lax <.depacker - 1,y		;saves a byte
+		ldx .depacker_code - 1,y
+		stx <.depacker - 1,y
 		dey
 		bne -
+lz_01 = * + 1
+		lda #$37			;replace value for $01 in saved stack
+		pha
                 jmp .depack
 
 		;------------------
@@ -288,24 +293,19 @@ lz_dst = * + 1
 		;restore zp up to $dc
 -
 		pla
-		sta <.depacker,y
-		iny
-		cpy #.restore_end - .depacker_start - (.depacker_end - .restore_end)
+		tsx
+		sta <(.depacker - ($100 - (.restore_end - .depacker_start))),x
 		bne -
-lz_01 = * + 1
-		lda #$37
-		sta $01
-
-		ldx #$ff			;be nice and fix stackpointer O:-)
-		txs
+		pha				;end up with SP = $ff
 lz_cli
 		sei
 lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
 }
-!warn "zp saved up to: ",.restore_end - .depacker
-!warn "sfx zp size: ", .depacker_end - .depacker_start
+;!warn "fixup size: ",.depacker_end - .restore_end
+;!warn "zp saved up to: ",.restore_end - .depacker
+;!warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start
 .data
 		;!bin "test.lz"
