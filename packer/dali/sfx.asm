@@ -83,7 +83,7 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 .depacker_code
 !pseudopc .depacker {
 .depacker_start
-		!byte $38
+		!byte $34
 lz_bits
 !if DALI_BITS_LEFT = 1 {
 		!byte $40
@@ -102,9 +102,10 @@ lz_data_end = * + 1
 
                 dec <.src + 2
 lz_data_size_hi = * + 1
-                lda #>(.data_end - .data) + 1
+                lda #>(.data_end - .data) + 1	;check for last page to copy
                 dcp <.dst + 2
                 bne -
+
 		;ldy #$00			;is already 0
 		;------------------
 		;LITERAL
@@ -161,7 +162,7 @@ lz_src = * + 1
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
 		;sec				;need sec here if we want to forgo in the beq .lz_calc_msrc
 		bcs +
-		dcp <.lz_len_hi
+		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
 +
 .lz_match_
 		eor #$ff
@@ -290,13 +291,12 @@ lz_dst = * + 1
 		sta <.depacker,y
 		iny
 		cpy #.restore_end - .depacker_start - (.depacker_end - .restore_end)
-!warn .restore_end - .depacker
 		bne -
 lz_01 = * + 1
 		lda #$37
 		sta $01
 
-		ldx #$ff			;be nice and fix stackpointer :-)
+		ldx #$ff			;be nice and fix stackpointer O:-)
 		txs
 lz_cli
 		sei
@@ -304,6 +304,7 @@ lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
 }
+!warn "zp saved up to: ",.restore_end - .depacker
 !warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start
 .data
