@@ -25,15 +25,33 @@
 
 !cpu 6510
 
+LZ_BITS_LEFT	= 1
+
 .depacker	= $01
 .smc_offsetd 	= .depacker - (.zx0_code_end - .zx0_code_start)
-ZX0_SRC		= .lz_src - .smc_offsetd + 2
-ZX0_DST		= .lz_dst      - .smc_offsetd + 2
-ZX0_SFX_ADDR	= .lz_sfx_addr - .smc_offsetd + 2
-ZX0_DATA_END 	= .lz_data_end      - .smc_offsetd + 2
-ZX0_DATA_SIZE_HI = .lz_data_size_hi - .smc_offsetd + 2
-ZX0_01		= .lz_01 - .smc_offsetd + 2
-ZX0_CLI		= .lz_cli - .smc_offsetd + 2
+ZX0_SRC		= lz_src - .smc_offsetd + 2
+ZX0_DST		= lz_dst      - .smc_offsetd + 2
+ZX0_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
+ZX0_DATA_END 	= lz_data_end      - .smc_offsetd + 2
+ZX0_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
+ZX0_01		= lz_01 - .smc_offsetd + 2
+ZX0_CLI		= lz_cli - .smc_offsetd + 2
+
+!macro get_lz_bit {
+	!if LZ_BITS_LEFT {
+		asl <lz_bits
+	} else {
+		lsr <lz_bits
+	}
+}
+
+!macro set_lz_bit_marker {
+	!if LZ_BITS_LEFT {
+		rol
+	} else {
+		ror
+	}
+}
 
 		* = $0801
 .zx0_code_start
@@ -66,17 +84,18 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 !pseudopc .depacker {
 .depacker_start
 		!byte $38
+lz_bits		!byte $40
 .depack
 -
                 dey
-.lz_data_end = * + 1
+lz_data_end = * + 1
 .src		lda .data_end - $100,y
 .dst		sta $ff00,y
                 tya				;annoying, but need to copy from $ff ... $00
                 bne -
 
                 dec <.src + 2
-.lz_data_size_hi = * + 1
+lz_data_size_hi = * + 1
                 lda #>(.data_end - .data) + 1
                 dcp <.dst + 2
                 bne -
@@ -86,7 +105,7 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 		;------------------
 .lz_start_over
 		lda #$01			;we fall through this check on entry and start with literal
-		asl <.lz_bits
+		+get_lz_bit
 		bcs .lz_new_offset		;after each match check for another match or literal?
 .literal
 		jsr .get_length
@@ -94,26 +113,26 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 		beq .lz_l_page_
 ;		dec <.lz_len_hi			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it sets carry and resets Y, what is unnecessary, but happens so seldom it doesn't hurt
 .cp_literal
-.lz_src = * + 1
+lz_src = * + 1
 		lda .data,y			;looks expensive, but is cheaper than loop
-		sta (.lz_dst),y
+		sta (lz_dst),y
 		iny
 		dex
 		bne .cp_literal
 
 		dey				;this way we force increment of lz_dst + 1 if y = 0
 		tya
-		adc <.lz_dst + 0
-		sta <.lz_dst + 0		;XXX TODO final add of y, coudl be combined with next add? -> postpone until match that will happen necessarily later on?
+		adc <lz_dst + 0
+		sta <lz_dst + 0		;XXX TODO final add of y, coudl be combined with next add? -> postpone until match that will happen necessarily later on?
 		bcc +
-		inc <.lz_dst + 1
+		inc <lz_dst + 1
 +
 		tya
 		sec
-		adc <.lz_src + 0
-		sta <.lz_src + 0
+		adc <lz_src + 0
+		sta <lz_src + 0
 		bcc +
-		inc <.lz_src + 1
+		inc <lz_src + 1
 +
 		ldy <.lz_len_hi
 		bne .lz_l_page			;happens very seldom
@@ -124,7 +143,7 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 
 .cp_literal_done
 		lda #$01
-		asl <.lz_bits
+		+get_lz_bit
 		bcs .lz_new_offset		;either match with new offset or old offset
 
 		;------------------
@@ -144,27 +163,27 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 		tay
 		eor #$ff			;restore A
 .lz_match__					;entry from new_offset handling
-		adc <.lz_dst + 0
-		sta <.lz_dst + 0
+		adc <lz_dst + 0
+		sta <lz_dst + 0
 		bcs +				;/!\ branch happens less than fall through, only in case of branch carry needs to be cleared :-(
-		dec <.lz_dst + 1
+		dec <lz_dst + 1
 +
 		clc				;can this be avoided by receiving offset - 1 from stream?
 .lz_offset_lo = * + 1
 		sbc #$00
 		sta <.lz_msrcr + 0
-		lda <.lz_dst + 1
+		lda <lz_dst + 1
 .lz_offset_hi = * + 1
 		sbc #$00
 		sta <.lz_msrcr + 1
 .cp_match
 .lz_msrcr = * + 1
 		lda $beef,y
-.lz_dst = * + 1
+lz_dst = * + 1
 		sta $4000,y
 		iny
 		bne .cp_match
-		inc <.lz_dst + 1
+		inc <lz_dst + 1
 
 .lz_len_hi = * + 1
 		lda #$00			;check for more loop runs
@@ -183,10 +202,10 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 		;FETCH A NEW OFFSET
 		;------------------
 -						;get_length as inline
-		asl <.lz_bits			;fetch payload bit
+		+get_lz_bit			;fetch payload bit
 		rol				;can also moved to front and executed once on start
 .lz_new_offset
-		asl <.lz_bits
+		+get_lz_bit
 		bcc -
 +
 		bne +
@@ -198,13 +217,13 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 		lsr
 		sta <.lz_offset_hi		;hibyte of offset
 
-		lda (.lz_src),y			;fetch another byte directly
+		lda (lz_src),y			;fetch another byte directly
 		ror
 		sta <.lz_offset_lo
 
-		inc <.lz_src + 0
+		inc <lz_src + 0
 		bne +
-		inc <.lz_src + 1
+		inc <lz_src + 1
 +
 						;XXX TODO would be nice to have inverted data sent, but would mean MSB also receives inverted bits? sucks. As soon as we refill bits we fall into loop that checks overflow on LSB, should check for bcc however :-( then things would work
 						;would work on offset MSB, but need to clear lz_len_hi after that
@@ -212,36 +231,35 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 		ldy #$fe
 		bcs .lz_match__			;length = 2 ^ $ff, do it the very short way :-)
 -
-		asl <.lz_bits			;fetch first payload bit
+		+get_lz_bit			;fetch first payload bit
 
 		rol				;can also moved to front and executed once on start
-		asl <.lz_bits
+		+get_lz_bit
 		bcc -
 		bne .lz_match_
 		ldy #$00
 		jsr .lz_refill_bits		;fetch remaining bits
 		bcs .lz_match_
-.lz_bits	!byte $40
 .lz_refill_bits
 		tax
-		lda (.lz_src),y
-		rol
-		sta <.lz_bits
-		inc <.lz_src + 0
+		lda (lz_src),y
+		+set_lz_bit_marker
+		sta <lz_bits
+		inc <lz_src + 0
 		bne +
-		inc <.lz_src + 1
+		inc <lz_src + 1
 +
 		txa
 		bcs .end_bit_16
 
 		;fetch up to 8 bits first, if first byte overflows, stash away byte and fetch more bits as MSB
 .lz_get_loop
-		asl <.lz_bits			;fetch payload bit
+		+get_lz_bit			;fetch payload bit
 .get_length_
 		rol				;can also moved to front and executed once on start
 		bcs .get_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .get_length
-		asl <.lz_bits
+		+get_lz_bit
 		bcc .lz_get_loop
 		beq .lz_refill_bits
 		rts
@@ -268,15 +286,15 @@ ZX0_CLI		= .lz_cli - .smc_offsetd + 2
 		cpy #.restore_end - .depacker_start - (.depacker_end - .restore_end)
 !warn .restore_end - .depacker
 		bne -
-.lz_01 = * + 1
+lz_01 = * + 1
 		lda #$37
 		sta $01
 
 		ldx #$ff			;be nice and fix stackpointer :-)
 		txs
-.lz_cli
+lz_cli
 		sei
-.lz_sfx_addr = * + 1
+lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
 }
