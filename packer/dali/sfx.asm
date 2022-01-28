@@ -25,20 +25,20 @@
 
 !cpu 6510
 
-LZ_BITS_LEFT	= 1
+DALI_BITS_LEFT	= 0
 
 .depacker	= $01
-.smc_offsetd 	= .depacker - (.zx0_code_end - .zx0_code_start)
-ZX0_SRC		= lz_src - .smc_offsetd + 2
-ZX0_DST		= lz_dst      - .smc_offsetd + 2
-ZX0_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
-ZX0_DATA_END 	= lz_data_end      - .smc_offsetd + 2
-ZX0_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
-ZX0_01		= lz_01 - .smc_offsetd + 2
-ZX0_CLI		= lz_cli - .smc_offsetd + 2
+.smc_offsetd 	= .depacker - (.dali_code_end - .dali_code_start)
+DALI_SRC	= lz_src - .smc_offsetd + 2
+DALI_DST	= lz_dst      - .smc_offsetd + 2
+DALI_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
+DALI_DATA_END 	= lz_data_end      - .smc_offsetd + 2
+DALI_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
+DALI_01		= lz_01 - .smc_offsetd + 2
+DALI_CLI	= lz_cli - .smc_offsetd + 2
 
 !macro get_lz_bit {
-	!if LZ_BITS_LEFT = 1 {
+	!if DALI_BITS_LEFT = 1 {
 		asl <lz_bits
 	} else {
 		lsr <lz_bits
@@ -46,7 +46,7 @@ ZX0_CLI		= lz_cli - .smc_offsetd + 2
 }
 
 !macro set_lz_bit_marker {
-	!if LZ_BITS_LEFT = 1 {
+	!if DALI_BITS_LEFT = 1 {
 		rol
 	} else {
 		ror
@@ -54,7 +54,7 @@ ZX0_CLI		= lz_cli - .smc_offsetd + 2
 }
 
 		* = $0801
-.zx0_code_start
+.dali_code_start
                 !byte $0b,$08
 		!word 1602
 		!byte $9e
@@ -79,12 +79,18 @@ ZX0_CLI		= lz_cli - .smc_offsetd + 2
 		;------------------
 		;depacker starts here
 		;------------------
-.zx0_code_end
+.dali_code_end
 .depacker_code
 !pseudopc .depacker {
 .depacker_start
 		!byte $38
-lz_bits		!byte $40
+lz_bits
+!if DALI_BITS_LEFT = 1 {
+		!byte $40
+} else {
+		!byte $02
+}
+
 .depack
 -
                 dey
@@ -299,7 +305,7 @@ lz_sfx_addr = * + 1
 .depacker_end
 }
 !warn "sfx zp size: ", .depacker_end - .depacker_start
-!warn "sfx size: ", * - .zx0_code_start
+!warn "sfx size: ", * - .dali_code_start
 .data
 		;!bin "test.lz"
 .data_end

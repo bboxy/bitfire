@@ -76,14 +76,22 @@ void write_reencoded_byte(ctx* ctx, int value) {
 
 void write_reencoded_bit(ctx* ctx, int value) {
     if (!(ctx->reencoded_bit_mask & 255)) {
-        ctx->reencoded_bit_mask = 0x80;
+        if (DALI_BITS_LEFT == 1) {
+            ctx->reencoded_bit_mask = 0x80;
+        } else {
+            ctx->reencoded_bit_mask = 0x1;
+        }
         /* remember position of bit-buffer */
         ctx->reencoded_bit_index = ctx->reencoded_index;
         write_reencoded_byte(ctx, 0);
     }
     if (value)
         ctx->reencoded_data[ctx->reencoded_bit_index] |= ctx->reencoded_bit_mask;
-    ctx->reencoded_bit_mask >>= 1;
+    if (DALI_BITS_LEFT == 1) {
+        ctx->reencoded_bit_mask >>= 1;
+    } else {
+        ctx->reencoded_bit_mask <<= 1;
+    }
 }
 
 void write_reencoded_interlaced_elias_gamma(ctx* ctx, int value, int skip) {
@@ -532,25 +540,25 @@ int main(int argc, char *argv[]) {
         memcpy (sfx_code, decruncher, sizeof(decruncher));
 
         /* setup jmp target after decompression */
-        sfx_code[ZX0_SFX_ADDR + 0] = sfx_addr & 0xff;
-        sfx_code[ZX0_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
+        sfx_code[DALI_SFX_ADDR + 0] = sfx_addr & 0xff;
+        sfx_code[DALI_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
 
         /* setup decompression destination */
-        sfx_code[ZX0_DST + 0] = cbm_orig_addr & 0xff;
-        sfx_code[ZX0_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
+        sfx_code[DALI_DST + 0] = cbm_orig_addr & 0xff;
+        sfx_code[DALI_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
 
         /* setup compressed data src */
-        sfx_code[ZX0_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
-        sfx_code[ZX0_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
+        sfx_code[DALI_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
+        sfx_code[DALI_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
 
         /* setup compressed data end */
-        sfx_code[ZX0_DATA_END + 0] = (0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) & 0xff;
-        sfx_code[ZX0_DATA_END + 1] = ((0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
+        sfx_code[DALI_DATA_END + 0] = (0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) & 0xff;
+        sfx_code[DALI_DATA_END + 1] = ((0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
 
-        sfx_code[ZX0_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
+        sfx_code[DALI_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
 
-        sfx_code[ZX0_01] = sfx_01;
-        if (sfx_cli) sfx_code[ZX0_CLI] = 0x58;
+        sfx_code[DALI_01] = sfx_01;
+        if (sfx_cli) sfx_code[DALI_CLI] = 0x58;
 
         printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
         printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.packed_index + (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));

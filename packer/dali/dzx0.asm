@@ -3,7 +3,7 @@
 !cpu 6510
 
 CONFIG_ZP_ADDR		= $f0
-LZ_BITS_LEFT            = 1
+LZ_BITS_LEFT            = 0
 
 lz_bits			= CONFIG_ZP_ADDR + 0
 lz_dst			= CONFIG_ZP_ADDR + 1
@@ -26,6 +26,15 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
         }
 }
 
+!macro init_lz_bits {
+        !if LZ_BITS_LEFT = 1 {
+                        lda #$40
+                        sta <lz_bits                    ;start with an empty lz_bits, first +get_lz_bit leads to literal this way and bits are refilled upon next shift
+        } else {
+                        stx <lz_bits
+        }
+}
+
 ;---------------------------------------------------------------------------------
 ;DEPACKER STUFF
 ;---------------------------------------------------------------------------------
@@ -35,8 +44,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 
                         ldy #$00                        ;needs to be set in any case, also plain decomp enters here
                         ldx #$02
-			lda #$40
-                        sta <lz_bits			;start with an empty lz_bits, first +get_lz_bit leads to literal this way and bits are refilled upon next shift
+			+init_lz_bits
 -
                         lda (lz_src),y
                         sta <lz_dst + 0 - 1, x
