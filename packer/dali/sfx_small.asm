@@ -65,13 +65,9 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 		sei
 
 		;full zp code will be copied, but later less bytes will be copied back
-		ldx #<($100 + (.depacker_end - .restore_end))
-		txs
 
 		ldy #.depacker_end - .depacker_start
 -
-		pha				;saved zp to stack down to $02
-		lax <.depacker - 1,y		;saves a byte, 2 byte compared to lda $0000,y
 		ldx .depacker_code - 1,y
 		stx <.depacker - 1,y
 		dey
@@ -92,11 +88,10 @@ lz_bits
 } else {
 		!byte $02
 }
+lz_01
+		!byte $00
 
 .depack
-lz_01 = * + 1
-		lda #$37			;replace value for $01 in saved ZP on stack
-		pha
 -						;copy data to end of ram ($ffff)
                 dey
 lz_data_end = * + 1
@@ -123,30 +118,24 @@ lz_data_size_hi = * + 1
 .literal
 		jsr .get_length
 		tax
-		beq .lz_l_page_
+		beq .lz_l_page
 .cp_literal
 lz_src = * + 1
 		lda .data,y			;looks expensive, but is cheaper than loop
 		sta (lz_dst),y
-		iny
+
+		inc <lz_src + 0
+		bne +
+		inc <lz_src + 1
++
+		inc <lz_dst + 0
+		bne +
+		inc <lz_dst + 1
++
 		dex
 		bne .cp_literal
 
-		dey				;this way we force increment of lz_dst + 1 if y = 0
-		tya
-		adc <lz_dst + 0
-		sta <lz_dst + 0			;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on?
-		bcc +
-		inc <lz_dst + 1
-+
-		tya
-		sec
-		adc <lz_src + 0
-		sta <lz_src + 0
-		bcc +
-		inc <lz_src + 1
-+
-		ldy <.lz_len_hi
+		lda <.lz_len_hi
 		bne .lz_l_page			;happens very seldom
 
 		;------------------
@@ -154,7 +143,7 @@ lz_src = * + 1
 		;------------------
 
 .cp_literal_done
-		lda #$01
+		rol
 		+get_lz_bit
 		bcs .lz_new_offset		;either match with new offset or old offset
 
@@ -165,10 +154,9 @@ lz_src = * + 1
 		jsr .get_length
 						;XXX TODO encode length - 1 for rep match? but 0 can't be detected then?
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
-		bcc .lz_dcp
-;		bcs +
-;		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
-;+
+		bcs +
+		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
++
 .lz_match_
 		eor #$ff
 		tay
@@ -176,11 +164,10 @@ lz_src = * + 1
 .lz_match__					;entry from new_offset handling
 		adc <lz_dst + 0
 		sta <lz_dst + 0
-		bcs .lz_clc			;/!\ branch happens less than fall through, only in case of branch carry needs to be cleared :-(
-;		bcc +
-;		clc
-;		top
-;+
+		bcc +
+		clc
+		top
++
 		dec <lz_dst + 1
 .lz_clc_
 .lz_offset_lo = * + 1
@@ -206,25 +193,15 @@ lz_dst = * + 1
 		inc <.lz_msrcr + 1		;XXX TODO only needed if more pages follow
 		bne .cp_match
 .lz_l_page
-		sec				;only needs to be set for consecutive rounds of literals, happens very seldom
-		ldy #$00
-.lz_l_page_
 		dec <.lz_len_hi
 		bcs .cp_literal
 
 		;------------------
 		;FETCH A NEW OFFSET
 		;------------------
--						;get_length as inline
-		+get_lz_bit			;fetch payload bit
-		rol				;can also moved to front and executed once on start
+
 .lz_new_offset
-		+get_lz_bit
-		bcc -
-+
-		bne +
-		jsr .lz_refill_bits
-+
+		jsr .get_length
 		sbc #$01
 
 		bcc .lz_eof			;underflow. must have been 0
@@ -245,21 +222,9 @@ lz_dst = * + 1
 		ldy #$fe
 		bcs .lz_match__			;length = 2 ^ $ff, do it the very short way :-)
 -
-		+get_lz_bit			;fetch first payload bit
-
-		rol				;can also moved to front and executed once on start
-		+get_lz_bit
-		bcc -
-		bne .lz_match_
 		ldy #$00
-		jsr .lz_refill_bits		;fetch remaining bits
+		jsr .lz_get_loop
 		bcs .lz_match_
-.lz_dcp
-		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
-		bcs .lz_match_
-.lz_clc
-		clc
-		bcc .lz_clc_
 
 .lz_refill_bits
 		tax
@@ -298,14 +263,6 @@ lz_dst = * + 1
 		;exit code for sfx only
 		;------------------
 
-.restore_end
-		;restore zp up to $dc
--
-		pla
-		tsx
-		sta <(.depacker - ($100 - (.restore_end - .depacker_start))),x
-		bne -
-		pha				;end up with SP = $ff, let's be nice :-)
 lz_cli
 		sei
 lz_sfx_addr = * + 1
@@ -313,7 +270,6 @@ lz_sfx_addr = * + 1
 .depacker_end
 }
 ;!warn "fixup size: ",.depacker_end - .restore_end
-!warn "zp saved up to: ",.restore_end - .depacker
 ;!warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start
 .data
