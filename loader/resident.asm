@@ -367,13 +367,13 @@ bitfire_loadcomp_
 			;------------------
 			;POINTER HANDLING LITERAL COPY
 			;------------------
-.lz_src_inc
+.lz_inc_src3
 	!if CONFIG_LOADER = 1 {
 			jsr .lz_next_page		;sets X = 0, so all sane
 	} else {
 			inc <lz_src + 1
 	}
-			bcs .lz_src_inc_
+			bcs .lz_inc_src3_
 
 .lz_dst_inc
 			inc <lz_dst + 1
@@ -404,8 +404,8 @@ bitfire_loadcomp_
 			sta (lz_dst),y
 
 			inc <lz_src + 0
-			beq .lz_src_inc
-.lz_src_inc_
+			beq .lz_inc_src3
+.lz_inc_src3_
 			inc <lz_dst + 0
 			beq .lz_dst_inc
 .lz_dst_inc_
@@ -513,6 +513,7 @@ bitfire_loadcomp_
 +
 
 			;offset 1..255, first 8 bits, could also be send in another way? 256 = 0 = end
+			;-> 0..254 as offset
 			;else end sequence?
 			;n*2 bits offset
 			;7 bits remaining offset
@@ -530,13 +531,8 @@ bitfire_loadcomp_
 			sta .lz_offset_lo + 1
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
-			bne +
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;preserves carry, all sane
-	} else {
-			inc <lz_src + 1
-	}
-+
+			beq .lz_inc_src
+.lz_inc_src_
 			lda #$01
 			ldy #$fe
 			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
@@ -561,6 +557,21 @@ bitfire_loadcomp_
 			clc
 			bcc .lz_clc_back
 
+.lz_inc_src
+	!if CONFIG_LOADER = 1 {
+			jsr .lz_next_page		;preserves carry, all sane
+	} else {
+			inc <lz_src + 1
+	}
+			bne .lz_inc_src_
+.lz_inc_src2
+	!if CONFIG_LOADER = 1 {
+			jsr .lz_next_page		;preserves carry and A, clears X, Y, all sane
+	} else {
+			inc <lz_src + 1
+	}
+			bne .lz_inc_src2_
+
 			;------------------
 			;ELIAS FETCH
 			;------------------
@@ -570,13 +581,8 @@ bitfire_loadcomp_
 			+set_lz_bit_marker
 			sta <lz_bits
 			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
-			bne +				;XXX TODO if we would prefer beq, 0,2% saving
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;preserves carry and A, clears X, Y, all sane
-	} else {
-			inc <lz_src + 1
-	}
-+
+			beq .lz_inc_src2		;XXX TODO if we would prefer beq, 0,2% saving
+.lz_inc_src2_
 			txa
 			bcs .lz_lend
 
