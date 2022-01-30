@@ -25,8 +25,6 @@
 
 !cpu 6510
 
-DALI_BITS_LEFT	= 0
-
 .depacker	= $01
 .smc_offsetd 	= .depacker - (.dali_code_end - .dali_code_start)
 DALI_SRC	= lz_src - .smc_offsetd + 2

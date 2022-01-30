@@ -10,6 +10,8 @@
 
 #define FALSE 0
 #define TRUE 1
+#define DALI_BITS_LEFT 0
+#define DALI_ELIAS_LE 1
 
 typedef struct ctx {
     FILE *packed_fp;
@@ -102,12 +104,14 @@ void write_reencoded_interlaced_elias_gamma(ctx* ctx, int value, int skip) {
     for (i = 2; i <= value; i <<= 1);
     i >>= 1;
 
-    if (bits >= 8) {
-        /* change bit-order, send LSB first */
-        /* remove preceeding 1 first */
-        value = value & ((0xffff ^ i));
-        /* move LSB bits to the beginning */
-        value = (value >> 8) | ((value & 0xff) << (bits - 8));
+    if (DALI_ELIAS_LE) {
+        if (bits >= 8) {
+            /* change bit-order, send LSB first */
+            /* remove preceeding 1 first */
+            value = value & ((0xffff ^ i));
+            /* move LSB bits to the beginning */
+            value = (value >> 8) | ((value & 0xff) << (bits - 8));
+        }
     }
 
     while ((i >>= 1) > 0) {

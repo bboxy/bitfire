@@ -25,7 +25,7 @@
 
 !cpu 6510
 
-DALI_BITS_LEFT		= 0
+BITS_LEFT		= 0
 
 .depacker		= $01
 .smc_offsetd 		= .depacker - (.dali_code_end - .dali_code_start)
@@ -36,7 +36,7 @@ DALI_SMALL_DATA_END 	= lz_data_end      - .smc_offsetd + 2
 DALI_SMALL_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
 
 !macro get_lz_bit {
-	!if DALI_BITS_LEFT = 1 {
+	!if BITS_LEFT = 1 {
 		asl <lz_bits
 	} else {
 		lsr <lz_bits
@@ -44,7 +44,7 @@ DALI_SMALL_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
 }
 
 !macro set_lz_bit_marker {
-	!if DALI_BITS_LEFT = 1 {
+	!if BITS_LEFT = 1 {
 		rol
 	} else {
 		ror
@@ -79,7 +79,7 @@ DALI_SMALL_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
 .depacker_start
 		!byte $34
 lz_bits
-!if DALI_BITS_LEFT = 1 {
+!if BITS_LEFT = 1 {
 		!byte $40
 } else {
 		!byte $02
