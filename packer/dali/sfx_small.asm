@@ -25,17 +25,15 @@
 
 !cpu 6510
 
-DALI_BITS_LEFT	= 0
+DALI_BITS_LEFT		= 0
 
-.depacker	= $01
-.smc_offsetd 	= .depacker - (.dali_code_end - .dali_code_start)
-DALI_SRC	= lz_src - .smc_offsetd + 2
-DALI_DST	= lz_dst      - .smc_offsetd + 2
-DALI_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
-DALI_DATA_END 	= lz_data_end      - .smc_offsetd + 2
-DALI_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
-DALI_01		= lz_01 - .smc_offsetd + 2
-DALI_CLI	= lz_cli - .smc_offsetd + 2
+.depacker		= $01
+.smc_offsetd 		= .depacker - (.dali_code_end - .dali_code_start)
+DALI_SMALL_SRC		= lz_src - .smc_offsetd + 2
+DALI_SMALL_DST		= lz_dst      - .smc_offsetd + 2
+DALI_SMALL_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
+DALI_SMALL_DATA_END 	= lz_data_end      - .smc_offsetd + 2
+DALI_SMALL_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
 
 !macro get_lz_bit {
 	!if DALI_BITS_LEFT = 1 {
@@ -64,8 +62,6 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 		;/!\ ATTENTION, the depacker just fits into ZP this way, if it gets larger, the copy routine will overwrite $00, as it is a 8-bit address sta
 		sei
 
-		;full zp code will be copied, but later less bytes will be copied back
-
 		ldy #.depacker_end - .depacker_start
 -
 		ldx .depacker_code - 1,y
@@ -88,8 +84,6 @@ lz_bits
 } else {
 		!byte $02
 }
-lz_01
-		!byte $00
 
 .depack
 -						;copy data to end of ram ($ffff)
@@ -124,13 +118,13 @@ lz_src = * + 1
 		lda .data,y			;looks expensive, but is cheaper than loop
 		sta (lz_dst),y
 
-		inc <lz_src + 0
-		bne +
-		inc <lz_src + 1
+                inc <lz_src + 0
+                bne +
+                inc <lz_src + 1
 +
-		inc <lz_dst + 0
-		bne +
-		inc <lz_dst + 1
+                inc <lz_dst + 0
+                bne +
+                inc <lz_dst + 1
 +
 		dex
 		bne .cp_literal
@@ -216,14 +210,8 @@ lz_dst = * + 1
 		bne +
 		inc <lz_src + 1
 +
-						;XXX TODO would be nice to have inverted data sent, but would mean MSB also receives inverted bits? sucks. As soon as we refill bits we fall into loop that checks overflow on LSB, should check for bcc however :-( then things would work
-						;would work on offset MSB, but need to clear lz_len_hi after that
 		lda #$01
-		ldy #$fe
-		bcs .lz_match__			;length = 2 ^ $ff, do it the very short way :-)
--
-		ldy #$00
-		jsr .lz_get_loop
+		jsr .get_length_bt
 		bcs .lz_match_
 
 .lz_refill_bits
@@ -246,6 +234,7 @@ lz_dst = * + 1
 		bcs .get_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .get_length
 		+get_lz_bit
+.get_length_bt
 		bcc .lz_get_loop
 		beq .lz_refill_bits
 		rts
@@ -263,13 +252,14 @@ lz_dst = * + 1
 		;exit code for sfx only
 		;------------------
 
-lz_cli
-		sei
+.restore_end
+		;restore zp up to $dc
 lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
 }
 ;!warn "fixup size: ",.depacker_end - .restore_end
+!warn "zp saved up to: ",.restore_end - .depacker
 ;!warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start
 .data

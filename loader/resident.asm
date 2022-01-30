@@ -511,8 +511,16 @@ bitfire_loadcomp_
 			bne +
 			jsr .lz_refill_bits
 +
+
+			;offset 1..255, first 8 bits, could also be send in another way? 256 = 0 = end
+			;else end sequence?
+			;n*2 bits offset
+			;7 bits remaining offset
+			;backtrack bit for length
+
+							;XXX TODO can eof marker be something else? send 7 bits max and directlyuse as offset? without lsr and sbc #1? use lower bit for a check? without backing up last bit?
 			sbc #$01			;XXX TODO can be omitted if just endposition is checked, but 0 does not exist as value?
-			bcc .lz_eof			;underflow. must have been 0
+			bcc .lz_eof
 
 			lsr
 			sta .lz_offset_hi + 1		;hibyte of offset
@@ -582,6 +590,8 @@ bitfire_loadcomp_
 
 			bcc .lz_get_loop
 			beq .lz_refill_bits
+			;XXX TODO manage to have flags suiting for pulled length?
+			;XXX TODO swap stop bit and payload bit in positions?
 .lz_lend
 .lz_eof
 			rts
@@ -612,3 +622,7 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;-> lda #$entry
 ;-> jmp back -> setup jump
 ;
+
+
+
+;send elias stuff inverted and uninverted, for that, elias code must be initialised in two ways (incl. lz_len_hi), with $0001 and $fffe and teh elias fetch has to be 16 bit always, no postponed breakout for higher bits

@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "sfx.h"
+#include "sfx_small.h"
+#include "sfx_fast.h"
 
 #define BUFFER_SIZE 65536  /* must be > MAX_OFFSET */
 #define INITIAL_OFFSET 1
@@ -300,6 +301,8 @@ int main(int argc, char *argv[]) {
     int sfx_addr = -1;
     int sfx_01 = -1;
     int sfx_cli = FALSE;
+    int sfx_small = FALSE;
+    int sfx_size;
     char *sfx_code = NULL;
 
     char *output_name = NULL;
@@ -323,6 +326,8 @@ int main(int argc, char *argv[]) {
                 cbm = FALSE;
             } else if (!strcmp(argv[i], "--no-inplace")) {
                 ctx.inplace = FALSE;
+            } else if (!strcmp(argv[i], "--small")) {
+                sfx_small = TRUE;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
                 i++;
                 cbm_relocate_packed_addr = read_number(argv[i], 65536);
@@ -373,6 +378,7 @@ int main(int argc, char *argv[]) {
                         "  --sfx [num]                Create a c64 compatible sfx-executable\n"
                         "  --01 [num]                 Set $01 to [num] after sfx\n"
                         "  --cli [num]                Do a CLI after sfx, default is SEI\n"
+                        "  --small                    Use a very small depacker that fits into zeropage, but --01 and --cli are ignored\n"
                         "  --no-inplace               Disable inplace-decompression\n"
                         "  --binfile                  Input file is a raw binary without load-address\n"
                         "  --from [$num]              Compress file from [num] on\n"
@@ -534,36 +540,62 @@ int main(int argc, char *argv[]) {
 
     /* as sfx */
     if (sfx) {
-        if (sfx_01 < 0) sfx_01 = 0x37;
-        /* copy over to change values in code */
-        sfx_code = (char *)malloc(sizeof(decruncher));
-        memcpy (sfx_code, decruncher, sizeof(decruncher));
+        if (sfx_small) {
+            sfx_size = sizeof(decruncher_small);
+            /* copy over to change values in code */
+            sfx_code = (char *)malloc(sfx_size);
+            memcpy (sfx_code, decruncher_small, sfx_size);
 
-        /* setup jmp target after decompression */
-        sfx_code[DALI_SFX_ADDR + 0] = sfx_addr & 0xff;
-        sfx_code[DALI_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
+            /* setup jmp target after decompression */
+            sfx_code[DALI_SMALL_SFX_ADDR + 0] = sfx_addr & 0xff;
+            sfx_code[DALI_SMALL_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
 
-        /* setup decompression destination */
-        sfx_code[DALI_DST + 0] = cbm_orig_addr & 0xff;
-        sfx_code[DALI_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
+            /* setup decompression destination */
+            sfx_code[DALI_SMALL_DST + 0] = cbm_orig_addr & 0xff;
+            sfx_code[DALI_SMALL_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
 
-        /* setup compressed data src */
-        sfx_code[DALI_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
-        sfx_code[DALI_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
+            /* setup compressed data src */
+            sfx_code[DALI_SMALL_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
+            sfx_code[DALI_SMALL_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
 
-        /* setup compressed data end */
-        sfx_code[DALI_DATA_END + 0] = (0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) & 0xff;
-        sfx_code[DALI_DATA_END + 1] = ((0x0801 + sizeof(decruncher) - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
+            /* setup compressed data end */
+            sfx_code[DALI_SMALL_DATA_END + 0] = (0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) & 0xff;
+            sfx_code[DALI_SMALL_DATA_END + 1] = ((0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
 
-        sfx_code[DALI_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
+            sfx_code[DALI_SMALL_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
+        } else {
+            sfx_size = sizeof(decruncher);
+            /* copy over to change values in code */
+            sfx_code = (char *)malloc(sfx_size);
+            memcpy (sfx_code, decruncher, sfx_size);
 
-        sfx_code[DALI_01] = sfx_01;
-        if (sfx_cli) sfx_code[DALI_CLI] = 0x58;
+            if (sfx_01 < 0) sfx_01 = 0x37;
 
+            /* setup jmp target after decompression */
+            sfx_code[DALI_SFX_ADDR + 0] = sfx_addr & 0xff;
+            sfx_code[DALI_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
+
+            /* setup decompression destination */
+            sfx_code[DALI_DST + 0] = cbm_orig_addr & 0xff;
+            sfx_code[DALI_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
+
+            /* setup compressed data src */
+            sfx_code[DALI_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
+            sfx_code[DALI_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
+
+            /* setup compressed data end */
+            sfx_code[DALI_DATA_END + 0] = (0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) & 0xff;
+            sfx_code[DALI_DATA_END + 1] = ((0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
+
+            sfx_code[DALI_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
+
+            sfx_code[DALI_01] = sfx_01;
+            if (sfx_cli) sfx_code[DALI_CLI] = 0x58;
+        }
         printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
-        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sizeof(decruncher) + ctx.packed_index, (int)sizeof(decruncher) + ctx.packed_index, ((float)(ctx.packed_index + (int)sizeof(decruncher)) / (float)(ctx.unpacked_size) * 100.0));
+        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sfx_size + ctx.packed_index, (int)sfx_size + ctx.packed_index, ((float)(ctx.packed_index + (int)sfx_size) / (float)(ctx.unpacked_size) * 100.0));
 
-        if (fwrite(sfx_code, sizeof(char), sizeof(decruncher), ctx.reencoded_fp) != sizeof(decruncher)) {
+        if (fwrite(sfx_code, sizeof(char), sfx_size, ctx.reencoded_fp) != sfx_size) {
             fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
             exit(1);
         }
