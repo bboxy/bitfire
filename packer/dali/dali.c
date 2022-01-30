@@ -471,7 +471,7 @@ int main(int argc, char *argv[]) {
     cbm_orig_addr = cbm_range_from;
 
     if (cbm_range_from > cbm_range_to) {
-        fprintf(stderr, "Error: --from beyond fileend\n");
+        fprintf(stderr, "Error: --from beyond fileend ($%04x - $%04x)\n", cbm_range_from, cbm_range_to);
         exit(1);
     }
 

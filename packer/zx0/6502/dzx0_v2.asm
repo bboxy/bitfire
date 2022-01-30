@@ -19,6 +19,11 @@ ZX0_INPLACE		= 0
 		sta .lz_src2
 		sta .lz_src3
 
+		lda #$00
+		sta <.lz_dst + 0
+		lda #$a0
+		sta <.lz_dst + 1
+
 		ldy #$ff
 		sty .lz_offset_lo + 1
 		sty .lz_offset_hi + 1
@@ -38,9 +43,10 @@ ZX0_INPLACE		= 0
 .lz_literal
 		jsr .lz_get_len
 		sta .lz_y + 1
-		and #$ff			;annoying, but flags are not set corresponding to A
+		and #$ff                        ;annoying, but flags are not set corresponding to A
 		beq .lz_l_page
-;		dec <.lz_len_hi			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi
+;		dec <.lz_len_hi                 ;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi
+
 .lz_cp_literal
 .lz_src1 = * + 2
 		lda $1000,x

@@ -27,10 +27,10 @@
 
 		jsr .timer_start
 
-		lda #$00
-		sta <.lz_dst + 0
-		lda #$a0
-		sta <.lz_dst + 1
+		;lda #$00
+		;sta <.lz_dst + 0
+		;lda #$a0
+		;sta <.lz_dst + 1
 
 		ldx #<data_start
 		lda #>data_start
@@ -109,6 +109,7 @@
 
 !align 255,0
 depack
+;!src "zx0_6502.asm"
 !src "dzx0_v2.asm"
 !warn "depacker size: ", * - depack
 
