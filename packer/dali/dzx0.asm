@@ -18,8 +18,8 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
         }
 }
 
-!macro set_lz_bit_marker = 1 {
-        !if LZ_BITS_LEFT {
+!macro set_lz_bit_marker {
+        !if LZ_BITS_LEFT = 1{
                 rol
         } else {
                 ror
