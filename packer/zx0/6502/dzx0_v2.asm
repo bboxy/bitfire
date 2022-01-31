@@ -44,9 +44,7 @@ ZX0_INPLACE		= 0
 		jsr .lz_get_len
 		sta .lz_y + 1
 		and #$ff                        ;annoying, but flags are not set corresponding to A
-		beq .lz_l_page
-;		dec <.lz_len_hi                 ;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi
-
+		beq .lz_l_page_
 .lz_cp_literal
 .lz_src1 = * + 2
 		lda $1000,x
@@ -78,10 +76,11 @@ ZX0_INPLACE		= 0
 		bcs .lz_new_offset		;either match with new offset or old offset
 .lz_match_repeat
 		jsr .lz_get_len
+!if ZX0_INPLACE == 0 {
+.lz_m_page
+}
 		sbc #$01			;saves the iny later on
-		bcs +
-		dcp .lz_len_hi			;dec highbyte of length by one, a = $ff, so cmp will always set carry for free on top
-+
+		bcc .lz_dcp			;dec highbyte of length by one, a = $ff, so cmp will always set carry for free on top
 .lz_match_
 		eor #$ff
 		;beq .lz_calc_msrc		;just fall through on zero? $ff + sec -> addition is neutralized and carry is set, so no harm
@@ -108,7 +107,7 @@ ZX0_INPLACE		= 0
 		inc <.lz_dst + 1
 
 		lda <.lz_len_hi			;check for more loop runs
-!if ZX0_INPLACE == 1 {
+Y!if ZX0_INPLACE == 1 {
 		bne .lz_m_page			;do more page runs
 
 		cpx <.lz_dst + 0		;check for end condition when depacking inplace
@@ -117,24 +116,28 @@ ZX0_INPLACE		= 0
 		sbc <.lz_src1
 		bne .lz_start_over
 		rts
+.lz_m_page
+		lda #$ff
 } else {
 		beq .lz_start_over		;do more page runs
+		tya
+		bne .lz_m_page
 }
 		;------------------
 		;SELDOM STUFF
 		;------------------
-.lz_m_page
-		dec <.lz_len_hi
-		inc .lz_msrcr + 1
-		bne .lz_cp_match
+.lz_dcp
+		dcp .lz_len_hi
+		bcs .lz_match_
 .lz_clc
 		clc
 		bcc .lz_clc_back
 .lz_l_page
-		dec <.lz_len_hi
 		sec				;only needs to be set for consecutive rounds of literals, happens very seldom
 		ldy #$00
-		beq .lz_cp_literal
+.lz_l_page_
+		dec <.lz_len_hi
+		bcs .lz_cp_literal
 
 		;------------------
 		;FETCH A NEW OFFSET
