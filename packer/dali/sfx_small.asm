@@ -138,19 +138,30 @@ lz_src = * + 1
 
 		rol
 		+get_lz_bit
-		bcs .lz_new_offset		;either match with new offset or old offset
+		bcc .lz_match			;either match with new offset or old offset
 
 		;------------------
-		;DO MATCH
+		;FETCH A NEW OFFSET
 		;------------------
-.lz_match
+
+.lz_new_offset
 		jsr .get_length
-						;XXX TODO encode length - 1 for rep match? but 0 can't be detected then?
-.lz_m_page
-		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
-		bcs +
-		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
+		sbc #$01
+
+		bcc .lz_eof			;underflow. must have been 0
+		lsr
+		sta <.lz_offset_hi		;hibyte of offset
+
+		lda (lz_src),y			;fetch another byte directly
+		ror
+		sta <.lz_offset_lo
+
+		inc <lz_src + 0
+		bne +
+		inc <lz_src + 1
 +
+		lda #$01
+		jsr .get_length_bt
 .lz_match_
 		eor #$ff
 		tay
@@ -185,34 +196,22 @@ lz_dst = * + 1
 		beq .lz_start_over
 		tya
 		beq .lz_m_page
+
+		;------------------
+		;DO MATCH
+		;------------------
+.lz_match
+		jsr .get_length
+.lz_m_page
+		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
+		bcs .lz_match_
+.lz_dcp
+		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
+		bcs .lz_match_
 .lz_l_page
 .lz_l_page_
 		dec <.lz_len_hi
 		bcs .cp_literal
-
-		;------------------
-		;FETCH A NEW OFFSET
-		;------------------
-
-.lz_new_offset
-		jsr .get_length
-		sbc #$01
-
-		bcc .lz_eof			;underflow. must have been 0
-		lsr
-		sta <.lz_offset_hi		;hibyte of offset
-
-		lda (lz_src),y			;fetch another byte directly
-		ror
-		sta <.lz_offset_lo
-
-		inc <lz_src + 0
-		bne +
-		inc <lz_src + 1
-+
-		lda #$01
-		jsr .get_length_bt
-		bcs .lz_match_
 
 .lz_refill_bits
 		tax

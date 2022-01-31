@@ -114,14 +114,14 @@ lz_01 = * + 1
 -						;copy data to end of ram ($ffff)
                 dey
 lz_data_end = * + 1
-.src		lda .data_end - $100,y
+.src		lda $beef,y
 .dst		sta $ff00,y
                 tya				;annoying, but need to copy from $ff ... $00
                 bne -
 
                 dec <.src + 2
 lz_data_size_hi = * + 1
-                lda #>(.data_end - .data) + 1	;check for last page to copy
+                lda #$00			;check for last page to copy
                 dcp <.dst + 2
                 bne -
 
@@ -140,7 +140,7 @@ lz_data_size_hi = * + 1
 		beq .lz_l_page_
 .cp_literal
 lz_src = * + 1
-		lda .data,y			;looks expensive, but is cheaper than loop
+		lda $beef,y			;looks expensive, but is cheaper than loop
 		sta (lz_dst),y
 !ifdef SFX_FAST {
 		iny
@@ -201,9 +201,8 @@ lz_src = * + 1
 !ifdef SFX_FAST {
 		bcc .lz_dcp
 } else {
-		bcs +
+		bcs .lz_match_
 		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
-+
 }
 .lz_match_
 		eor #$ff
@@ -352,9 +351,8 @@ lz_dst = * + 1
 		;exit code for sfx only
 		;------------------
 
-.restore_end
-		;restore zp up to $dc
 !ifdef SFX_FAST {
+.restore_end
 -
 		pla
 		tsx
@@ -369,10 +367,8 @@ lz_sfx_addr = * + 1
 .depacker_end
 }
 
-;!warn "fixup size: ",.depacker_end - .restore_end
-!warn "zp saved up to: ",.restore_end - .depacker
-;!warn "sfx zp size: ", .depacker_end - .depacker_start
+!ifdef SFX_FAST {
+!warn "zp saved/restored up to: ",.restore_end - .depacker
+}
+!warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start
-.data
-		;!bin "test.lz"
-.data_end
