@@ -381,19 +381,19 @@ int main(int argc, char *argv[]) {
 
     if (argc == 1) {
         fprintf(stderr, "Usage: %s [options] input\n"
-     //                   "  -x [path]                  Path to zx0/salvador executeable\n"
-                        "  -o [filename]              Set output filename\n"
-                        "  --sfx [num]                Create a c64 compatible sfx-executable\n"
-                        "  --01 [num]                 Set $01 to [num] after sfx\n"
-                        "  --cli [num]                Do a CLI after sfx, default is SEI\n"
-                        "  --small                    Use a very small depacker that fits into zeropage, but --01 and --cli are ignored\n"
-                        "  --no-inplace               Disable inplace-decompression\n"
-                        "  --binfile                  Input file is a raw binary without load-address\n"
-                        "  --from [$num]              Compress file from [num] on\n"
-                        "  --to [$num]                Compress file until position [num]\n"
-                        "  --use-prefix               Use preceeding data of file as dictionary\n"
-                        "  --relocate-packed [num]    Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
-                        "  --relocate-origin [num]    Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
+                        "  -o [filename]               Set output filename\n"
+                        "  --sfx [$num]                Create a c64 compatible sfx-executable\n"
+                        "  --01 [$num]                 Set $01 to [num] after sfx\n"
+                        "  --cli [$num]                Do a CLI after sfx, default is SEI\n"
+                        "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored\n"
+                        "  --no-inplace                Disable inplace-decompression\n"
+                        "  --binfile                   Input file is a raw binary without load-address\n"
+                        "  --from [$num]               Compress file from [num] on\n"
+                        "  --to [$num]                 Compress file until position [num]\n"
+                        "  --use-prefix                Use preceeding data of file as dictionary\n"
+                        "  --relocate-packed [$num]    Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
+                        "  --relocate-origin [$num]    Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
+
                         ,argv[0]);
         exit(1);
     }
