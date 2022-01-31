@@ -319,11 +319,11 @@ Please check your drive so that it is running at 300 rpm. In fact the loader can
 
 2. Electromagnetic Fields
 
-During the testing, i discovered, that my screen significantly influences the floppy, that was located beneath. With the screen turned off, i had no read erroros happening, but when having the screen turned on, there's suddenly read-errors and checksum-errors. Creating a distance of around 30cm between floppy and screen, ceased all the problems and reading was error-free. Moving the floppy side by side to the screen, made it even fail completely. I first suspected a bad timing in the gcr-loop, but no matter how i shifted the timing, the errors still happened. The errors also occur on a SX64, th thas the screen and the floppy build in at a fixed distance, so not much one can change here.
+During the testing, i discovered, that my screen significantly influences the floppy, that was located beneath. With the screen turned off, i had no read erroros happening, but when having the screen turned on, there's suddenly read-errors and checksum-errors. Creating a distance of around 30cm between floppy and screen, ceased all the problems and reading was error-free. Moving the floppy side by side to the screen, made it even fail completely. I first suspected a bad timing in the gcr-loop, but no matter how i shifted the timing, the errors still happened. The errors also occur on a SX64, that has the screen and the floppy built in at a fixed distance, so not much one can change here.
 
 3. Cables
 
-Thanks to Ikwai i happened to have hands on a setup wit ha 2m unshielded iec-cable on which the 72-cacle 2bit-ATN transfer failed as it missed it's timing. A slower timing solved the problems, but also exchanging that cable.
+Thanks to Ikwai i happened to have hands on a setup with a 2m unshielded iec-cable on which the 72-cycle 2bit-ATN transfer failed, as it missed it's timing. A slower timing solved the problems, but also exchanging that cable.
 
 4. Unsettled Head
 
@@ -331,7 +331,7 @@ Starting to read from disk directly after stepping can also lead to checksum err
 
 5. Spin Up
 
-During spin up of teh drive, the gcr read might fail, as it misses the window where timing is optimal, either by spinning too slow yet, or by overshooting. This also can cause checksum errors. As one file ends on teh same sector, where a new one begins, we can force the last sector of a file to be read last. Upon loading of the next file, the sector is already cached and present and the first file chunk can be sind during spin up. This covers at least a few errors that else occur on spin up.
+During spin up of the drive, the gcr read might fail, as it misses the window where timing is optimal, either by spinning too slow yet, or by overshooting. This also can cause checksum errors. As one file ends on the same sector, where a new one begins, we can force the last sector of a file to be read last. Upon loading of the next file, the sector is already cached and present and the first file chunk can be send during spin up. This covers at least a few errors that else occur on spin up.
 
 6. Buslock
 
@@ -339,7 +339,7 @@ Banging $dd00 hard while the floppy is idle, seems to produce glitches on THCM's
 
 7. Jitter
 
-The gcr read usually introduced 3 cycles jitter by using bvc * to sync on a byte_ready. Krill showed, that one can also use a bunch of bvs .loop to sync on a byte, what introduces only cycles jitter and allows for a better timing within range.
+The gcr read usually introduced 3 cycles jitter by using bvc * to sync on a byte_ready. Krill showed, that one can also use a bunch of bvs .loop to sync on a byte, what introduces only two cycles of jitter and allows for a better timing within range.
 
 8. Fast Stepping
 
