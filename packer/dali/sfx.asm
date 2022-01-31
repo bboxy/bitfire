@@ -186,7 +186,7 @@ lz_src = * + 1
 !ifdef SFX_FAST {
 		lda #$01
 } else {
-		rol
+		rol				;A = 0, C = 1 -> same as lda #$01
 }
 		+get_lz_bit
 		bcs .lz_new_offset		;either match with new offset or old offset
@@ -241,9 +241,8 @@ lz_dst = * + 1
 .lz_len_hi = * + 1
 		lda #$00			;check for more loop runs
 		beq .lz_start_over
-		tya
-		beq .lz_m_page
 !ifdef SFX_FAST {
+		lda #$ff
 .lz_dcp
 		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
 		bcs .lz_match_
@@ -251,6 +250,9 @@ lz_dst = * + 1
 		clc
 		bcc .lz_clc_
 
+} else {
+		tya
+		beq .lz_m_page
 }
 .lz_l_page
 !ifdef SFX_FAST {

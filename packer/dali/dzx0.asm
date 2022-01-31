@@ -57,17 +57,6 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
                         stx .lz_offset_lo + 1           ;initialize offset with $0000
                         stx .lz_offset_hi + 1
                         stx <lz_len_hi
-			beq .lz_start_over		;start with a literal
-
-			;------------------
-			;SELDOM STUFF
-			;------------------
-.lz_l_page
-			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
-			ldy #$00
-.lz_l_page_
-			dec <lz_len_hi
-			bcs .lz_cp_lit
 
 			;------------------
 			;LITERAL
@@ -157,6 +146,21 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			bne .lz_start_over
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			rts				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+
+			;------------------
+			;SELDOM STUFF
+			;------------------
+.lz_l_page
+			sec				;only needs to be set for consecutive rounds of literals, happens very seldom
+			ldy #$00
+.lz_l_page_
+			dec <lz_len_hi
+			bcs .lz_cp_lit
+.lz_clc
+			clc
+			bcc .lz_clc_back
+.lz_m_page
+			lda #$ff
 .lz_dcp
 			dcp lz_len_hi
 			bcs .lz_match_big
@@ -201,17 +205,6 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big
-
-			;------------------
-			;SELDOM STUFF
-			;------------------
-.lz_clc
-			clc
-			bcc .lz_clc_back
-.lz_m_page
-			dec <lz_len_hi
-			lda #$ff
-			bne .lz_match_len2
 
 			;------------------
 			;ELIAS FETCH

@@ -2,7 +2,7 @@
 
 !cpu 6510
 
-ZX0_INPLACE		= 0
+;ZX0_INPLACE		= 0
 
 .ZP_ADDR		= $f8
 .lz_dst			= .ZP_ADDR + 0
@@ -76,9 +76,8 @@ ZX0_INPLACE		= 0
 		bcs .lz_new_offset		;either match with new offset or old offset
 .lz_match_repeat
 		jsr .lz_get_len
-!if ZX0_INPLACE == 0 {
-.lz_m_page
-}
+;!if ZX0_INPLACE == 0 {
+;}
 		sbc #$01			;saves the iny later on
 		bcc .lz_dcp			;dec highbyte of length by one, a = $ff, so cmp will always set carry for free on top
 .lz_match_
@@ -107,22 +106,21 @@ ZX0_INPLACE		= 0
 		inc <.lz_dst + 1
 
 		lda <.lz_len_hi			;check for more loop runs
-Y!if ZX0_INPLACE == 1 {
-		bne .lz_m_page			;do more page runs
-
-		cpx <.lz_dst + 0		;check for end condition when depacking inplace
-		bne .lz_start_over
-		lda <.lz_dst + 1
-		sbc <.lz_src1
-		bne .lz_start_over
-		rts
-.lz_m_page
-		lda #$ff
-} else {
+;!if ZX0_INPLACE == 1 {
+;		bne .lz_m_page			;do more page runs
+;
+;		cpx <.lz_dst + 0		;check for end condition when depacking inplace
+;		bne .lz_start_over
+;		lda <.lz_dst + 1
+;		sbc <.lz_src1
+;		bne .lz_start_over
+;		rts
+;.lz_m_page
+;		lda #$ff
+;} else {
 		beq .lz_start_over		;do more page runs
-		tya
-		bne .lz_m_page
-}
+		lda #$ff
+;}
 		;------------------
 		;SELDOM STUFF
 		;------------------
