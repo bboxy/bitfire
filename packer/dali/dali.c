@@ -385,7 +385,7 @@ int main(int argc, char *argv[]) {
                         "  --sfx [$num]                Create a c64 compatible sfx-executable\n"
                         "  --01 [$num]                 Set $01 to [num] after sfx\n"
                         "  --cli [$num]                Do a CLI after sfx, default is SEI\n"
-                        "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored\n"
+                        "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!)\n"
                         "  --no-inplace                Disable inplace-decompression\n"
                         "  --binfile                   Input file is a raw binary without load-address\n"
                         "  --from [$num]               Compress file from [num] on\n"
