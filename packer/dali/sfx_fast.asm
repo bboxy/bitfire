@@ -153,7 +153,6 @@ lz_src = * + 1
 		;NEW OR OLD OFFSET
 		;------------------
 
-.cp_literal_done
 		lda #$01
 		+get_lz_bit
 		bcs .lz_new_offset		;either match with new offset or old offset
@@ -161,14 +160,11 @@ lz_src = * + 1
 		;------------------
 		;DO MATCH
 		;------------------
-.lz_match_repeat
+.lz_match
 		jsr .get_length
-						;XXX TODO encode length - 1 for rep match? but 0 can't be detected then?
+.lz_m_page
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
 		bcc .lz_dcp
-;		bcs +
-;		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
-;+
 .lz_match_
 		eor #$ff
 		tay
@@ -177,10 +173,6 @@ lz_src = * + 1
 		adc <lz_dst + 0
 		sta <lz_dst + 0
 		bcs .lz_clc			;/!\ branch happens less than fall through, only in case of branch carry needs to be cleared :-(
-;		bcc +
-;		clc
-;		top
-;+
 		dec <lz_dst + 1
 .lz_clc_
 .lz_offset_lo = * + 1
@@ -202,9 +194,15 @@ lz_dst = * + 1
 .lz_len_hi = * + 1
 		lda #$00			;check for more loop runs
 		beq .lz_start_over
-		dec <.lz_len_hi
-		inc <.lz_msrcr + 1		;XXX TODO only needed if more pages follow
-		bne .cp_match
+		tya
+		beq .lz_m_page
+.lz_dcp
+		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
+		bcs .lz_match_
+.lz_clc
+		clc
+		bcc .lz_clc_
+
 .lz_l_page
 		sec				;only needs to be set for consecutive rounds of literals, happens very seldom
 		ldy #$00
@@ -254,12 +252,6 @@ lz_dst = * + 1
 		ldy #$00
 		jsr .lz_refill_bits		;fetch remaining bits
 		bcs .lz_match_
-.lz_dcp
-		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
-		bcs .lz_match_
-.lz_clc
-		clc
-		bcc .lz_clc_
 
 .lz_refill_bits
 		tax
@@ -312,6 +304,7 @@ lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
 }
+
 ;!warn "fixup size: ",.depacker_end - .restore_end
 !warn "zp saved up to: ",.restore_end - .depacker
 ;!warn "sfx zp size: ", .depacker_end - .depacker_start
@@ -319,7 +312,3 @@ lz_sfx_addr = * + 1
 .data
 		;!bin "test.lz"
 .data_end
-
-
-;XXX TODO, do s small sfx and a fast sfx? Small does not save stack?
-;literal copy in small, jsr to lz_length, remove optimizations, no stack save and no $01/cli -> $01 == $34 afterwards

@@ -136,7 +136,6 @@ lz_src = * + 1
 		;NEW OR OLD OFFSET
 		;------------------
 
-.cp_literal_done
 		rol
 		+get_lz_bit
 		bcs .lz_new_offset		;either match with new offset or old offset
@@ -144,9 +143,10 @@ lz_src = * + 1
 		;------------------
 		;DO MATCH
 		;------------------
-.lz_match_repeat
+.lz_match
 		jsr .get_length
 						;XXX TODO encode length - 1 for rep match? but 0 can't be detected then?
+.lz_m_page
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
 		bcs +
 		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
@@ -183,9 +183,8 @@ lz_dst = * + 1
 .lz_len_hi = * + 1
 		lda #$00			;check for more loop runs
 		beq .lz_start_over
-		dec <.lz_len_hi
-		inc <.lz_msrcr + 1		;XXX TODO only needed if more pages follow
-		bne .cp_match
+		tya
+		beq .lz_m_page
 .lz_l_page
 		dec <.lz_len_hi
 		bcs .cp_literal
