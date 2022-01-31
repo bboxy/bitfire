@@ -36,11 +36,15 @@ typedef struct ctx {
 
 void salvador_main();
 
-static int read_number(char* arg, int limit) {
+static int read_number(char* arg, char* argname, int limit) {
     int number;
-    if(arg[0] == '$') number = strtoul(arg + 1, NULL, 16);
-    else if(arg[0] == '0' && arg[1] == 'x') number = strtoul(arg + 2, NULL, 16);
-    else number = strtoul(arg, NULL, 10);
+    if (arg != NULL && arg[0] == '$') number = strtoul(arg + 1, NULL, 16);
+    else if (arg != NULL && arg[0] == '0' && arg[1] == 'x') number = strtoul(arg + 2, NULL, 16);
+    else if (arg != NULL && arg[0] >= '0' && arg[0] <= '9') number = strtoul(arg, NULL, 10);
+    else {
+        fprintf(stderr, "Error: no valid number given for argument %s (given value is: '%s')\n", argname, arg);
+        exit(1);
+    }
     if (number < 0 || number > limit) {
         fprintf(stderr, "Error: Number '%s' out of range (0 - 65536)\n", arg);
         exit(1);
@@ -333,25 +337,25 @@ int main(int argc, char *argv[]) {
             } else if (!strcmp(argv[i], "--small")) {
                 sfx_small = TRUE;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
+                cbm_relocate_packed_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
-                cbm_relocate_packed_addr = read_number(argv[i], 65536);
             } else if (!strcmp(argv[i], "--relocate-origin")) {
+                cbm_relocate_origin_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
-                cbm_relocate_origin_addr = read_number(argv[i], 65536);
             } else if (!strcmp(argv[i], "--from")) {
+                cbm_range_from = read_number(argv[i + 1], argv[i], 65536);
                 i++;
-                cbm_range_from = read_number(argv[i], 65536);
             } else if (!strcmp(argv[i], "--to")) {
+                cbm_range_to = read_number(argv[i + 1], argv[i], 65536);
                 i++;
-                cbm_range_to = read_number(argv[i], 65536);
             } else if (!strcmp(argv[i], "--01")) {
+                sfx_01 = read_number(argv[i + 1], argv[i], 256);
                 i++;
-                sfx_01 = read_number(argv[i], 256);
             } else if (!strcmp(argv[i], "--cli")) {
                 sfx_cli = TRUE;
             } else if (!strcmp(argv[i], "--sfx")) {
+                sfx_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
-                sfx_addr = read_number(argv[i], 65536);
                 sfx = TRUE;
                 ctx.inplace = FALSE;
      //       } else if (!strcmp(argv[i], "-x")) {
@@ -394,6 +398,9 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    if (!sfx && sfx_small) {
+        fprintf(stderr, "Info: No sfx, ignoring --small option\n");
+    }
     if (!sfx && sfx_01 >= 0) {
         fprintf(stderr, "Info: No sfx, ignoring --01 option\n");
     }
