@@ -79,6 +79,14 @@ lz_len_hi		= CONFIG_ZP_ADDR + 6 + CONFIG_DEBUG
 }
 }
 
+!macro inc_src_ptr {
+	!if CONFIG_LOADER = 1 {
+			jsr lz_next_page		;sets X = 0, so all sane
+	} else {
+			inc <lz_src + 1
+	}
+}
+
 bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only aggregate labels from this file into loader_*.inc
 
 			* = CONFIG_RESIDENT_ADDR
@@ -337,7 +345,7 @@ bitfire_loadcomp_
 			sta <lz_dst + 0 - 1, x
 			inc <lz_src + 0
 			bne +
-			jsr .lz_next_page
+			+inc_src_ptr
 +
 			dex
 			bne -
@@ -357,6 +365,11 @@ bitfire_loadcomp_
 			;------------------
 			;SELDOM STUFF
 			;------------------
+.lz_clc
+			clc
+			bcc .lz_clc_back
+.lz_m_page
+			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
 .lz_dcp
 			dcp <lz_len_hi
 			bcs .lz_match_big
@@ -368,13 +381,8 @@ bitfire_loadcomp_
 			;POINTER HANDLING LITERAL COPY
 			;------------------
 .lz_inc_src3
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;sets X = 0, so all sane
-	} else {
-			inc <lz_src + 1
-	}
+			+inc_src_ptr
 			bcs .lz_inc_src3_
-
 .lz_dst_inc
 			inc <lz_dst + 1
 			bcs .lz_dst_inc_
@@ -428,13 +436,13 @@ bitfire_loadcomp_
 			;------------------
 .lz_repeat
 			jsr .lz_length
+
 			sbc #$01
 			bcc .lz_dcp			;fix highbyte of length in case and set carry again (a = $ff -> compare delivers carry = 1)
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
 			eor #$ff			;restore A
-.lz_m_page_
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
 			sta <lz_dst + 0
@@ -462,8 +470,8 @@ bitfire_loadcomp_
 .lz_check_poll
 			cpx <lz_src + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
-			lda <lz_dst + 1
-			sbc <lz_src + 1
+			ldx <lz_dst + 1
+			cpx <lz_src + 1
 			bne .lz_start_over
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
@@ -472,7 +480,7 @@ bitfire_loadcomp_
 			;------------------
 			;NEXT PAGE IN STREAM
 			;------------------
-.lz_next_page
+lz_next_page
 			inc <lz_src + 1
 .lz_next_page_
 	!if CONFIG_LOADER = 1 {
@@ -531,8 +539,8 @@ bitfire_loadcomp_
 			sta .lz_offset_lo + 1
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
-			beq .lz_inc_src
-.lz_inc_src_
+			beq .lz_inc_src1
+.lz_inc_src1_
 			lda #$01
 			ldy #$fe
 			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
@@ -545,31 +553,11 @@ bitfire_loadcomp_
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big
-
-			;------------------
-			;MORE SELDOM STUFF
-			;------------------
-.lz_m_page
-			dec <lz_len_hi
-			lda #$ff			;shorter this way, but costs a few more cycles per page, happens super seldom
-			bne .lz_m_page_			;if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-.lz_clc
-			clc
-			bcc .lz_clc_back
-
-.lz_inc_src
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;preserves carry, all sane
-	} else {
-			inc <lz_src + 1
-	}
-			bne .lz_inc_src_
+.lz_inc_src1
+			+inc_src_ptr			;preserves carry, all sane
+			bne .lz_inc_src1_
 .lz_inc_src2
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;preserves carry and A, clears X, Y, all sane
-	} else {
-			inc <lz_src + 1
-	}
+			+inc_src_ptr			;preserves carry and A, clears X, Y, all sane
 			bne .lz_inc_src2_
 
 			;------------------
