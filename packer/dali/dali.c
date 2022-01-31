@@ -576,25 +576,25 @@ int main(int argc, char *argv[]) {
             if (sfx_01 < 0) sfx_01 = 0x37;
 
             /* setup jmp target after decompression */
-            sfx_code[DALI_SFX_ADDR + 0] = sfx_addr & 0xff;
-            sfx_code[DALI_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
+            sfx_code[DALI_FAST_SFX_ADDR + 0] = sfx_addr & 0xff;
+            sfx_code[DALI_FAST_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
 
             /* setup decompression destination */
-            sfx_code[DALI_DST + 0] = cbm_orig_addr & 0xff;
-            sfx_code[DALI_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
+            sfx_code[DALI_FAST_DST + 0] = cbm_orig_addr & 0xff;
+            sfx_code[DALI_FAST_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
 
             /* setup compressed data src */
-            sfx_code[DALI_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
-            sfx_code[DALI_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
+            sfx_code[DALI_FAST_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
+            sfx_code[DALI_FAST_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
 
             /* setup compressed data end */
-            sfx_code[DALI_DATA_END + 0] = (0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) & 0xff;
-            sfx_code[DALI_DATA_END + 1] = ((0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
+            sfx_code[DALI_FAST_DATA_END + 0] = (0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) & 0xff;
+            sfx_code[DALI_FAST_DATA_END + 1] = ((0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
 
-            sfx_code[DALI_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
+            sfx_code[DALI_FAST_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
 
-            sfx_code[DALI_01] = sfx_01;
-            if (sfx_cli) sfx_code[DALI_CLI] = 0x58;
+            sfx_code[DALI_FAST_01] = sfx_01;
+            if (sfx_cli) sfx_code[DALI_FAST_CLI] = 0x58;
         }
         printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
         printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sfx_size + ctx.packed_index, (int)sfx_size + ctx.packed_index, ((float)(ctx.packed_index + (int)sfx_size) / (float)(ctx.unpacked_size) * 100.0));

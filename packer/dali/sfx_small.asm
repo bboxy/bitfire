@@ -112,7 +112,7 @@ lz_data_size_hi = * + 1
 .literal
 		jsr .get_length
 		tax
-		beq .lz_l_page
+		beq .lz_l_page_
 .cp_literal
 lz_src = * + 1
 		lda .data,y			;looks expensive, but is cheaper than loop
@@ -186,6 +186,7 @@ lz_dst = * + 1
 		tya
 		beq .lz_m_page
 .lz_l_page
+.lz_l_page_
 		dec <.lz_len_hi
 		bcs .cp_literal
 
@@ -257,6 +258,7 @@ lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
 }
+
 ;!warn "fixup size: ",.depacker_end - .restore_end
 !warn "zp saved up to: ",.restore_end - .depacker
 ;!warn "sfx zp size: ", .depacker_end - .depacker_start
@@ -264,7 +266,3 @@ lz_sfx_addr = * + 1
 .data
 		;!bin "test.lz"
 .data_end
-
-
-;XXX TODO, do s small sfx and a fast sfx? Small does not save stack?
-;literal copy in small, jsr to lz_length, remove optimizations, no stack save and no $01/cli -> $01 == $34 afterwards

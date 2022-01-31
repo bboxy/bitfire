@@ -25,18 +25,28 @@
 
 !cpu 6510
 
-.depacker	= $01
-.smc_offsetd 	= .depacker - (.dali_code_end - .dali_code_start)
-DALI_SRC	= lz_src - .smc_offsetd + 2
-DALI_DST	= lz_dst      - .smc_offsetd + 2
-DALI_SFX_ADDR	= lz_sfx_addr - .smc_offsetd + 2
-DALI_DATA_END 	= lz_data_end      - .smc_offsetd + 2
-DALI_DATA_SIZE_HI = lz_data_size_hi - .smc_offsetd + 2
-DALI_01		= lz_01 - .smc_offsetd + 2
-DALI_CLI	= lz_cli - .smc_offsetd + 2
+BITS_LEFT		= 0
+
+.depacker		= $01
+.smc_offsetd 		= .depacker - (.dali_code_end - .dali_code_start)
+!ifdef SFX_FAST {
+DALI_FAST_SRC		= lz_src 		- .smc_offsetd + 2
+DALI_FAST_DST		= lz_dst		- .smc_offsetd + 2
+DALI_FAST_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
+DALI_FAST_DATA_END 	= lz_data_end		- .smc_offsetd + 2
+DALI_FAST_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
+DALI_FAST_01		= lz_01			- .smc_offsetd + 2
+DALI_FAST_CLI		= lz_cli		- .smc_offsetd + 2
+} else {
+DALI_SMALL_SRC		= lz_src		- .smc_offsetd + 2
+DALI_SMALL_DST		= lz_dst		- .smc_offsetd + 2
+DALI_SMALL_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
+DALI_SMALL_DATA_END 	= lz_data_end		- .smc_offsetd + 2
+DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
+}
 
 !macro get_lz_bit {
-	!if DALI_BITS_LEFT = 1 {
+	!if BITS_LEFT = 1 {
 		asl <lz_bits
 	} else {
 		lsr <lz_bits
@@ -44,7 +54,7 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 }
 
 !macro set_lz_bit_marker {
-	!if DALI_BITS_LEFT = 1 {
+	!if BITS_LEFT = 1 {
 		rol
 	} else {
 		ror
@@ -62,14 +72,18 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 		;/!\ ATTENTION, the depacker just fits into ZP this way, if it gets larger, the copy routine will overwrite $00, as it is a 8-bit address sta
 		sei
 
+!ifdef SFX_FAST {
 		;full zp code will be copied, but later less bytes will be copied back
 		ldx #<($100 + (.depacker_end - .restore_end))
 		txs
 
+}
 		ldy #.depacker_end - .depacker_start
 -
+!ifdef SFX_FAST {
 		pha				;saved zp to stack down to $02
 		lax <.depacker - 1,y		;saves a byte, 2 byte compared to lda $0000,y
+}
 		ldx .depacker_code - 1,y
 		stx <.depacker - 1,y
 		dey
@@ -85,16 +99,18 @@ DALI_CLI	= lz_cli - .smc_offsetd + 2
 .depacker_start
 		!byte $34
 lz_bits
-!if DALI_BITS_LEFT = 1 {
+!if BITS_LEFT = 1 {
 		!byte $40
 } else {
 		!byte $02
 }
 
 .depack
+!ifdef SFX_FAST {
 lz_01 = * + 1
 		lda #$37			;replace value for $01 in saved ZP on stack
 		pha
+}
 -						;copy data to end of ram ($ffff)
                 dey
 lz_data_end = * + 1
@@ -126,10 +142,23 @@ lz_data_size_hi = * + 1
 lz_src = * + 1
 		lda .data,y			;looks expensive, but is cheaper than loop
 		sta (lz_dst),y
+!ifdef SFX_FAST {
 		iny
+} else {
+
+                inc <lz_src + 0
+                bne +
+                inc <lz_src + 1
++
+                inc <lz_dst + 0
+                bne +
+                inc <lz_dst + 1
++
+}
 		dex
 		bne .cp_literal
 
+!ifdef SFX_FAST {
 		dey				;this way we force increment of lz_dst + 1 if y = 0
 		tya
 		adc <lz_dst + 0
@@ -145,28 +174,37 @@ lz_src = * + 1
 		inc <lz_src + 1
 +
 		ldy <.lz_len_hi
+} else {
+		lda <.lz_len_hi
+}
 		bne .lz_l_page			;happens very seldom
 
 		;------------------
 		;NEW OR OLD OFFSET
 		;------------------
 
-.cp_literal_done
+!ifdef SFX_FAST {
 		lda #$01
+} else {
+		rol
+}
 		+get_lz_bit
 		bcs .lz_new_offset		;either match with new offset or old offset
 
 		;------------------
 		;DO MATCH
 		;------------------
-.lz_match_repeat
+.lz_match
 		jsr .get_length
-						;XXX TODO encode length - 1 for rep match? but 0 can't be detected then?
+.lz_m_page
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
+!ifdef SFX_FAST {
 		bcc .lz_dcp
-;		bcs +
-;		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
-;+
+} else {
+		bcs +
+		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
++
+}
 .lz_match_
 		eor #$ff
 		tay
@@ -174,11 +212,14 @@ lz_src = * + 1
 .lz_match__					;entry from new_offset handling
 		adc <lz_dst + 0
 		sta <lz_dst + 0
+!ifdef SFX_FAST {
 		bcs .lz_clc			;/!\ branch happens less than fall through, only in case of branch carry needs to be cleared :-(
-;		bcc +
-;		clc
-;		top
-;+
+} else {
+		bcc +
+		clc
+		top
++
+}
 		dec <lz_dst + 1
 .lz_clc_
 .lz_offset_lo = * + 1
@@ -200,12 +241,22 @@ lz_dst = * + 1
 .lz_len_hi = * + 1
 		lda #$00			;check for more loop runs
 		beq .lz_start_over
-		dec <.lz_len_hi
-		inc <.lz_msrcr + 1		;XXX TODO only needed if more pages follow
-		bne .cp_match
+		tya
+		beq .lz_m_page
+!ifdef SFX_FAST {
+.lz_dcp
+		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
+		bcs .lz_match_
+.lz_clc
+		clc
+		bcc .lz_clc_
+
+}
 .lz_l_page
+!ifdef SFX_FAST {
 		sec				;only needs to be set for consecutive rounds of literals, happens very seldom
 		ldy #$00
+}
 .lz_l_page_
 		dec <.lz_len_hi
 		bcs .cp_literal
@@ -213,16 +264,22 @@ lz_dst = * + 1
 		;------------------
 		;FETCH A NEW OFFSET
 		;------------------
+!ifdef SFX_FAST {
 -						;get_length as inline
 		+get_lz_bit			;fetch payload bit
 		rol				;can also moved to front and executed once on start
+}
 .lz_new_offset
+!ifdef SFX_FAST {
 		+get_lz_bit
 		bcc -
 +
 		bne +
 		jsr .lz_refill_bits
 +
+} else {
+		jsr .get_length
+}
 		sbc #$01
 
 		bcc .lz_eof			;underflow. must have been 0
@@ -237,9 +294,8 @@ lz_dst = * + 1
 		bne +
 		inc <lz_src + 1
 +
-						;XXX TODO would be nice to have inverted data sent, but would mean MSB also receives inverted bits? sucks. As soon as we refill bits we fall into loop that checks overflow on LSB, should check for bcc however :-( then things would work
-						;would work on offset MSB, but need to clear lz_len_hi after that
 		lda #$01
+!ifdef SFX_FAST {
 		ldy #$fe
 		bcs .lz_match__			;length = 2 ^ $ff, do it the very short way :-)
 -
@@ -251,13 +307,10 @@ lz_dst = * + 1
 		bne .lz_match_
 		ldy #$00
 		jsr .lz_refill_bits		;fetch remaining bits
+} else {
+		jsr .get_length_bt
+}
 		bcs .lz_match_
-.lz_dcp
-		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
-		bcs .lz_match_
-.lz_clc
-		clc
-		bcc .lz_clc_
 
 .lz_refill_bits
 		tax
@@ -279,6 +332,7 @@ lz_dst = * + 1
 		bcs .get_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
 .get_length
 		+get_lz_bit
+.get_length_bt
 		bcc .lz_get_loop
 		beq .lz_refill_bits
 		rts
@@ -298,6 +352,7 @@ lz_dst = * + 1
 
 .restore_end
 		;restore zp up to $dc
+!ifdef SFX_FAST {
 -
 		pla
 		tsx
@@ -306,10 +361,12 @@ lz_dst = * + 1
 		pha				;end up with SP = $ff, let's be nice :-)
 lz_cli
 		sei
+}
 lz_sfx_addr = * + 1
 		jmp $0000
 .depacker_end
 }
+
 ;!warn "fixup size: ",.depacker_end - .restore_end
 !warn "zp saved up to: ",.restore_end - .depacker
 ;!warn "sfx zp size: ", .depacker_end - .depacker_start
@@ -317,7 +374,3 @@ lz_sfx_addr = * + 1
 .data
 		;!bin "test.lz"
 .data_end
-
-
-;XXX TODO, do s small sfx and a fast sfx? Small does not save stack?
-;literal copy in small, jsr to lz_length, remove optimizations, no stack save and no $01/cli -> $01 == $34 afterwards

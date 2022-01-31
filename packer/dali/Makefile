@@ -30,7 +30,7 @@ salvador.a:
 depack.prg: depack.asm dzx0.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
 
-sfx_small.h: sfx_small.asm
+sfx_small.h: sfx.asm
 	@echo "Compiling sfx code for dali..."
 	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'DALI' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
@@ -40,9 +40,9 @@ sfx_small.h: sfx_small.asm
 	$(VR)echo '};' >> $@
 	$(VR)rm $(basename $@).lst $(basename $@)
 
-sfx_fast.h: sfx_fast.asm
+sfx_fast.h: sfx.asm
 	@echo "Compiling sfx code for dali..."
-	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
+	$(VR)$(ACME) $(ACME_OPTS) -DSFX_FAST=1 -l $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'DALI' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
 	$(VR)echo 'static const char decruncher[] = {' >> $@
 	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
