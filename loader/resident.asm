@@ -130,7 +130,6 @@ link_music_addr = * + 1
 			jmp link_music_play_side1
 	}
 }
-
 			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 			;and advances the frame counter if needed
 
@@ -462,7 +461,7 @@ bitfire_loadcomp_
 			iny
 			bne .lz_cp_match
 			inx
-			stx <lz_dst + 1
+			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0
 
 			lda <lz_len_hi			;check for more loop runs
 			bne .lz_m_page			;do more page runs? Yes? Fall through
@@ -484,8 +483,7 @@ lz_next_page
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
 			php				;save carry
-			pha				;and A
-			txa
+			txa				;and x
 			pha
 .lz_fetch_sector					;entry of loop
 			jsr .ld_pblock			;fetch another block
@@ -499,7 +497,6 @@ lz_next_page
 			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
 			pla
 			tax
-			pla
 			plp
 	}
 			rts
@@ -517,17 +514,8 @@ lz_next_page
 			bne +
 			jsr .lz_refill_bits
 +
-
-			;offset 1..255, first 8 bits, could also be send in another way? 256 = 0 = end
-			;-> 0..254 as offset
-			;else end sequence?
-			;n*2 bits offset
-			;7 bits remaining offset
-			;backtrack bit for length
-
-							;XXX TODO can eof marker be something else? send 7 bits max and directlyuse as offset? without lsr and sbc #1? use lower bit for a check? without backing up last bit?
-			sbc #$01			;XXX TODO can be omitted if just endposition is checked, but 0 does not exist as value?
-			bcc .lz_eof
+			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
+			bcc .lz_eof			;underflow, so offset was $100
 
 			lsr
 			sta .lz_offset_hi + 1		;hibyte of offset
@@ -605,20 +593,3 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;XXX TODO
 ;decide upon 2 bits with bit <lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
-
-
-;set jump to init depacker
-;jsr send_filename
-;load block
-;until barrier is okay
-;jmp init depacker -> change to jump back? how to preserve entry? and depack
-;whenever new block is needed: jmp load block
-
-
-;-> lda #$entry
-;-> jmp back -> setup jump
-;
-
-
-
-;send elias stuff inverted and uninverted, for that, elias code must be initialised in two ways (incl. lz_len_hi), with $0001 and $fffe and teh elias fetch has to be 16 bit always, no postponed breakout for higher bits
