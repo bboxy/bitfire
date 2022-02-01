@@ -463,7 +463,7 @@ bitfire_loadcomp_
 			inx
 			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
 
-			ldx <lz_len_hi			;check for more loop runs
+			lda <lz_len_hi			;check for more loop runs
 			bne .lz_m_page			;do more page runs? Yes? Fall through
 .lz_check_poll
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
