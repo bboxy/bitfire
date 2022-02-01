@@ -6,15 +6,45 @@ Bitfire is a fixed interleave loadersystem with depacker, a basic framework and 
 dali
 ----
 
-The packer supports output of both, sfx as well as levelpacked files suitable for Bitfire
+dali is a wrapper of salvador a zx0-compatible near-optimal compressor, that can also handle repeated offsets besides normal matches and literals. Salvador is written by Emmanuel Marty and is pretty fast compaed to the original zx0-compressor brought up by Einar Saukas. The tradeoff are slight differences in the pack-ration of a few bytes occasionally.
 
--o						Name of oputput file
---sfx startaddr					Spit out an executable for c64
-#--use-prefix					Reference also the stuff that is cut off the file when using --cut-input-addr. The referenced part must be in c64-memory however to make this work upon depacking. It saves a few bytes on splitted files, as more matches can be found
---relocate-packed				Force packed file to be loaded to a differnet location (for e.g. if it starts/ends in IO range)
---relocate-origin				Move file to alternative address, prior to packing
---binfile					Given file is without 2 byte .prg header, --relocate-origin can help out
---from [num] --to [num]				Only compress the given part of a file. Addresses can be given in hex (0x0000, $0000) or decimal format. Addresses are absolute.
+The packer/wrapper supports output of both, sfx as well as levelpacked files suitable for Bitfire
+
+the following options are available:
+
+-o [filename]
+Set an output filename, else it will be derived from the input filename by adding an .lz extension
+
+--sfx [$addr]
+Create a c64 compatible sfx-executable that starts your code at [$addr] after depacking. Further options are available to configure the sfx-depacker.
+
+--01 [$num]                 Set $01 to [num] after sfx
+Address $01 in zeropage will be set to the given value after depacking, so that you end up using the right memory configuration, mostly needed when your executeable starts under basic, kernal or i/o.
+
+--cli [$num]                Do a CLI after sfx, default is SEI
+Enable interrupts again after depacking, default is to leave the depacker with a SEI instruction, so interrupts do not go mayhem after disabling any ROM with $01.
+
+--small
+Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!) whereas the normal sfx restores the zeropage from $01 - $df after depacking, $e0-$ff are trashed.
+
+--no-inplace
+Disables the inplace-decompression, and thus always an end-marker is added to the file.
+
+--binfile
+Input file is a raw binary without load-address, the load-address needed is taken from the --relocate-origin switch
+
+--from [$num]
+--to [$num]
+With those two flags the file can be cut into desired slices that are then fed to the packer. This way the file can easily split up into a portion that gies up until $d000 and a portion that gies from $d000-$ffff (remember, no loading under i/o possible)
+
+--use-prefix
+Use preceeding data of file as dictionary. This requires, that the data referenced here is also in memory at the same location when depacking.
+
+--relocate-packed [$num]
+Relocate packed data to desired address [$num]. The resulting file can't de decompressed inplace anymore after that, as it requires an end-marker then.
+
+--relocate-origin [$num]
+Set load-address of source file to [$num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.
 
 Disclayout
 ----------
