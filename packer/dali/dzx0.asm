@@ -144,7 +144,6 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			lda <lz_dst + 1
 			sbc <lz_src + 1
 			bne .lz_start_over
-			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			rts				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
 
 			;------------------

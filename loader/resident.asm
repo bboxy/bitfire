@@ -432,7 +432,7 @@ bitfire_loadcomp_
 			bcs .lz_match			;either match with new offset or old offset
 
 			;------------------
-			;DO MATCH
+			;REPEAT LAST OFFSET
 			;------------------
 .lz_repeat
 			jsr .lz_length
@@ -476,7 +476,6 @@ bitfire_loadcomp_
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
 							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
-
 			;------------------
 			;NEXT PAGE IN STREAM
 			;------------------
@@ -507,7 +506,7 @@ lz_next_page
 			rts
 
 			;------------------
-			;FETCH A NEW OFFSET
+			;MATCH
 			;------------------
 -							;lz_length as inline
 			+get_lz_bit			;fetch payload bit
@@ -553,6 +552,10 @@ lz_next_page
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big
+
+			;------------------
+			;POINTER HIGHBYTE HANDLING
+			;------------------
 .lz_inc_src1
 			+inc_src_ptr			;preserves carry, all sane
 			bne .lz_inc_src1_
