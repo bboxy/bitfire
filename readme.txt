@@ -46,6 +46,8 @@ Relocate packed data to desired address [$num]. The resulting file can't de deco
 --relocate-origin [$num]
 Set load-address of source file to [$num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.
 
+A standalone depacker-example can be found in packer/dali/dzx0.asm
+
 Disclayout
 ----------
 
