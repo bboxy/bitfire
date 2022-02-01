@@ -117,16 +117,14 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
 			sta <lz_dst + 0
-			tax				;remember for later end check, cheaper this way
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
 			dec <lz_dst + 1			;subtract one more in this case
 .lz_clc_back
 .lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1) in fact we could use sbx here, but would not respect carry, but a and x are same, but need x later anyway for other purpose
 			sta .lz_msrcr + 0
-			lda <lz_dst + 1
+			lax <lz_dst + 1
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
-			;				;XXX TODO would have dst + 0 and + 1 in X and A here, of any use?
 .lz_cp_match
 			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
@@ -134,15 +132,16 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			sta (lz_dst),y
 			iny
 			bne .lz_cp_match
-			inc <lz_dst + 1
+			inx
+			stx <lz_dst + 1
 
 			lda <lz_len_hi			;check for more loop runs
 			bne .lz_m_page			;do more page runs? Yes? Fall through
 
-			cpx <lz_src + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
+			cpx <lz_src + 1
 			bne .lz_start_over		;we could check against src >= dst XXX TODO
-			lda <lz_dst + 1
-			sbc <lz_src + 1
+			ldx <lz_dst + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
+			cpx <lz_src + 0
 			bne .lz_start_over
 			rts				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
 
@@ -188,9 +187,8 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			sta .lz_offset_lo + 1
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
-			bne +
-			inc <lz_src + 1
-+
+			beq .lz_inc_src1
+.lz_inc_src1_
 			lda #$01
 			ldy #$fe
 			bcs .lz_match_len2		;length = 2 ^ $ff, do it the very short way :-)
@@ -206,6 +204,16 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			bcs .lz_match_big
 
 			;------------------
+			;POINTER HIGHBYTE HANDLING
+			;------------------
+.lz_inc_src1
+			inc <lz_src + 1			;preserves carry, all sane
+			bne .lz_inc_src1_
+.lz_inc_src2
+			inc <lz_src + 1			;preserves carry and A, clears X, Y, all sane
+			bne .lz_inc_src2_
+
+			;------------------
 			;ELIAS FETCH
 			;------------------
 .lz_refill_bits
@@ -213,13 +221,11 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			lda (lz_src),y
 			+set_lz_bit_marker
 			sta <lz_bits
-			txa
 			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
-			bne +				;XXX TODO if we would prefer beq, 0,2% saving
-			inc <lz_src + 1
-+
+			beq .lz_inc_src2		;XXX TODO if we would prefer beq, 0,2% saving
+.lz_inc_src2_
+			txa
 			bcs .lz_lend
-
 
 .lz_get_loop
 			+get_lz_bit			;fetch payload bit
