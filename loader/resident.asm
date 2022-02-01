@@ -91,6 +91,17 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only agg
 
 			* = CONFIG_RESIDENT_ADDR
 .lz_gap1
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+
 !if CONFIG_FRAMEWORK = 1 {
 
 ;XXX TODO move away frameworkstuff to $0105 onwards
@@ -352,12 +363,25 @@ bitfire_loadcomp_
 			stx .lz_offset_hi + 1
 			stx <lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 			beq .lz_start_over		;start with a literal, X = 0
+.lz_l_page
+			dec <lz_len_hi
+			bcs .lz_cp_lit
 
 			!ifdef .lz_gap2 {
 				!warn .lz_gap2 - *, " bytes left until gap2"
 			}
 !align 255,0
 .lz_gap2
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+
 !if .lz_gap2 - .lz_gap1 > $0100 {
 		!error "code on first page too big, second gap does not fit!"
 }
@@ -372,9 +396,6 @@ bitfire_loadcomp_
 .lz_dcp
 			dcp <lz_len_hi
 			bcs .lz_match_big
-.lz_l_page
-			dec <lz_len_hi
-			bcs .lz_cp_lit
 
 			;------------------
 			;POINTER HANDLING LITERAL COPY
@@ -403,11 +424,19 @@ bitfire_loadcomp_
 			+get_lz_bit
 			bcs .lz_match			;after each match check for another match or literal?
 .lz_literal
-			jsr .lz_length
+			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
+			bcs +
+			+get_lz_bit			;fetch payload bit
+			rol				;can also moved to front and executed once on start
+			bcc .lz_literal
++
+			bne +
+			jsr .lz_refill_bits
++
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
-			lda (lz_src),y			;Need to copy this way, or wie copy from area that is blocked by barrier
+			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier
 			sta (lz_dst),y
 
 			inc <lz_src + 0
@@ -499,6 +528,7 @@ lz_next_page
 			tax
 			plp
 	}
+.lz_eof
 			rts
 
 			;------------------
@@ -559,11 +589,10 @@ lz_next_page
 			+set_lz_bit_marker
 			sta <lz_bits
 			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
-			beq .lz_inc_src2		;XXX TODO if we would prefer beq, 0,2% saving
+			beq .lz_inc_src2
 .lz_inc_src2_
 			txa
 			bcs .lz_lend
-
 .lz_get_loop
 			+get_lz_bit			;fetch payload bit
 .lz_length_16_
@@ -574,10 +603,7 @@ lz_next_page
 
 			bcc .lz_get_loop
 			beq .lz_refill_bits
-			;XXX TODO manage to have flags suiting for pulled length?
-			;XXX TODO swap stop bit and payload bit in positions?
 .lz_lend
-.lz_eof
 			rts
 .lz_length_16						;happens very rarely
 			pha				;save LSB
