@@ -344,7 +344,9 @@ numb		lda #$00		;file number
 		jsr hex_runs
 		jsr reset
 !if TIME_STRICT == 1{
-		jam
+		lda #$1b
+		sta $d011
+		jmp *
 }
 
 !if REQDISC == 1 {
