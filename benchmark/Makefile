@@ -23,7 +23,7 @@ benchmark: checksum.asm Makefile ../loader/installer
 	$(MAKE) -C ../
 	$(ACME) $(ACME_OPTS) -o $@ $<
 	#exomizer sfx 0x0900 -o $@.prg $@
-	$(PACKER) $(PACKER_OPTS) --sfx 0x0900 --01 0x35 -o $@.prg $@
+	$(PACKER) $(PACKER_OPTS) --sfx 0x0900 -o $@.prg $@
 	cp benchmark.prg installer$(TIMESTAMP).prg
 	$(D64WRITE) $(D64WRITE_OPTS) -c side$(TIMESTAMP).d64 --free 1337 -h oxyron -i \<3 --side 1 \
 			--boot $@.prg \
