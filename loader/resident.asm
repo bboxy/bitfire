@@ -318,7 +318,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 bitfire_decomp_
 link_decomp
 	!if CONFIG_LOADER = 1 {
-			lda #(.lz_start_over - .lz_skip_poll) - 2
+			lda #(.lz_start_over - .lz_skip_poll) - 2	;a9
 			ldx #$60
 			bne .loadcomp_entry
 		!if CONFIG_FRAMEWORK = 1 {
@@ -328,7 +328,7 @@ link_load_comp
 		}
 bitfire_loadcomp_
 			jsr bitfire_send_byte_		;returns now with x = $3f
-			lda #(.lz_poll - .lz_skip_poll) - 2
+			lda #(.lz_poll - .lz_skip_poll) - 2		;a1
 			ldx #$08
 .loadcomp_entry
 			sta .lz_skip_poll + 1
@@ -446,16 +446,14 @@ bitfire_loadcomp_
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
 			sta <lz_dst + 0
-			tax				;remember for later end check, cheaper this way
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
 			dec <lz_dst + 1			;subtract one more in this case
 .lz_clc_back
 .lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1) in fact we could use sbx here, but would not respect carry, but a and x are same, but need x later anyway for other purpose
 			sta .lz_msrcr + 0
-			lda <lz_dst + 1
+			lax <lz_dst + 1
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
-			;				;XXX TODO would have dst + 0 and + 1 in X and A here, of any use? x is reused later on cpx
 .lz_cp_match
 			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
@@ -463,15 +461,16 @@ bitfire_loadcomp_
 			sta (lz_dst),y
 			iny
 			bne .lz_cp_match
-			inc <lz_dst + 1
+			inx
+			stx <lz_dst + 1
 
 			lda <lz_len_hi			;check for more loop runs
 			bne .lz_m_page			;do more page runs? Yes? Fall through
 .lz_check_poll
-			cpx <lz_src + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
+			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
-			ldx <lz_dst + 1
-			cpx <lz_src + 1
+			ldx <lz_dst + 0
+			cpx <lz_src + 0
 			bne .lz_start_over
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
