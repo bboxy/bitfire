@@ -30,7 +30,7 @@ salvador.a:
 depack.prg: depack.asm dzx0.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
 
-sfx_small.h: sfx_small.asm
+sfx_small.h: sfx.asm
 	@echo "Compiling sfx code for dali..."
 	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'DALI' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@

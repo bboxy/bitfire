@@ -78,7 +78,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			dey				;this way we force increment of lz_src + 1 if y = 0
 			tya				;carry is still set on first round
 			adc <lz_dst + 0
-			sta <lz_dst + 0		;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on? but this could be called mutliple times for several pages? :-(
+			sta <lz_dst + 0			;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on? but this could be called mutliple times for several pages? :-(
 			bcc +				;XXX TODO branch out and reenter
 			inc <lz_dst + 1
 +
