@@ -79,10 +79,19 @@ lz_len_hi		= CONFIG_ZP_ADDR + 6 + CONFIG_DEBUG
 }
 }
 
+!macro inc_src_ptr {
+	!if CONFIG_LOADER = 1 {
+			jsr lz_next_page		;sets X = 0, so all sane
+	} else {
+			inc <lz_src + 1
+	}
+}
+
 bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only aggregate labels from this file into loader_*.inc
 
 			* = CONFIG_RESIDENT_ADDR
 .lz_gap1
+
 !if CONFIG_FRAMEWORK = 1 {
 
 ;XXX TODO move away frameworkstuff to $0105 onwards
@@ -122,7 +131,6 @@ link_music_addr = * + 1
 			jmp link_music_play_side1
 	}
 }
-
 			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 			;and advances the frame counter if needed
 
@@ -310,7 +318,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 bitfire_decomp_
 link_decomp
 	!if CONFIG_LOADER = 1 {
-			lda #(.lz_start_over - .lz_skip_poll) - 2
+			lda #(.lz_start_over - .lz_skip_poll) - 2	;9e
 			ldx #$60
 			bne .loadcomp_entry
 		!if CONFIG_FRAMEWORK = 1 {
@@ -320,7 +328,7 @@ link_load_comp
 		}
 bitfire_loadcomp_
 			jsr bitfire_send_byte_		;returns now with x = $3f
-			lda #(.lz_poll - .lz_skip_poll) - 2
+			lda #(.lz_poll - .lz_skip_poll) - 2		;96
 			ldx #$08
 .loadcomp_entry
 			sta .lz_skip_poll + 1
@@ -337,7 +345,7 @@ bitfire_loadcomp_
 			sta <lz_dst + 0 - 1, x
 			inc <lz_src + 0
 			bne +
-			jsr .lz_next_page
+			+inc_src_ptr
 +
 			dex
 			bne -
@@ -345,39 +353,33 @@ bitfire_loadcomp_
 			stx .lz_offset_hi + 1
 			stx <lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 			beq .lz_start_over		;start with a literal, X = 0
+.lz_l_page_
+			sec
+			ldy #$00
+.lz_l_page
+			dec <lz_len_hi
+			bcs .lz_cp_lit
 
 			!ifdef .lz_gap2 {
 				!warn .lz_gap2 - *, " bytes left until gap2"
 			}
-;!align 255,0
+!align 255,0
 .lz_gap2
+
 !if .lz_gap2 - .lz_gap1 > $0100 {
 		!error "code on first page too big, second gap does not fit!"
 }
 			;------------------
 			;SELDOM STUFF
 			;------------------
-.lz_dcp
+.lz_clc
+			clc
+			bcc .lz_clc_back
+.lz_m_page
+			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
+.lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
 			dcp <lz_len_hi
-			bcs .lz_match_big
-.lz_l_page
-			dec <lz_len_hi
-			bcs .lz_cp_lit
-
-			;------------------
-			;POINTER HANDLING LITERAL COPY
-			;------------------
-.lz_inc_src3
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;sets X = 0, so all sane
-	} else {
-			inc <lz_src + 1
-	}
-			bcs .lz_inc_src3_
-
-.lz_dst_inc
-			inc <lz_dst + 1
-			bcs .lz_dst_inc_
+			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
 
 			;------------------
 			;POLLING
@@ -396,76 +398,73 @@ bitfire_loadcomp_
 			+get_lz_bit
 			bcc .lz_literal
 			jmp .lz_match			;after each match check for another match or literal?
--							;lz_length as inline
+-
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
 .lz_literal
-			+get_lz_bit
+			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
 			bcc -
-
++
 			bne +
 			jsr .lz_refill_bits
 +
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
-			lda (lz_src),y			;Need to copy this way, or wie copy from area that is blocked by barrier
+			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this way barrier needs to be 2 pages ahead
 			sta (lz_dst),y
-
-			inc <lz_src + 0
-			beq .lz_inc_src3
-.lz_inc_src3_
-			inc <lz_dst + 0
-			beq .lz_dst_inc
-.lz_dst_inc_
+			iny
 			dex
 			bne .lz_cp_lit
 
-			lda <lz_len_hi			;more pages to copy?
-			bne .lz_l_page			;happens very seldom
+			dey                             ;this way we force increment of lz_dst + 1 if y = 0
+			tya
+			adc <lz_dst + 0
+			sta <lz_dst + 0                 ;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on?
+			bcc +
+			inc <lz_dst + 1
++
+			tya
+			sec
+			adc <lz_src + 0
+			sta <lz_src + 0
+			bcc +
+			jsr lz_next_page
++
+			ldy <lz_len_hi
+			bne .lz_l_page_			;happens very seldom
 
 			;------------------
 			;NEW OR OLD OFFSET
 			;------------------
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
-			rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
+			lda #$01			;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
 			+get_lz_bit
 			bcs .lz_match			;either match with new offset or old offset
-			bcc .lz_repeat
 
 			;------------------
-			;DO MATCH
+			;REPEAT LAST OFFSET
 			;------------------
--							;lz_length as inline
-			+get_lz_bit			;fetch payload bit
-			rol				;can also moved to front and executed once on start
 .lz_repeat
-			+get_lz_bit
-			bcc -
+			jsr .lz_length
 
-			bne +
-			jsr .lz_refill_bits
-+
 			sbc #$01
 			bcc .lz_dcp			;fix highbyte of length in case and set carry again (a = $ff -> compare delivers carry = 1)
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
 			eor #$ff			;restore A
-.lz_m_page_
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
 			sta <lz_dst + 0
-			tax				;remember for later end check, cheaper this way
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
 			dec <lz_dst + 1			;subtract one more in this case
 .lz_clc_back
 .lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1) in fact we could use sbx here, but would not respect carry, but a and x are same, but need x later anyway for other purpose
 			sta .lz_msrcr + 0
-			lda <lz_dst + 1
+			lax <lz_dst + 1
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
-			;				;XXX TODO would have dst + 0 and + 1 in X and A here, of any use? x is reused later on cpx
 .lz_cp_match
 			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
@@ -473,31 +472,31 @@ bitfire_loadcomp_
 			sta (lz_dst),y
 			iny
 			bne .lz_cp_match
-			inc <lz_dst + 1
+			inx
+			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
 
 			lda <lz_len_hi			;check for more loop runs
 			bne .lz_m_page			;do more page runs? Yes? Fall through
 .lz_check_poll
-			cpx <lz_src + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
+			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
-			lda <lz_dst + 1
-			sbc <lz_src + 1
+
+			ldx <lz_dst + 0
+			cpx <lz_src + 0
 			bne .lz_start_over
 			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
 							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
-
 			;------------------
 			;NEXT PAGE IN STREAM
 			;------------------
-.lz_next_page
+lz_next_page
 			inc <lz_src + 1
 .lz_next_page_
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
 			php				;save carry
-			pha				;and A
-			txa
+			txa				;and x
 			pha
 .lz_fetch_sector					;entry of loop
 			jsr .ld_pblock			;fetch another block
@@ -511,13 +510,13 @@ bitfire_loadcomp_
 			;Y = 0				;XXX TODO could be used to return somewhat dirty from a jsr situation, this would pull two bytes from stack and return
 			pla
 			tax
-			pla
 			plp
 	}
+.lz_eof
 			rts
 
 			;------------------
-			;FETCH A NEW OFFSET
+			;MATCH
 			;------------------
 -							;lz_length as inline
 			+get_lz_bit			;fetch payload bit
@@ -529,28 +528,19 @@ bitfire_loadcomp_
 			bne +
 			jsr .lz_refill_bits
 +
+			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
+			bcc .lz_eof			;underflow, so offset was $100
 
-			;offset 1..255, first 8 bits, could also be send in another way? 256 = 0 = end
-			;-> 0..254 as offset
-			;else end sequence?
-			;n*2 bits offset
-			;7 bits remaining offset
-			;backtrack bit for length
-
-							;XXX TODO can eof marker be something else? send 7 bits max and directlyuse as offset? without lsr and sbc #1? use lower bit for a check? without backing up last bit?
-			sbc #$01			;XXX TODO can be omitted if just endposition is checked, but 0 does not exist as value?
-			bcc .lz_eof
-
-			lsr
+			lsr				;set bit 15 to 0 while shifting hibyte
 			sta .lz_offset_hi + 1		;hibyte of offset
 
-			lda (lz_src),y			;fetch another byte directly
-			ror
+			lda (lz_src),y			;fetch another byte directly, same as refill_bits...
+			ror				;and shift -> first bit for lenth is in carry, and we have %0xxxxxxx xxxxxxxx as offset
 			sta .lz_offset_lo + 1
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
-			beq .lz_inc_src
-.lz_inc_src_
+			beq .lz_inc_src1
+.lz_inc_src1_
 			lda #$01
 			ldy #$fe
 			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
@@ -562,32 +552,16 @@ bitfire_loadcomp_
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
-			bcs .lz_match_big
+			bcs .lz_match_big		;and enter match copy loop
 
 			;------------------
-			;MORE SELDOM STUFF
+			;POINTER HIGHBYTE HANDLING
 			;------------------
-.lz_m_page
-			dec <lz_len_hi
-			lda #$ff			;shorter this way, but costs a few more cycles per page, happens super seldom
-			bne .lz_m_page_			;if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-.lz_clc
-			clc
-			bcc .lz_clc_back
-
-.lz_inc_src
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;preserves carry, all sane
-	} else {
-			inc <lz_src + 1
-	}
-			bne .lz_inc_src_
+.lz_inc_src1
+			+inc_src_ptr			;preserves carry, all sane
+			bne .lz_inc_src1_
 .lz_inc_src2
-	!if CONFIG_LOADER = 1 {
-			jsr .lz_next_page		;preserves carry and A, clears X, Y, all sane
-	} else {
-			inc <lz_src + 1
-	}
+			+inc_src_ptr			;preserves carry and A, clears X, Y, all sane
 			bne .lz_inc_src2_
 
 			;------------------
@@ -599,11 +573,10 @@ bitfire_loadcomp_
 			+set_lz_bit_marker
 			sta <lz_bits
 			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
-			beq .lz_inc_src2		;XXX TODO if we would prefer beq, 0,2% saving
+			beq .lz_inc_src2
 .lz_inc_src2_
-			txa
+			txa				;also postpone, so A can be trashed on lz_inc_src above
 			bcs .lz_lend
-
 .lz_get_loop
 			+get_lz_bit			;fetch payload bit
 .lz_length_16_
@@ -614,14 +587,11 @@ bitfire_loadcomp_
 
 			bcc .lz_get_loop
 			beq .lz_refill_bits
-			;XXX TODO manage to have flags suiting for pulled length?
-			;XXX TODO swap stop bit and payload bit in positions?
 .lz_lend
-.lz_eof
 			rts
 .lz_length_16						;happens very rarely
 			pha				;save LSB
-			tya				;was lda #$01, but A = 0 + rol makes this also start with MSB = 1
+			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with MSB = 1
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
@@ -633,20 +603,3 @@ bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 ;XXX TODO
 ;decide upon 2 bits with bit <lz_bits? bmi + bvs + bvc? bpl/bmi decides if repeat or not, bvs = length 2/check for new bits and redecide, other lengths do not need to check, this can alos be used on other occasions?
 ;do a jmp ($00xx) to determine branch?
-
-
-;set jump to init depacker
-;jsr send_filename
-;load block
-;until barrier is okay
-;jmp init depacker -> change to jump back? how to preserve entry? and depack
-;whenever new block is needed: jmp load block
-
-
-;-> lda #$entry
-;-> jmp back -> setup jump
-;
-
-
-
-;send elias stuff inverted and uninverted, for that, elias code must be initialised in two ways (incl. lz_len_hi), with $0001 and $fffe and teh elias fetch has to be 16 bit always, no postponed breakout for higher bits

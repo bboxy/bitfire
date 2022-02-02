@@ -91,16 +91,6 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only agg
 
 			* = CONFIG_RESIDENT_ADDR
 .lz_gap1
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
 
 !if CONFIG_FRAMEWORK = 1 {
 
@@ -328,7 +318,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 bitfire_decomp_
 link_decomp
 	!if CONFIG_LOADER = 1 {
-			lda #(.lz_start_over - .lz_skip_poll) - 2	;a9
+			lda #(.lz_start_over - .lz_skip_poll) - 2	;9e
 			ldx #$60
 			bne .loadcomp_entry
 		!if CONFIG_FRAMEWORK = 1 {
@@ -338,7 +328,7 @@ link_load_comp
 		}
 bitfire_loadcomp_
 			jsr bitfire_send_byte_		;returns now with x = $3f
-			lda #(.lz_poll - .lz_skip_poll) - 2		;a1
+			lda #(.lz_poll - .lz_skip_poll) - 2		;96
 			ldx #$08
 .loadcomp_entry
 			sta .lz_skip_poll + 1
@@ -372,15 +362,6 @@ bitfire_loadcomp_
 			}
 !align 255,0
 .lz_gap2
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
 
 !if .lz_gap2 - .lz_gap1 > $0100 {
 		!error "code on first page too big, second gap does not fit!"
@@ -393,9 +374,9 @@ bitfire_loadcomp_
 			bcc .lz_clc_back
 .lz_m_page
 			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-.lz_dcp
+.lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
 			dcp <lz_len_hi
-			bcs .lz_match_big
+			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
 
 			;------------------
 			;POINTER HANDLING LITERAL COPY
@@ -497,6 +478,7 @@ bitfire_loadcomp_
 .lz_check_poll
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
+
 			ldx <lz_dst + 0
 			cpx <lz_src + 0
 			bne .lz_start_over
@@ -547,11 +529,11 @@ lz_next_page
 			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
 			bcc .lz_eof			;underflow, so offset was $100
 
-			lsr
+			lsr				;set bit 15 to 0 while shifting hibyte
 			sta .lz_offset_hi + 1		;hibyte of offset
 
-			lda (lz_src),y			;fetch another byte directly
-			ror
+			lda (lz_src),y			;fetch another byte directly, same as refill_bits...
+			ror				;and shift -> first bit for lenth is in carry, and we have %0xxxxxxx xxxxxxxx as offset
 			sta .lz_offset_lo + 1
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
@@ -568,7 +550,7 @@ lz_next_page
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
-			bcs .lz_match_big
+			bcs .lz_match_big		;and enter match copy loop
 
 			;------------------
 			;POINTER HIGHBYTE HANDLING
@@ -591,7 +573,7 @@ lz_next_page
 			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
 			beq .lz_inc_src2
 .lz_inc_src2_
-			txa
+			txa				;also postpone, so A can be trashed on lz_inc_src above
 			bcs .lz_lend
 .lz_get_loop
 			+get_lz_bit			;fetch payload bit
@@ -607,7 +589,7 @@ lz_next_page
 			rts
 .lz_length_16						;happens very rarely
 			pha				;save LSB
-			tya				;was lda #$01, but A = 0 + rol makes this also start with MSB = 1
+			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with MSB = 1
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
