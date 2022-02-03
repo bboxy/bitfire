@@ -91,6 +91,18 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only agg
 
 			* = CONFIG_RESIDENT_ADDR
 .lz_gap1
+!if CONFIG_NMI_GAPS = 1 {
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+}
 
 !if CONFIG_FRAMEWORK = 1 {
 
@@ -357,14 +369,25 @@ bitfire_loadcomp_
 			dec <lz_len_hi
 			bcs .lz_cp_lit
 
+!if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
 				!warn .lz_gap2 - *, " bytes left until gap2"
 			}
 !align 255,0
 .lz_gap2
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
 
 !if .lz_gap2 - .lz_gap1 > $0100 {
 		!error "code on first page too big, second gap does not fit!"
+}
 }
 			;------------------
 			;SELDOM STUFF
@@ -417,7 +440,7 @@ bitfire_loadcomp_
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
-			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier
+			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks
 			sta (lz_dst),y
 
 			inc <lz_src + 0
