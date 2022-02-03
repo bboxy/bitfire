@@ -31,27 +31,22 @@
 
 LZ_BITS_LEFT		= 0
 
-!if CONFIG_LOADER = 1 {
-;loader zp-addresses
+!if CONFIG_DECOMP = 0 {
 filenum			= CONFIG_ZP_ADDR + 0
-barrier			= filenum
-	!if CONFIG_DECOMP = 0 {
-bitfire_load_addr_lo	= filenum			;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
-bitfire_load_addr_hi	= filenum + 1
+bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
+bitfire_load_addr_hi	= CONFIG_ZP_ADDR + 1
+preamble		= CONFIG_ZP_ADDR + 2
 	} else {
+filenum			= CONFIG_ZP_ADDR + 0
+lz_bits			= CONFIG_ZP_ADDR + 1
+lz_dst			= CONFIG_ZP_ADDR + 2
+lz_src			= CONFIG_ZP_ADDR + 4
+lz_len_hi		= CONFIG_ZP_ADDR + 6
+preamble		= CONFIG_ZP_ADDR + 7
+barrier			= CONFIG_ZP_ADDR + 10
+
 bitfire_load_addr_lo	= lz_src + 0
 bitfire_load_addr_hi	= lz_src + 1
-	}
-	!if CONFIG_DEBUG = 1 {
-bitfire_errors		= CONFIG_ZP_ADDR + 1
-	}
-}
-
-!if CONFIG_DECOMP = 1 {
-lz_bits			= CONFIG_ZP_ADDR + 1 + CONFIG_DEBUG
-lz_dst			= CONFIG_ZP_ADDR + 2 + CONFIG_DEBUG
-lz_src			= CONFIG_ZP_ADDR + 4 + CONFIG_DEBUG
-lz_len_hi		= CONFIG_ZP_ADDR + 6 + CONFIG_DEBUG
 
 !macro get_lz_bit {
         !if LZ_BITS_LEFT = 1 {
@@ -202,28 +197,6 @@ bitfire_send_byte_
 .ld_pend
 			rts
 
-;			sec
-;			ror
-;			sta filenum
-;			ldx #$3f
-;			txa
-;.ld_loop
-;			and #$2f
-;			bcs +
-;			eor #$10
-;+
-;			eor #$20
-;			sta $dd02 - $3f,x
-;			jsr .waste
-;			lsr <(filenum - $3f),x		;fetch next bit from filenumber and waste cycles
-;			bne .ld_loop
-;-
-;			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
-;			bmi -
-;			stx $dd02			;restore $dd02
-;.waste
-;			rts
-
 	!if CONFIG_FRAMEWORK = 1 {
 link_load_next_raw
 			lda #BITFIRE_LOAD_NEXT
@@ -243,43 +216,26 @@ bitfire_loadraw_
 			asl				;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bmi .ld_pend			;block ready?
 .ld_pblock_
-			ldx #$60			;set rts
-			jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
-			php				;preserve flag
-			;extract errors here:
-	!if CONFIG_DEBUG = 1 {
-			asr #$7c
-			lsr
-			adc <bitfire_errors
-			sta <bitfire_errors
-	}
+			ldy #$05			;5 bytes
+			lda #$00			;set up target -> sta preamble,y
+			ldx #<preamble
+			jsr .ld_set_block_tgt		;load 5 bytes preamble
 
-	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
-			jsr .ld_get_byte		;fetch barrier
-			sta <barrier
-	}
-.bitfire_load_block
-			jsr .ld_get_byte		;fetch blockaddr hi
-			sta .ld_store + 2		;where to place the block?
-			tay				;preserve value in Y
-			jsr .ld_get_byte
-			sta .ld_store + 1
-							;lo/hi-1 in a/y for later use
-			plp
-			bmi .ld_skip_stax		;#$fc -> first block, fetch load-address
-			iny				;increment, as last .ld_get_byte call decremented y by 1
-			sta <bitfire_load_addr_lo
-			sty <bitfire_load_addr_hi
-.ld_skip_stax
-			jsr .ld_get_byte		;fetch blocklen
-
-			tay
-			ldx #$99			;sta $xxxx,y
-.bitfire_ack_
-			stx .ld_store
+			ldy <preamble + 0		;load blocklength
+			ldx <preamble + 1		;block_address lo
+			lda <preamble + 2		;block_address hi
+			;lda <preamble + 3		;can be omitted directly copied to barrier val in zp!
+			;sta <barrier
+			bit <preamble + 4		;status -> first_block?
+			bmi .ld_set_block_tgt
+			stx bitfire_load_addr_lo	;yes, store load_address
+			sta bitfire_load_addr_hi
+.ld_set_block_tgt
+			stx .ld_store + 1		;setup target for block data
+			sta .ld_store + 2
 .ld_get_byte
 			ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
-			top				;top XXX TODO
+			top
 .ld_en_exit
 			ldx #$60
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(

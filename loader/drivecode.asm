@@ -209,7 +209,7 @@
 .temp			= .zp_start + $5a
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
-;free			= .zp_start + $68
+.block_size		= .zp_start + $68
 .filenum 		= .zp_start + $69
 .is_loaded_track	= .zp_start + $6a
 .is_loaded_sector	= .zp_start + $6c
@@ -444,26 +444,34 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.start_send							;entered with c = 0
-			lda #.preloop - .branch - 2		;be sure branch points to preloop
-			sta .branch + 1
-			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
-.preloop
-			lax <.preamble_data,y			;meh, 16 bit, lax xx,y would be 8 bit
-			ldx #$09				;masking value
-			sbx #$00				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
-			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
-			ldx #$0a				;masking value for later sax $1800 and for preamble encoding
-			bne .preamble_entry			;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
 .send_sector_data_setup
 			lda #.sendloop - .branch - 2		;redirect branch to sendloop
 			sta .branch + 1				;meh, sta exists twice, but can't be saved
-			ldy <.preamble_data + 0			;blocksize + 1, could store that val in an extra ZP-addr, waste 1 byte compared to this solution and save 2 cycles on the dey
-			dey
+			lda #$68				;place mnemonic pla in highbyte
+			sta .sendloop
+			ldy <.block_size			;blocksize + 1
 			inx					;x = $0b -> indicate second round, does not hurt the sax
-.sendloop							;send the data block
-			pla					;just pull from stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
-.preamble_entry
+			bne .sendloop				;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
+.start_send							;entered with c = 0
+			ldy #$03 + CONFIG_DECOMP + 1		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+-
+			lax <.preamble_data - 1,y
+			ldx #$09				;masking value
+			sbx #$00				;scramble byte while sending, enough time to do so, preamble is called via jsr, so plenty of time between sent bytes
+			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
+			sta <.preamble_data - 1,y		;meh, 16 bit
+			dey
+			bne -
+
+			lda #.preloop - .branch - 2		;be sure branch points to preloop
+			sta .branch + 1
+			sty .sendloop
+			ldx #$0a				;masking value for later sax $1800 and for preamble encoding
+			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+.preloop
+.sendloop = * + 2						;send the data block
+			lda .preamble_data,y
+								;just pull from stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
 			bit $1800
 			bmi *-3
 			sax $1800				;76540213	-> ddd-0d1d
@@ -1278,6 +1286,7 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .preamble							;y = blocksize
+			sty <.block_size
 			iny					;set up num of bytes to be transferred
 			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
 
