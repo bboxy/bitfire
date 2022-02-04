@@ -38,6 +38,7 @@
 !src "constants.inc"
 
 ;config params
+.LOAD_IN_ORDER		= 0 ;load all blocks in order to check if depacker runs into yet unloaded memory
 .POSTPONED_XFER		= 1 ;postpone xfer of block until first halfstep to cover settle time for head transport
 .CACHED_SECTOR		= 1 ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
@@ -197,7 +198,7 @@
 .spin_up		= .zp_start + $19
 ;.free			= .zp_start + $20
 ;.free			= .zp_start + $21
-;.free			= .zp_start + $22
+.last_sect		= .zp_start + $22
 ;.free			= .zp_start + $23
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 .blocks 		= .zp_start + $28			;2 bytes
@@ -552,6 +553,11 @@ ___			= $ff
 			; RECEIVE/WAIT FOR A BYTE FROM HOST
 			;
 			;----------------------------------------------------------------------------------------------------
+
+!if .LOAD_IN_ORDER = 1 {
+			ldy #$00
+			sty .last_sect
+}
 .get_byte
 
 			ldy #$80				;expect a whole new byte and start with a free bus
@@ -1103,6 +1109,11 @@ ___			= $ff
 }
 								;96 cycles
 			ldy <.wanted,x				;sector on list?
+!if .LOAD_IN_ORDER = 1 {
+			cpy .last_sect
+			bne .retry_no_count
+}
+
 !if .FORCE_LAST_BLOCK = 1 {
 			cpy <.last_block_num			;current block is last block on list?
 			bne .not_last				;nope continue
@@ -1220,6 +1231,9 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .setup_send
+!if .LOAD_IN_ORDER = 1 {
+			inc .last_sect
+}
 			cmp <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
 			sta <.block_num
 			tax					;is needed then however to restore flags, but cheaper
