@@ -37,13 +37,13 @@ bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the h
 bitfire_load_addr_hi	= CONFIG_ZP_ADDR + 1
 preamble		= CONFIG_ZP_ADDR + 2
 	} else {
-filenum			= CONFIG_ZP_ADDR + 0
-lz_bits			= CONFIG_ZP_ADDR + 1
-lz_dst			= CONFIG_ZP_ADDR + 2
-lz_src			= CONFIG_ZP_ADDR + 4
-lz_len_hi		= CONFIG_ZP_ADDR + 6
-preamble		= CONFIG_ZP_ADDR + 7
-barrier			= CONFIG_ZP_ADDR + 10
+lz_bits			= CONFIG_ZP_ADDR + 0		;1 byte
+lz_dst			= CONFIG_ZP_ADDR + 1		;2 byte
+lz_src			= CONFIG_ZP_ADDR + 3		;2 byte
+lz_len_hi		= CONFIG_ZP_ADDR + 5		;1 byte
+preamble		= CONFIG_ZP_ADDR + 6		;5 bytes
+barrier			= preamble + 3
+filenum			= barrier
 
 bitfire_load_addr_lo	= lz_src + 0
 bitfire_load_addr_hi	= lz_src + 1
@@ -181,19 +181,19 @@ bitfire_send_byte_
 			lda #$3f
 .ld_loop
 			eor #$20
-			and #$2f
-			bcs +
-			eor #$10
+			tax				;$1f/$3f
+			bcc +
+			sbx #$10			;$0f/$2f
 +
 			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive to fast @floppy
 			lsr <filenum
 			bne .ld_loop
-			lda #$3f
+			tax				;x is always $3f after 8 rounds (8 times eor #$20)
 -
 			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
 			bmi -
 .ld_set_dd02
-			sta $dd02			;restore $dd02
+			stx $dd02			;restore $dd02
 .ld_pend
 			rts
 
@@ -219,7 +219,7 @@ bitfire_loadraw_
 			ldy #$05			;5 bytes
 			lda #$00			;set up target -> sta preamble,y
 			ldx #<preamble
-			jsr .ld_set_block_tgt		;load 5 bytes preamble
+			jsr .ld_set_block_tgt		;load 5 bytes preamble - returns with C = 0 at times
 
 			ldy <preamble + 0		;load blocklength
 			ldx <preamble + 1		;block_address lo
@@ -233,13 +233,15 @@ bitfire_loadraw_
 .ld_set_block_tgt
 			stx .ld_store + 1		;setup target for block data
 			sta .ld_store + 2
+			sec
 .ld_get_byte
+							;lax would be a7, would need to swap carry in that case: eof == clc, block read = sec
 			ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
 			top
 .ld_en_exit
 			ldx #$60
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
-			bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
+			bpl +				;do bpl first
 bitfire_ntsc5
 			bmi .ld_gentry			;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
 .ld_gloop
