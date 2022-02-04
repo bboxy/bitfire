@@ -1202,12 +1202,12 @@ ___			= $ff
 			cpx #.CHECKSUM_CONST2			;0 01010 01 - more traiing zeroes
 			bne .retry_no_count
 }
-!if .SANCHECK_TRAILING_ZERO = 1 {
-			lda $1c01
-			and #$e0
-			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
-			bne .retry_no_count
-}
+;!if .SANCHECK_TRAILING_ZERO = 1 {				;disabled this nibble, as it makes floppy hang sometimes on upper tracks :-(
+;			lda $1c01
+;			and #$e0
+;			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
+;			bne .retry_no_count
+;}
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
 			ora .tab44444000_lo,y
