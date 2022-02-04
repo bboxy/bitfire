@@ -31,27 +31,22 @@
 
 LZ_BITS_LEFT		= 0
 
-!if CONFIG_LOADER = 1 {
-;loader zp-addresses
+!if CONFIG_DECOMP = 0 {
 filenum			= CONFIG_ZP_ADDR + 0
-barrier			= filenum
-	!if CONFIG_DECOMP = 0 {
-bitfire_load_addr_lo	= filenum			;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
-bitfire_load_addr_hi	= filenum + 1
+bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
+bitfire_load_addr_hi	= CONFIG_ZP_ADDR + 1
+preamble		= CONFIG_ZP_ADDR + 2
 	} else {
+lz_bits			= CONFIG_ZP_ADDR + 0		;1 byte
+lz_dst			= CONFIG_ZP_ADDR + 1		;2 byte
+lz_src			= CONFIG_ZP_ADDR + 3		;2 byte
+lz_len_hi		= CONFIG_ZP_ADDR + 5		;1 byte
+preamble		= CONFIG_ZP_ADDR + 6		;5 bytes
+barrier			= preamble + 3
+filenum			= barrier
+
 bitfire_load_addr_lo	= lz_src + 0
 bitfire_load_addr_hi	= lz_src + 1
-	}
-	!if CONFIG_DEBUG = 1 {
-bitfire_errors		= CONFIG_ZP_ADDR + 1
-	}
-}
-
-!if CONFIG_DECOMP = 1 {
-lz_bits			= CONFIG_ZP_ADDR + 1 + CONFIG_DEBUG
-lz_dst			= CONFIG_ZP_ADDR + 2 + CONFIG_DEBUG
-lz_src			= CONFIG_ZP_ADDR + 4 + CONFIG_DEBUG
-lz_len_hi		= CONFIG_ZP_ADDR + 6 + CONFIG_DEBUG
 
 !macro get_lz_bit {
         !if LZ_BITS_LEFT = 1 {
@@ -91,6 +86,18 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only agg
 
 			* = CONFIG_RESIDENT_ADDR
 .lz_gap1
+!if CONFIG_NMI_GAPS = 1 {
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+}
 
 !if CONFIG_FRAMEWORK = 1 {
 
@@ -174,43 +181,21 @@ bitfire_send_byte_
 			lda #$3f
 .ld_loop
 			eor #$20
-			and #$2f
-			bcs +
-			eor #$10
+			tax				;$1f/$3f
+			bcc +
+			sbx #$10			;$0f/$2f
 +
 			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive to fast @floppy
 			lsr <filenum
 			bne .ld_loop
-			lda #$3f
+			tax				;x is always $3f after 8 rounds (8 times eor #$20)
 -
 			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
 			bmi -
 .ld_set_dd02
-			sta $dd02			;restore $dd02
+			stx $dd02			;restore $dd02
 .ld_pend
 			rts
-
-;			sec
-;			ror
-;			sta filenum
-;			ldx #$3f
-;			txa
-;.ld_loop
-;			and #$2f
-;			bcs +
-;			eor #$10
-;+
-;			eor #$20
-;			sta $dd02 - $3f,x
-;			jsr .waste
-;			lsr <(filenum - $3f),x		;fetch next bit from filenumber and waste cycles
-;			bne .ld_loop
-;-
-;			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
-;			bmi -
-;			stx $dd02			;restore $dd02
-;.waste
-;			rts
 
 	!if CONFIG_FRAMEWORK = 1 {
 link_load_next_raw
@@ -231,47 +216,32 @@ bitfire_loadraw_
 			asl				;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bmi .ld_pend			;block ready?
 .ld_pblock_
-			ldx #$60			;set rts
-			jsr .bitfire_ack_		;start data transfer (6 bits of payload possible on first byte, as first two bits are used to signal block ready + no eof). Also sets an rts in receive loop
-			php				;preserve flag
-			;extract errors here:
-	!if CONFIG_DEBUG = 1 {
-			asr #$7c
-			lsr
-			adc <bitfire_errors
-			sta <bitfire_errors
-	}
+			ldy #$05			;5 bytes
+			lda #$00			;set up target -> sta preamble,y
+			ldx #<preamble
+			jsr .ld_set_block_tgt		;load 5 bytes preamble - returns with C = 0 at times
 
-	!if CONFIG_DECOMP = 1 {				;decompressor only needs to be setup if there
-			jsr .ld_get_byte		;fetch barrier
-			sta <barrier
-	}
-.bitfire_load_block
-			jsr .ld_get_byte		;fetch blockaddr hi
-			sta .ld_store + 2		;where to place the block?
-			tay				;preserve value in Y
-			jsr .ld_get_byte
-			sta .ld_store + 1
-							;lo/hi-1 in a/y for later use
-			plp
-			bmi .ld_skip_stax		;#$fc -> first block, fetch load-address
-			iny				;increment, as last .ld_get_byte call decremented y by 1
-			sta <bitfire_load_addr_lo
-			sty <bitfire_load_addr_hi
-.ld_skip_stax
-			jsr .ld_get_byte		;fetch blocklen
-
-			tay
-			ldx #$99			;sta $xxxx,y
-.bitfire_ack_
-			stx .ld_store
+			ldy <preamble + 0		;load blocklength
+			ldx <preamble + 1		;block_address lo
+			lda <preamble + 2		;block_address hi
+			;lda <preamble + 3		;can be omitted directly copied to barrier val in zp!
+			;sta <barrier
+			bit <preamble + 4		;status -> first_block?
+			bmi .ld_set_block_tgt
+			stx bitfire_load_addr_lo	;yes, store load_address
+			sta bitfire_load_addr_hi
+.ld_set_block_tgt
+			stx .ld_store + 1		;setup target for block data
+			sta .ld_store + 2
+			sec
 .ld_get_byte
+							;lax would be a7, would need to swap carry in that case: eof == clc, block read = sec
 			ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
-			top				;top XXX TODO
+			top
 .ld_en_exit
 			ldx #$60
 			stx .ld_gend			;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
-			bpl +				;do bpl first and waste another 2 cycles on loop entry, so that floppy manages to switch from preamble to send_data
+			bpl +				;do bpl first
 bitfire_ntsc5
 			bmi .ld_gentry			;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
 .ld_gloop
@@ -360,26 +330,41 @@ bitfire_loadcomp_
 			dec <lz_len_hi
 			bcs .lz_cp_lit
 
-			!ifdef .lz_gap2 {
-				!warn .lz_gap2 - *, " bytes left until gap2"
-			}
-!align 255,0
-.lz_gap2
-
-!if .lz_gap2 - .lz_gap1 > $0100 {
-		!error "code on first page too big, second gap does not fit!"
-}
 			;------------------
 			;SELDOM STUFF
 			;------------------
 .lz_clc
 			clc
 			bcc .lz_clc_back
-.lz_m_page
+.lz_m_page_
 			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
 .lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
 			dcp <lz_len_hi
 			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
+
+!if CONFIG_NMI_GAPS = 1 {
+			!ifdef .lz_gap2 {
+				!warn .lz_gap2 - *, " bytes left until gap2"
+			}
+!align 255,0
+.lz_gap2
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+
+!if .lz_gap2 - .lz_gap1 > $0100 {
+		!error "code on first page too big, second gap does not fit!"
+}
+}
+
+.lz_m_page
+			bne .lz_m_page_
 
 			;------------------
 			;POLLING
