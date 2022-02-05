@@ -194,6 +194,7 @@ bitfire_send_byte_
 			bmi -
 .ld_set_dd02
 			stx $dd02			;restore $dd02
+							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
 .ld_pend
 			rts
 
@@ -234,7 +235,6 @@ bitfire_loadraw_
 			stx .ld_store + 1		;setup target for block data
 			sta .ld_store + 2
 			sec
-.ld_get_byte
 							;lax would be a7, would need to swap carry in that case: eof == clc, block read = sec
 			ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
 			top
@@ -267,7 +267,7 @@ bitfire_ntsc2		and $dd00
 .ld_store		sta $b00b,y
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
-bitfire_ntsc3		adc $dd00			;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
+bitfire_ntsc3		adc $dd00			;XXX $DD = CMP $xxxx,x  ;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
 							;%xx111xxx
 .ld_gend
 			stx $dd02			;carry is cleared now, we can exit here and do our rts with .ld_gend
@@ -398,7 +398,7 @@ bitfire_loadcomp_
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
-			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks
+			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks, loading in order reveals that
 			sta (lz_dst),y
 
 			inc <lz_src + 0

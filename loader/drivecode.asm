@@ -39,7 +39,7 @@
 
 ;config params
 .LOAD_IN_ORDER		= 0 ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 1 ;postpone xfer of block until first halfstep to cover settle time for head transport
+.POSTPONED_XFER		= 0 ;postpone xfer of block until first halfstep to cover settle time for head transport
 .CACHED_SECTOR		= 1 ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
 ;ldy <.last_block_num
@@ -50,13 +50,13 @@
 
 .FORCE_LAST_BLOCK	= 1
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
-.DELAY_SPIN_DOWN	= 1
+.DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
 .SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
 .SANCHECK_HEADER_0F	= 0 ;does never trigger
 .SANCHECK_HEADER_ID	= 0 ;does never trigger
 .SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
 .SANCHECK_TRACK		= 1 ;check if on right track after header is read
-.SANCHECK_SECTOR	= 0 ;
+.SANCHECK_SECTOR	= 0 ;check if sector # is within range
 .INTERLEAVE		= 4
 .GCR_125		= 1
 
@@ -280,11 +280,11 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;                    1                      ccccccccccc   2                   ggggggggg...3ggggggggg                 ccccccc   4           v        5         bbbbbbbbbbbbbb
+;           gggggg   1                      ccccccccccc   2                   ggggggggg...3ggggggggg                 ccccccc   4           v        5         bbbbbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;                  1                      ccccccccccc   2                   gggggg...3gggggg                 ccccccc   4           v        5         bbbbbbbbbbbb
+;           gggg   1                      ccccccccccc   2                   gggggg...3gggggg                 ccccccc   4           v        5         bbbbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;                1                      ccccccccccc   2                   ggg...3ggg                 ccccccc   4           v        5         bbbbbbbbbb
+;           gg   1                      ccccccccccc   2                   ggg...3ggg                 ccccccc   4           v        5         bbbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
 ;              1                      ccccccccccc   2                   ...3                 ccccccc   4           v        5         bbbbbbbb
 ;b = bvc *
