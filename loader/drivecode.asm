@@ -39,7 +39,7 @@
 
 ;config params
 .LOAD_IN_ORDER		= 0 ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 0 ;postpone xfer of block until first halfstep to cover settle time for head transport
+.POSTPONED_XFER		= 1 ;postpone xfer of block until first halfstep to cover settle time for head transport
 .CACHED_SECTOR		= 1 ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
 ;ldy <.last_block_num

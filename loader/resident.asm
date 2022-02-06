@@ -32,22 +32,28 @@
 LZ_BITS_LEFT		= 0
 
 !if CONFIG_DECOMP = 0 {
-filenum			= CONFIG_ZP_ADDR + 0
 bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
 bitfire_load_addr_hi	= CONFIG_ZP_ADDR + 1
-preamble		= CONFIG_ZP_ADDR + 2
+preamble		= CONFIG_ZP_ADDR + 2		;5 bytes
 	} else {
 lz_bits			= CONFIG_ZP_ADDR + 0		;1 byte
 lz_dst			= CONFIG_ZP_ADDR + 1		;2 byte
 lz_src			= CONFIG_ZP_ADDR + 3		;2 byte
 lz_len_hi		= CONFIG_ZP_ADDR + 5		;1 byte
 preamble		= CONFIG_ZP_ADDR + 6		;5 bytes
-barrier			= preamble + 3
-filenum			= barrier
-
 bitfire_load_addr_lo	= lz_src + 0
 bitfire_load_addr_hi	= lz_src + 1
+}
 
+block_length		= preamble + 0
+block_addr_lo		= preamble + 1
+block_addr_hi		= preamble + 2
+block_barrier		= preamble + 3
+block_status		= preamble + 4
+filenum			= block_barrier
+
+
+!if CONFIG_DECOMP = 1 {
 !macro get_lz_bit {
         !if LZ_BITS_LEFT = 1 {
 			asl <lz_bits
@@ -222,14 +228,12 @@ bitfire_loadraw_
 			ldx #<preamble
 			jsr .ld_set_block_tgt		;load 5 bytes preamble - returns with C = 0 at times
 
-			ldy <preamble + 0		;load blocklength
-			ldx <preamble + 1		;block_address lo
-			lda <preamble + 2		;block_address hi
-			;lda <preamble + 3		;can be omitted directly copied to barrier val in zp!
-			;sta <barrier
-			bit <preamble + 4		;status -> first_block?
+			ldy <block_length		;load blocklength
+			ldx <block_addr_lo		;block_address lo
+			lda <block_addr_hi		;block_address hi
+			bit <block_status		;status -> first_block?
 			bmi .ld_set_block_tgt
-			stx bitfire_load_addr_lo	;yes, store load_address
+			stx bitfire_load_addr_lo	;yes, store load_address (also lz_src in case depacker is present)
 			sta bitfire_load_addr_hi
 .ld_set_block_tgt
 			stx .ld_store + 1		;setup target for block data
@@ -323,9 +327,24 @@ bitfire_loadcomp_
 			stx .lz_offset_hi + 1
 			stx <lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 			beq .lz_start_over		;start with a literal, X = 0
+
+			;------------------
+			;SELDOM STUFF
+			;------------------
 .lz_l_page
 			dec <lz_len_hi
 			bcs .lz_cp_lit
+.lz_clc
+			clc
+			bcc .lz_clc_back
+.lz_dst_inc
+			inc <lz_dst + 1
+			bcs .lz_dst_inc_
+.lz_m_page
+			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
+.lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
+			dcp <lz_len_hi
+			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
 
 !if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -347,27 +366,10 @@ bitfire_loadcomp_
 		!error "code on first page too big, second gap does not fit!"
 }
 }
-			;------------------
-			;SELDOM STUFF
-			;------------------
-.lz_clc
-			clc
-			bcc .lz_clc_back
-.lz_m_page
-			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-.lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
-			dcp <lz_len_hi
-			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
 
-			;------------------
-			;POINTER HANDLING LITERAL COPY
-			;------------------
 .lz_inc_src3
 			+inc_src_ptr
 			bcs .lz_inc_src3_
-.lz_dst_inc
-			inc <lz_dst + 1
-			bcs .lz_dst_inc_
 
 			;------------------
 			;POLLING
@@ -482,7 +484,7 @@ lz_next_page
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 							;XXX TODO send a high enough barrier on last block being sent
 			lda <lz_src + 1			;get current depack position
-			cmp <barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
+			cmp <block_barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
 							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking

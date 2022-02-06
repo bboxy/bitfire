@@ -74,6 +74,7 @@ bitfire_load_addr_hi	= lz_src + 1
 bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only aggregate labels from this file into loader_*.inc
 
 			* = CONFIG_RESIDENT_ADDR
+.loader_start
 bitfire_loadraw_
 bitfire_send_byte_
 			sec
@@ -165,6 +166,8 @@ bitfire_ntsc3		adc $dd00			;XXX $DD = CMP $xxxx,x  ;a is anything between 38 and
 			lsr				;%xxxx111x
 bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 
+.loader_end
+!warn "loader size: ", * - .loader_start
 ;---------------------------------------------------------------------------------
 ;DEPACKER STUFF
 ;---------------------------------------------------------------------------------
@@ -179,16 +182,6 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 .lz_clc
 			clc
 			bcc .lz_clc_back
-			;------------------
-			;POINTER HANDLING LITERAL COPY
-			;------------------
-.lz_inc_src3
-			+inc_src_ptr
-			bcs .lz_inc_src3_
-.lz_dst_inc
-			inc <lz_dst + 1
-			bcs .lz_dst_inc_
-
 .lz_m_page
 			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
 .lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
@@ -222,15 +215,7 @@ link_decomp
 			+get_lz_bit
 			bcs .lz_match			;after each match check for another match or literal?
 .lz_literal
-			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
-			bcs +
-			+get_lz_bit			;fetch payload bit
-			rol				;can also moved to front and executed once on start
-			bcc .lz_literal
-+
-			bne +
-			jsr .lz_refill_bits
-+
+			jsr .lz_length
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
@@ -238,11 +223,13 @@ link_decomp
 			sta (lz_dst),y
 
 			inc <lz_src + 0
-			beq .lz_inc_src3
-.lz_inc_src3_
+			bne +
+			+inc_src_ptr
++
 			inc <lz_dst + 0
-			beq .lz_dst_inc
-.lz_dst_inc_
+			bne +
+			inc <lz_dst + 1
++
 			dex
 			bne .lz_cp_lit
 
@@ -307,16 +294,8 @@ link_decomp
 			;------------------
 			;MATCH
 			;------------------
--							;lz_length as inline
-			+get_lz_bit			;fetch payload bit
-			rol				;can also moved to front and executed once on start
 .lz_match
-			+get_lz_bit
-			bcc -
-
-			bne +
-			jsr .lz_refill_bits
-+
+			jsr .lz_length
 			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
 			bcc .lz_eof			;underflow, so offset was $100
 
@@ -328,30 +307,15 @@ link_decomp
 			sta .lz_offset_lo + 1
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
-			beq .lz_inc_src1
-.lz_inc_src1_
+			bne +
+			+inc_src_ptr
++
 			lda #$01
 			ldy #$fe
 			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
--
-			+get_lz_bit
-			rol
-			+get_lz_bit
-			bcc -
-			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
-			jsr .lz_refill_bits		;fetch remaining bits
+			jsr .lz_get_loop
 			bcs .lz_match_big		;and enter match copy loop
-
-			;------------------
-			;POINTER HIGHBYTE HANDLING
-			;------------------
-.lz_inc_src1
-			+inc_src_ptr			;preserves carry, all sane
-			bne .lz_inc_src1_
-.lz_inc_src2
-			+inc_src_ptr			;preserves carry and A, clears X, Y, all sane
-			bne .lz_inc_src2_
 
 			;------------------
 			;ELIAS FETCH
@@ -362,8 +326,9 @@ link_decomp
 			+set_lz_bit_marker
 			sta <lz_bits
 			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
-			beq .lz_inc_src2
-.lz_inc_src2_
+			bne +
+			+inc_src_ptr			;preserves carry and A, clears X, Y, all sane
++
 			txa				;also postpone, so A can be trashed on lz_inc_src above
 			bcs .lz_lend
 .lz_get_loop
@@ -386,6 +351,7 @@ link_decomp
 			pla				;restore LSB
 			rts
 
+!warn "depacker size: ", * - .loader_end
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
 ;XXX TODO
