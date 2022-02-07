@@ -403,6 +403,13 @@ bitfire_loadcomp_
 			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks, loading in order reveals that
 			sta (lz_dst),y
 
+			;iny
+			;tya
+			;adc <lz_src + 0
+			;bcs inc_page!!!
+			;dex
+			;bne -?
+
 			inc <lz_src + 0
 			beq .lz_inc_src3
 .lz_inc_src3_
@@ -473,7 +480,7 @@ bitfire_loadcomp_
 			;------------------
 lz_next_page
 			inc <lz_src + 1
-.lz_next_page_
+.lz_next_page_						;preserves carry and X, clears Y, all sane
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
 			php				;save carry
@@ -539,10 +546,10 @@ lz_next_page
 			;POINTER HIGHBYTE HANDLING
 			;------------------
 .lz_inc_src1
-			+inc_src_ptr			;preserves carry, all sane
+			+inc_src_ptr
 			bne .lz_inc_src1_
 .lz_inc_src2
-			+inc_src_ptr			;preserves carry and A, clears X, Y, all sane
+			+inc_src_ptr
 			bne .lz_inc_src2_
 
 			;------------------
