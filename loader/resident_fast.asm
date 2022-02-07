@@ -322,13 +322,13 @@ bitfire_loadcomp_
 			stx .lz_offset_lo + 1		;initialize offset with $0000
 			stx .lz_offset_hi + 1
 			stx <lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
-			beq .lz_start_over		;start with a literal, X = 0
+			jmp .lz_start_over		;start with a literal, X = 0
 .lz_l_page_
 			sec
 			ldy #$00
 .lz_l_page
 			dec <lz_len_hi
-			bcs .lz_cp_lit
+			bcs .lz_l_page__
 
 			;------------------
 			;SELDOM STUFF
@@ -363,26 +363,6 @@ bitfire_loadcomp_
 }
 }
 
-.lz_m_page
-			bne .lz_m_page_
-
-			;------------------
-			;POLLING
-			;------------------
-.lz_poll
-	!if CONFIG_LOADER = 1 {
-			bit $dd00
-			bvs .lz_start_over
-			jsr .ld_pblock_			;yes, fetch another block, call is disabled for plain decomp
-	}
-			;------------------
-			;LITERAL
-			;------------------
-.lz_start_over
-			lda #$01			;we fall through this check on entry and start with literal
-			+get_lz_bit
-			bcc .lz_literal
-			jmp .lz_match			;after each match check for another match or literal?
 -
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
@@ -395,6 +375,12 @@ bitfire_loadcomp_
 +
 			tax
 			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
+			adc lz_src + 0			;check that upcoming literal copy does not cross page, if so, load one page of data extra
+			bcc +
+.lz_l_page__
+			jsr .lz_next_page_
++
+			sec
 .lz_cp_lit
 			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this way barrier needs to be 2 pages ahead
 			sta (lz_dst),y
@@ -500,6 +486,9 @@ lz_next_page
 .lz_eof
 			rts
 
+.lz_m_page
+			jmp .lz_m_page_
+
 			;------------------
 			;MATCH
 			;------------------
@@ -538,6 +527,24 @@ lz_next_page
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big		;and enter match copy loop
+
+			;------------------
+			;POLLING
+			;------------------
+.lz_poll
+	!if CONFIG_LOADER = 1 {
+			bit $dd00
+			bvs .lz_start_over
+			jsr .ld_pblock_			;yes, fetch another block, call is disabled for plain decomp
+	}
+			;------------------
+			;LITERAL
+			;------------------
+.lz_start_over
+			lda #$01			;we fall through this check on entry and start with literal
+			+get_lz_bit
+			bcs .lz_match			;after each match check for another match or literal?
+			jmp .lz_literal
 
 			;------------------
 			;POINTER HIGHBYTE HANDLING
