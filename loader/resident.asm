@@ -197,7 +197,7 @@ bitfire_send_byte_
 			tax				;x is always $3f after 8 rounds (8 times eor #$20)
 -
 			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
-			bmi -
+			bmi -				;waiting with pha/pla would also help, or even a jsr call to waste 12 cycles
 .ld_set_dd02
 			stx $dd02			;restore $dd02
 							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
@@ -216,8 +216,7 @@ bitfire_loadraw_
 .ld_load_raw
 			jsr .ld_pblock			;fetch all blocks until eof
 			bcc -
-			;rts				;XXX TODO can be omitted, maybe as we would skip blockloading on eof?
-							;just run into ld_pblock code again that will then jump to .ld_pend and rts
+			;rts				;just run into ld_pblock code again that will then jump to .ld_pend and rts
 .ld_pblock
 			lda $dd00			;bit 6 is always set if not ready or idle/EOF so no problem with just an ASL
 			asl				;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
@@ -238,7 +237,8 @@ bitfire_loadraw_
 .ld_set_block_tgt
 			stx .ld_store + 1		;setup target for block data
 			sta .ld_store + 2
-			sec
+							;XXX TODO, change busy signal 1 = ready, 0 = eof, leave ld_pblock with carry set, also tay can be done after preamble load as last value is still in a
+			sec				;loadraw enters ld_pblock with C = 0
 							;lax would be a7, would need to swap carry in that case: eof == clc, block read = sec
 			ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
 			top
@@ -271,12 +271,12 @@ bitfire_ntsc2		and $dd00
 .ld_store		sta $b00b,y
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
-bitfire_ntsc3		adc $dd00			;XXX $DD = CMP $xxxx,x  ;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
-							;%xx111xxx
+bitfire_ntsc3		adc $dd00			;XXX $DD = CMP $xxxx,x  ;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3, 4 and 5 are always set, bits 6 and 7 are given by floppy
+							;%xx1110xx
 .ld_gend
 			stx $dd02			;carry is cleared now, we can exit here and do our rts with .ld_gend
-			lsr				;%xxx111xx
-			lsr				;%xxxx111x
+			lsr				;%xxx1110x
+			lsr				;%xxxx1110
 bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }
