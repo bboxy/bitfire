@@ -341,10 +341,9 @@ bitfire_loadcomp_
 			inc <lz_dst + 1
 			bcs .lz_dst_inc_
 .lz_m_page
-			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-.lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
-			dcp <lz_len_hi
-			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
+			lda #$ff			;much shorter this way. Also forces carry to be set upon dcp
+			dcp <lz_len_hi			;decrement <lz_len_hi
+			bcs .lz_match_len2		;as Y = 0, we can skip the part that does Y = A xor $ff, as A = $ff and Y = $00 already.
 
 !if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -398,17 +397,9 @@ bitfire_loadcomp_
 			jsr .lz_refill_bits
 +
 			tax
-			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 .lz_cp_lit
 			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks, loading in order reveals that
 			sta (lz_dst),y
-
-			;iny
-			;tya
-			;adc <lz_src + 0
-			;bcs inc_page!!!
-			;dex
-			;bne -?
 
 			inc <lz_src + 0
 			beq .lz_inc_src3
@@ -437,7 +428,7 @@ bitfire_loadcomp_
 			jsr .lz_length
 
 			sbc #$01
-			bcc .lz_dcp			;fix highbyte of length in case and set carry again (a = $ff -> compare delivers carry = 1)
+			sec				;XXX TODO this is VERY annoying, as carry is only cleared in case of lz_len_lo == 0
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
@@ -540,6 +531,8 @@ lz_next_page
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
+			bne .lz_match_big		;all okay, less then 8 bits fetched
+			inc <lz_len_hi			;need to undo the dec <lz_len_hi for this case
 			bcs .lz_match_big		;and enter match copy loop
 
 			;------------------
@@ -583,6 +576,10 @@ lz_next_page
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
+			bne +
+			dec <lz_len_hi
+			lda #$00
++
 			rts
 }
 
