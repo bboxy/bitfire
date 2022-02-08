@@ -341,9 +341,9 @@ bitfire_loadcomp_
 			inc <lz_dst + 1
 			bcs .lz_dst_inc_
 .lz_m_page
-			lda #$ff			;much shorter this way. Also forces carry to be set upon dcp
-			dcp <lz_len_hi			;decrement <lz_len_hi
-			bcs .lz_match_len2		;as Y = 0, we can skip the part that does Y = A xor $ff, as A = $ff and Y = $00 already.
+			tya				;much shorter this way. Also forces carry to be set upon dcp
+			dec <lz_len_hi			;decrement <lz_len_hi
+			bcs .lz_match_page_		;as Y = 0, we can skip the part that does Y = A xor $ff, as A = $ff and Y = $00 already.
 
 !if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -428,10 +428,11 @@ bitfire_loadcomp_
 			jsr .lz_length
 
 			sbc #$01
-			sec				;XXX TODO this is VERY annoying, as carry is only cleared in case of lz_len_lo == 0
+			;sec				;XXX TODO this is VERY annoying, as carry is only cleared in case of lz_len_lo == 0
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
+.lz_match_page_
 			eor #$ff			;restore A
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
