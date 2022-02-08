@@ -188,18 +188,12 @@
 .zp_start
 
 ;.free			= .zp_start + $00
-;.free			= .zp_start + $01
-;.free			= .zp_start + $02
-;.free			= .zp_start + $03
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .spin_count		= .zp_start + $18
 .spin_up		= .zp_start + $19
-;.free			= .zp_start + $20
-;.free			= .zp_start + $21
-.last_sect		= .zp_start + $22
-;.free			= .zp_start + $23
+.last_sect		= .zp_start + $20
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 .blocks 		= .zp_start + $28			;2 bytes
 .wanted			= .zp_start + $3e			;21 bytes
@@ -225,6 +219,7 @@
 .dir_entry_num		= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
 
+.FS			= 0					;first sector
 .DT			= 18					;dir_track
 .DS			= 18					;dir_sector
 .PA			= $ff					;preamble
@@ -263,12 +258,15 @@ ___			= $ff
 			;     0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f
                         !byte ___, $b0, $80, $a0, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
                         !byte .DS, .BL, $f0, $1e, $70, $1f, $60, $17, ___, ___, $b0, $1a, $30, $1b, $20, $13	;10
-                        !byte ___, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
+                        !byte .FS, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, .WT, .WT	;30
                         !byte .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT	;40
                         !byte .WT, .WT, .WT, $0e, ___, $0f, .DT, $07, .DT, ___, ___, $0a, ___, $0b, ___, $03	;50
                         !byte .PA, .PA, .PA, .PA, .PA, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
                         !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08		;70
+
+
+
 
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
@@ -345,7 +343,7 @@ ___			= $ff
 			sta <.chksum + 1
 
 			lax $1c01				;77788888	forth read
-			asr #$40				;ora #$11011111 would also work, and create an offset of $1f? Unfortunatedly the tab then wraps but okay when in ZP :-(
+			asr #$40				;ora #$10111111 would also work, and create an offset of $1f? Unfortunatedly the tab then wraps but okay when in ZP :-(
 								;XXX TODO also and #$40 is okay, as it is just a single bit and shifting the second half of that tab?
 			tay
 								;can we reuse that trick to decode 7 bits at once somewhere?!
@@ -457,6 +455,20 @@ ___			= $ff
 .sendloop = * + 2						;send the data block
 			lda .preamble_data,y
 								;just pull from stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
+
+								;our possibiloities to send bits:
+								;...-0.1.
+								;...10.-.
+
+								;...+2.3.
+								;...32.-.
+
+								;...-4.5.
+								;...54.-.
+
+								;...+6.7.
+								;...76.-.
+
 			bit $1800
 			bmi *-3
 			sax $1800				;76540213	-> ddd-0d1d

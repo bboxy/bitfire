@@ -367,9 +367,9 @@ bitfire_loadcomp_
 }
 
 .lz_m_page
-			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-			dcp <lz_len_hi
-			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
+			tya					;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
+			dec <lz_len_hi
+			bcs .lz_m_page_				;as Y = 0, we can skip the part that does Y = A xor $ff
 
 			;------------------
 			;POLLING
@@ -443,6 +443,7 @@ bitfire_loadcomp_
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
+.lz_m_page_
 			eor #$ff			;restore A
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
@@ -572,9 +573,7 @@ lz_next_page
 .lz_length_16_
 			rol				;can also moved to front and executed once on start
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
-.lz_length
 			+get_lz_bit
-
 			bcc .lz_get_loop
 			beq .lz_refill_bits
 .lz_lend
