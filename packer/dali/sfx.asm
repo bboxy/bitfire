@@ -72,9 +72,13 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 +
 		bne +
 		jsr lz_refill_bits
+		beq lz_eof			;underflow. must have been 0
 +
+		sbc #$01
 } else {
 .entry		jsr get_length
+		sbc #$01
+		bcc lz_eof			;underflow. must have been 0
 }
 }
 
@@ -286,9 +290,6 @@ lz_len_hi = * + 1
 		;------------------
 
 		+get_lz_length ~.lz_new_offset
-		sbc #$01
-
-		bcc .lz_eof			;underflow. must have been 0
 		lsr
 		sta <.lz_offset_hi		;hibyte of offset
 
@@ -351,7 +352,7 @@ get_length
 		pla				;restore LSB
 .end_bit_16
 		rts
-.lz_eof
+lz_eof
 		;------------------
 		;exit code for sfx only
 		;------------------
