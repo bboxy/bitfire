@@ -332,18 +332,18 @@ bitfire_loadcomp_
 			;SELDOM STUFF
 			;------------------
 .lz_l_page
+			tya
 			dec <lz_len_hi
-			bcs .lz_cp_lit
+			bcs .lz_l_page_
 .lz_clc
 			clc
 			bcc .lz_clc_back
 .lz_dst_inc
 			inc <lz_dst + 1
 			bcs .lz_dst_inc_
-.lz_m_page
-			tya				;much shorter this way. Also forces carry to be set upon dcp
-			dec <lz_len_hi			;decrement <lz_len_hi
-			bcs .lz_match_page_		;as Y = 0, we can skip the part that does Y = A xor $ff, as A = $ff and Y = $00 already.
+.lz_inc_src3
+			+inc_src_ptr
+			bcs .lz_inc_src3_
 
 !if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -366,9 +366,10 @@ bitfire_loadcomp_
 }
 }
 
-.lz_inc_src3
-			+inc_src_ptr
-			bcs .lz_inc_src3_
+.lz_m_page
+			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
+			dcp <lz_len_hi
+			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
 
 			;------------------
 			;POLLING
@@ -385,16 +386,19 @@ bitfire_loadcomp_
 .lz_start_over
 			lda #$01			;we fall through this check on entry and start with literal
 			+get_lz_bit
-			bcs .lz_match			;after each match check for another match or literal?
-.lz_literal
-			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
-			bcs +
+			bcc .lz_literal
+			jmp .lz_match			;after each match check for another match or literal?
+-							;lz_length as inline
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
-			bcc .lz_literal
-+
+.lz_literal
+			+get_lz_bit
+			bcc -
+
 			bne +
 			jsr .lz_refill_bits
+			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
+.lz_l_page_
 +
 			tax
 .lz_cp_lit
@@ -425,14 +429,20 @@ bitfire_loadcomp_
 			;REPEAT LAST OFFSET
 			;------------------
 .lz_repeat
-			jsr .lz_length
-
+			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
+			bcs +
+			+get_lz_bit			;fetch payload bit
+			rol				;can also moved to front and executed once on start
+			bcc .lz_repeat
++
+			bne +
+			jsr .lz_refill_bits
+			beq .lz_m_page
++
 			sbc #$01
-			;sec				;XXX TODO this is VERY annoying, as carry is only cleared in case of lz_len_lo == 0
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
-.lz_match_page_
 			eor #$ff			;restore A
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
@@ -507,9 +517,10 @@ lz_next_page
 
 			bne +
 			jsr .lz_refill_bits
-			beq .lz_eof			;8 bits were sent, must be EOF
+			beq .lz_eof			;underflow, so offset was $100
 +
-			sbc #$01			;subtract 1, elias numbers range from 1..255, we need 0..254
+			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
+
 			lsr				;set bit 15 to 0 while shifting hibyte
 			sta .lz_offset_hi + 1		;hibyte of offset
 
@@ -531,8 +542,6 @@ lz_next_page
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
-			bne .lz_match_big		;all okay, less then 8 bits fetched
-			inc <lz_len_hi			;need to undo the dec <lz_len_hi for this case
 			bcs .lz_match_big		;and enter match copy loop
 
 			;------------------
@@ -576,10 +585,6 @@ lz_next_page
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
-			bne +
-			dec <lz_len_hi			;happens very seldom, on big matches with lobyte == 0
-			tya				;preserve Z = 0
-+
 			rts
 }
 
