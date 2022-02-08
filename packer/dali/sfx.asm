@@ -82,42 +82,6 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 }
 }
 
-!macro literal_copy {
-!ifdef SFX_FAST {
-		iny
-		dex
-		bne cp_literal
-
-		dey				;this way we force increment of lz_dst + 1 if y = 0
-		tya
-		adc <lz_dst + 0
-		sta <lz_dst + 0			;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on?
-		bcc +
-		inc <lz_dst + 1
-+
-		tya
-		sec
-		adc <lz_src + 0
-		sta <lz_src + 0
-		bcc +
-		inc <lz_src + 1
-+
-		ldy <lz_len_hi
-} else {
-                inc <lz_src + 0
-                bne +
-                inc <lz_src + 1
-+
-                inc <lz_dst + 0
-                bne +
-                inc <lz_dst + 1
-+
-		dex
-		bne cp_literal
-		lda <lz_len_hi
-}
-}
-
 		* = $0801
 .dali_code_start
                 !byte $0b,$08
@@ -190,16 +154,45 @@ lz_data_size_hi = * + 1
 .lz_start_over
 		lda #$01			;we fall through this check on entry and start with literal
 		+get_lz_bit
+!ifdef SFX_FAST {
+		bcc .literal
+		bcs .lz_new_offset		;after each match check for another match or literal?
+-                                                       ;lz_length as inline
+		+get_lz_bit                     ;fetch payload bit
+		rol                             ;can also moved to front and executed once on start
+.literal
+		+get_lz_bit
+		bcc -
+
+		bne +
+		jsr lz_refill_bits
+		beq .lz_l_page                  ;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
++
+		tax
+.lz_l_page_
+} else {
 		bcs .lz_new_offset		;after each match check for another match or literal?
 .literal
 		jsr get_length
 		tax
-		beq .lz_l_page_
+		beq .lz_l_page
+.lz_l_page_
+}
 cp_literal
 lz_src = * + 1
 		lda $beef,y			;looks expensive, but is cheaper than loop
 		sta (lz_dst),y
-		+literal_copy
+                inc <lz_src + 0
+                bne +
+                inc <lz_src + 1
++
+                inc <lz_dst + 0
+                bne +
+                inc <lz_dst + 1
++
+		dex
+		bne cp_literal
+		lda <lz_len_hi
 		bne .lz_l_page			;happens very seldom
 
 		;------------------
@@ -278,10 +271,8 @@ lz_len_hi = * + 1
 }
 .lz_l_page
 !ifdef SFX_FAST {
-		sec				;only needs to be set for consecutive rounds of literals, happens very seldom
-		ldy #$00
+		tya
 }
-.lz_l_page_
 		dec <lz_len_hi
 		bcs cp_literal
 
