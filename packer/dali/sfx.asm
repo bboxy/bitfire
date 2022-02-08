@@ -61,6 +61,59 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 	}
 }
 
+!macro get_lz_length ~.entry {
+!ifdef SFX_FAST {
+-						;get_length as inline
+		+get_lz_bit			;fetch payload bit
+		rol				;can also moved to front and executed once on start
+.entry
+		+get_lz_bit
+		bcc -
++
+		bne +
+		jsr lz_refill_bits
++
+} else {
+.entry		jsr get_length
+}
+}
+
+!macro literal_copy {
+!ifdef SFX_FAST {
+		iny
+		dex
+		bne cp_literal
+
+		dey				;this way we force increment of lz_dst + 1 if y = 0
+		tya
+		adc <lz_dst + 0
+		sta <lz_dst + 0			;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on?
+		bcc +
+		inc <lz_dst + 1
++
+		tya
+		sec
+		adc <lz_src + 0
+		sta <lz_src + 0
+		bcc +
+		inc <lz_src + 1
++
+		ldy <lz_len_hi
+} else {
+                inc <lz_src + 0
+                bne +
+                inc <lz_src + 1
++
+                inc <lz_dst + 0
+                bne +
+                inc <lz_dst + 1
++
+		dex
+		bne cp_literal
+		lda <lz_len_hi
+}
+}
+
 		* = $0801
 .dali_code_start
                 !byte $0b,$08
@@ -135,48 +188,14 @@ lz_data_size_hi = * + 1
 		+get_lz_bit
 		bcs .lz_new_offset		;after each match check for another match or literal?
 .literal
-		jsr .get_length
+		jsr get_length
 		tax
 		beq .lz_l_page_
-.cp_literal
+cp_literal
 lz_src = * + 1
 		lda $beef,y			;looks expensive, but is cheaper than loop
 		sta (lz_dst),y
-!ifdef SFX_FAST {
-		iny
-} else {
-
-                inc <lz_src + 0
-                bne +
-                inc <lz_src + 1
-+
-                inc <lz_dst + 0
-                bne +
-                inc <lz_dst + 1
-+
-}
-		dex
-		bne .cp_literal
-
-!ifdef SFX_FAST {
-		dey				;this way we force increment of lz_dst + 1 if y = 0
-		tya
-		adc <lz_dst + 0
-		sta <lz_dst + 0			;XXX TODO final add of y, could be combined with next add? -> postpone until match that will happen necessarily later on?
-		bcc +
-		inc <lz_dst + 1
-+
-		tya
-		sec
-		adc <lz_src + 0
-		sta <lz_src + 0
-		bcc +
-		inc <lz_src + 1
-+
-		ldy <.lz_len_hi
-} else {
-		lda <.lz_len_hi
-}
+		+literal_copy
 		bne .lz_l_page			;happens very seldom
 
 		;------------------
@@ -195,14 +214,14 @@ lz_src = * + 1
 		;DO MATCH
 		;------------------
 .lz_match
-		jsr .get_length
+		jsr get_length
 .lz_m_page
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
 !ifdef SFX_FAST {
 		bcc .lz_dcp
 } else {
 		bcs .lz_match_
-		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
+		dcp <lz_len_hi			;as a = $ff this will decrement <lz_len_hi and set carry again in any case
 }
 .lz_match_
 		eor #$ff
@@ -237,13 +256,13 @@ lz_dst = * + 1
 		bne .cp_match
 		inc <lz_dst + 1
 
-.lz_len_hi = * + 1
+lz_len_hi = * + 1
 		lda #$00			;check for more loop runs
 		beq .lz_start_over
 !ifdef SFX_FAST {
 		lda #$ff
 .lz_dcp
-		dcp <.lz_len_hi			;as a = $ff this will decrement <.lz_len_hi and set carry again in any case
+		dcp <lz_len_hi			;as a = $ff this will decrement <lz_len_hi and set carry again in any case
 		bcs .lz_match_
 .lz_clc
 		clc
@@ -259,28 +278,14 @@ lz_dst = * + 1
 		ldy #$00
 }
 .lz_l_page_
-		dec <.lz_len_hi
-		bcs .cp_literal
+		dec <lz_len_hi
+		bcs cp_literal
 
 		;------------------
 		;FETCH A NEW OFFSET
 		;------------------
-!ifdef SFX_FAST {
--						;get_length as inline
-		+get_lz_bit			;fetch payload bit
-		rol				;can also moved to front and executed once on start
-}
-.lz_new_offset
-!ifdef SFX_FAST {
-		+get_lz_bit
-		bcc -
-+
-		bne +
-		jsr .lz_refill_bits
-+
-} else {
-		jsr .get_length
-}
+
+		+get_lz_length ~.lz_new_offset
 		sbc #$01
 
 		bcc .lz_eof			;underflow. must have been 0
@@ -307,13 +312,13 @@ lz_dst = * + 1
 		bcc -
 		bne .lz_match_
 		ldy #$00
-		jsr .lz_refill_bits		;fetch remaining bits
+		jsr lz_refill_bits		;fetch remaining bits
 } else {
 		jsr .get_length_bt
 }
 		bcs .lz_match_
 
-.lz_refill_bits
+lz_refill_bits
 		tax
 		lda (lz_src),y
 		+set_lz_bit_marker
@@ -331,18 +336,18 @@ lz_dst = * + 1
 .get_length_
 		rol				;can also moved to front and executed once on start
 		bcs .get_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
-.get_length
+get_length
 		+get_lz_bit
 .get_length_bt
 		bcc .lz_get_loop
-		beq .lz_refill_bits
+		beq lz_refill_bits
 		rts
 
 .get_length_16
 		pha				;save LSB
 		tya				;start with MSB = 1
 		jsr .get_length_		;get up to 7 more bits
-		sta <.lz_len_hi			;save MSB
+		sta <lz_len_hi			;save MSB
 		pla				;restore LSB
 .end_bit_16
 		rts
