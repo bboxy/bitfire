@@ -119,3 +119,11 @@ v1.0
 - reduced code in the resident part
 - reworking sfx code
 - more sfx options
+
+v1.1
+- faster decompressor
+- reworked preamble-xfer
+- loadraw: ~22% faster than with v0.7
+- loadcomp: ~14% faster than with v0.7
+- decomp: ~19% faster than with v0.7
+- pack ratio: ~5,5% smaller than bitnax
