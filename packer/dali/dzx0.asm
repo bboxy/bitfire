@@ -105,12 +105,12 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			;------------------
 .lz_repeat
 			jsr .lz_length
+			beq .lz_m_page			;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
 			sbc #$01
-			bcc .lz_dcp			;XXX TODO in fact we could save on the sbc #$01 as the sec and adc later on corrects that again, but y would turn out one too less
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
-							;XXX TODO save on eor #$ff and do sbclz_dst + 0?
+.lz_m_page_						;XXX TODO save on eor #$ff and do sbclz_dst + 0?
 			eor #$ff			;restore A
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
@@ -156,10 +156,9 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			clc
 			bcc .lz_clc_back
 .lz_m_page
-			lda #$ff
-.lz_dcp
-			dcp lz_len_hi
-			bcs .lz_match_big
+			tya
+			dec lz_len_hi
+			bcs .lz_m_page_
 
 			;------------------
 			;FETCH A NEW OFFSET
@@ -173,9 +172,9 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 
 			bne +
 			jsr .lz_refill_bits
+			beq .lz_eof			;underflow. must have been 0
 +
 			sbc #$01			;XXX TODO can be omitted if just endposition is checked, but 0 does not exist as value?
-			bcc .lz_eof			;underflow. must have been 0
 
 			lsr
 			sta .lz_offset_hi + 1		;hibyte of offset
