@@ -506,10 +506,9 @@ lz_next_page
 
 			bne +
 			jsr .lz_refill_bits
+			beq .lz_eof			;8 bits were sent, must be EOF
 +
-			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
-			bcc .lz_eof			;underflow, so offset was $100
-
+			sbc #$01			;subtract 1, elias numbers range from 1..255, we need 0..254
 			lsr				;set bit 15 to 0 while shifting hibyte
 			sta .lz_offset_hi + 1		;hibyte of offset
 
@@ -577,8 +576,8 @@ lz_next_page
 			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
 			bne +
-			dec <lz_len_hi
-			lda #$00
+			dec <lz_len_hi			;happens very seldom, on big matches with lobyte == 0
+			tya				;preserve Z = 0
 +
 			rts
 }
