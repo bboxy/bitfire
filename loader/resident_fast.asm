@@ -32,22 +32,28 @@
 LZ_BITS_LEFT		= 0
 
 !if CONFIG_DECOMP = 0 {
-filenum			= CONFIG_ZP_ADDR + 0
 bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
 bitfire_load_addr_hi	= CONFIG_ZP_ADDR + 1
-preamble		= CONFIG_ZP_ADDR + 2
+preamble		= CONFIG_ZP_ADDR + 2		;5 bytes
 	} else {
 lz_bits			= CONFIG_ZP_ADDR + 0		;1 byte
 lz_dst			= CONFIG_ZP_ADDR + 1		;2 byte
 lz_src			= CONFIG_ZP_ADDR + 3		;2 byte
 lz_len_hi		= CONFIG_ZP_ADDR + 5		;1 byte
 preamble		= CONFIG_ZP_ADDR + 6		;5 bytes
-barrier			= preamble + 3
-filenum			= barrier
-
 bitfire_load_addr_lo	= lz_src + 0
 bitfire_load_addr_hi	= lz_src + 1
+}
 
+block_length		= preamble + 0
+block_addr_lo		= preamble + 1
+block_addr_hi		= preamble + 2
+block_barrier		= preamble + 3
+block_status		= preamble + 4
+filenum			= block_barrier
+
+
+!if CONFIG_DECOMP = 1 {
 !macro get_lz_bit {
         !if LZ_BITS_LEFT = 1 {
 			asl <lz_bits
@@ -86,19 +92,6 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only agg
 
 			* = CONFIG_RESIDENT_ADDR
 .lz_gap1
-!if CONFIG_NMI_GAPS = 1 {
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-}
-
 !if CONFIG_FRAMEWORK = 1 {
 
 ;XXX TODO move away frameworkstuff to $0105 onwards
@@ -191,9 +184,10 @@ bitfire_send_byte_
 			tax				;x is always $3f after 8 rounds (8 times eor #$20)
 -
 			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
-			bmi -
+			bmi -				;waiting with pha/pla would also help, or even a jsr call to waste 12 cycles
 .ld_set_dd02
 			stx $dd02			;restore $dd02
+							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
 .ld_pend
 			rts
 
@@ -209,8 +203,7 @@ bitfire_loadraw_
 .ld_load_raw
 			jsr .ld_pblock			;fetch all blocks until eof
 			bcc -
-			;rts				;XXX TODO can be omitted, maybe as we would skip blockloading on eof?
-							;just run into ld_pblock code again that will then jump to .ld_pend and rts
+			;rts				;just run into ld_pblock code again that will then jump to .ld_pend and rts
 .ld_pblock
 			lda $dd00			;bit 6 is always set if not ready or idle/EOF so no problem with just an ASL
 			asl				;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
@@ -221,20 +214,18 @@ bitfire_loadraw_
 			ldx #<preamble
 			jsr .ld_set_block_tgt		;load 5 bytes preamble - returns with C = 0 at times
 
-			ldy <preamble + 0		;load blocklength
-			ldx <preamble + 1		;block_address lo
-			lda <preamble + 2		;block_address hi
-			;lda <preamble + 3		;can be omitted directly copied to barrier val in zp!
-			;sta <barrier
-			bit <preamble + 4		;status -> first_block?
+			ldy <block_length		;load blocklength
+			ldx <block_addr_lo		;block_address lo
+			lda <block_addr_hi		;block_address hi
+			bit <block_status		;status -> first_block?
 			bmi .ld_set_block_tgt
-			stx bitfire_load_addr_lo	;yes, store load_address
+			stx bitfire_load_addr_lo	;yes, store load_address (also lz_src in case depacker is present)
 			sta bitfire_load_addr_hi
 .ld_set_block_tgt
 			stx .ld_store + 1		;setup target for block data
 			sta .ld_store + 2
-			sec
-.ld_get_byte
+							;XXX TODO, change busy signal 1 = ready, 0 = eof, leave ld_pblock with carry set, also tay can be done after preamble load as last value is still in a
+			sec				;loadraw enters ld_pblock with C = 0
 							;lax would be a7, would need to swap carry in that case: eof == clc, block read = sec
 			ldx #$8e			;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
 			top
@@ -267,12 +258,12 @@ bitfire_ntsc2		and $dd00
 .ld_store		sta $b00b,y
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
-bitfire_ntsc3		adc $dd00			;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3 and 4 is always set, bits 6 and 7 are given by floppy
-							;%xx111xxx
+bitfire_ntsc3		adc $dd00			;XXX $DD = CMP $xxxx,x  ;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3, 4 and 5 are always set, bits 6 and 7 are given by floppy
+							;%xx1110xx
 .ld_gend
 			stx $dd02			;carry is cleared now, we can exit here and do our rts with .ld_gend
-			lsr				;%xxx111xx
-			lsr				;%xxxx111x
+			lsr				;%xxx1110x
+			lsr				;%xxxx1110
 bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }
@@ -323,12 +314,11 @@ bitfire_loadcomp_
 			stx .lz_offset_hi + 1
 			stx <lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
 			jmp .lz_start_over		;start with a literal, X = 0
-.lz_l_page_
+.lz_l_page
 			sec
 			ldy #$00
-.lz_l_page
 			dec <lz_len_hi
-			bcs .lz_l_page__
+			bcs .lz_l_page_
 
 			;------------------
 			;SELDOM STUFF
@@ -336,32 +326,10 @@ bitfire_loadcomp_
 .lz_clc
 			clc
 			bcc .lz_clc_back
-.lz_m_page_
-			lda #$ff				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-.lz_dcp								;.lz_dcp is entered with A = $ff, the only valid condition where dcp sets the carrx always
-			dcp <lz_len_hi
-			bcs .lz_match_len2			;as Y = 0, we can skip the part that does Y = A xor $ff
-
-!if CONFIG_NMI_GAPS = 1 {
-			!ifdef .lz_gap2 {
-				!warn .lz_gap2 - *, " bytes left until gap2"
-			}
-!align 255,0
-.lz_gap2
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-
-!if .lz_gap2 - .lz_gap1 > $0100 {
-		!error "code on first page too big, second gap does not fit!"
-}
-}
+.lz_m_page
+			tya				;much shorter this way. Also forces carry to be set upon dcp
+			dec <lz_len_hi			;decrement <lz_len_hi
+			bcs .lz_match_page_		;as Y = 0, we can skip the part that does Y = A xor $ff, as A = $ff and Y = $00 already.
 
 -
 			+get_lz_bit			;fetch payload bit
@@ -374,10 +342,10 @@ bitfire_loadcomp_
 			jsr .lz_refill_bits
 +
 			tax
-			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
+			beq .lz_l_page_			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 			adc lz_src + 0			;check that upcoming literal copy does not cross page, if so, load one page of data extra
 			bcc +
-.lz_l_page__
+.lz_l_page_
 			jsr .lz_next_page_
 +
 			sec
@@ -403,7 +371,7 @@ bitfire_loadcomp_
 			jsr lz_next_page
 +
 			ldy <lz_len_hi
-			bne .lz_l_page_			;happens very seldom
+			bne .lz_l_page			;happens very seldom
 
 			;------------------
 			;NEW OR OLD OFFSET
@@ -420,10 +388,11 @@ bitfire_loadcomp_
 			jsr .lz_length
 
 			sbc #$01
-			bcc .lz_dcp			;fix highbyte of length in case and set carry again (a = $ff -> compare delivers carry = 1)
+			sec				;XXX TODO this is VERY annoying, as carry is only cleared in case of lz_len_lo == 0
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
+.lz_match_page_
 			eor #$ff			;restore A
 .lz_match_len2						;entry from new_offset handling
 			adc <lz_dst + 0
@@ -447,7 +416,7 @@ bitfire_loadcomp_
 			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
 
 			lda <lz_len_hi			;check for more loop runs
-			bne .lz_m_page			;do more page runs? Yes? Fall through
+			bne .lz_m_page__	;do more page runs? Yes? Fall through
 .lz_check_poll
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
@@ -463,7 +432,7 @@ bitfire_loadcomp_
 			;------------------
 lz_next_page
 			inc <lz_src + 1
-.lz_next_page_
+.lz_next_page_						;preserves carry and X, clears Y, all sane
 	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
 			php				;save carry
@@ -474,7 +443,7 @@ lz_next_page
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 							;XXX TODO send a high enough barrier on last block being sent
 			lda <lz_src + 1			;get current depack position
-			cmp <barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
+			cmp <block_barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
 							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking
@@ -486,8 +455,8 @@ lz_next_page
 .lz_eof
 			rts
 
-.lz_m_page
-			jmp .lz_m_page_
+.lz_m_page__
+			jmp .lz_m_page
 
 			;------------------
 			;MATCH
@@ -501,10 +470,9 @@ lz_next_page
 
 			bne +
 			jsr .lz_refill_bits
+			beq .lz_eof			;8 bits were sent, must be EOF
 +
-			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
-			bcc .lz_eof			;underflow, so offset was $100
-
+			sbc #$01			;subtract 1, elias numbers range from 1..255, we need 0..254
 			lsr				;set bit 15 to 0 while shifting hibyte
 			sta .lz_offset_hi + 1		;hibyte of offset
 
@@ -526,7 +494,9 @@ lz_next_page
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
-			bcs .lz_match_big		;and enter match copy loop
+			bne .lz_match_big		;all okay, less then 8 bits fetched
+			inc <lz_len_hi			;need to undo the dec <lz_len_hi for this case
+			jmp .lz_match_big		;and enter match copy loop
 
 			;------------------
 			;POLLING
@@ -587,6 +557,10 @@ lz_next_page
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
+			bne +
+			dec <lz_len_hi			;happens very seldom, on big matches with lobyte == 0
+			tya				;preserve Z = 0
++
 			rts
 }
 
