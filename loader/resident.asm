@@ -105,45 +105,6 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only agg
 			nop
 }
 
-!if CONFIG_FRAMEWORK = 1 {
-
-;XXX TODO move away frameworkstuff to $0105 onwards
-	!if CONFIG_FRAMEWORK_BASEIRQ = 1 {
-link_player
-			pha
-			tya
-			pha
-			txa
-			pha
-			inc $01				;should be save with $01 == $34/$35, except when music is @ >= $e000
-	!if CONFIG_FRAMEWORK_MUSIC_NMI = 1 {
-			lda $dd0d
-	} else {
-			dec $d019
-	}
-			jsr link_music_play
-			dec $01
-
-			pla
-			tax
-			pla
-			tay
-			pla
-			rti
-	}
-}
-
-!if CONFIG_FRAMEWORK = 1 {
-link_music_play
-	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
-			inc link_frame_count + 0
-			bne +
-			inc link_frame_count + 1
-+
-link_music_addr = * + 1
-			jmp link_music_play_side1
-	}
-}
 			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 			;and advances the frame counter if needed
 
@@ -166,18 +127,6 @@ link_music_addr = * + 1
 ;			rts
 ;	}
 
-!if CONFIG_FRAMEWORK = 1 & CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
-link_frame_count
-			!word 0
-}
-
-!if CONFIG_AUTODETECT = 1 {
-link_chip_types
-link_sid_type			;%00000001		;bit set = new, bit cleared = old
-link_cia1_type			;%00000010
-link_cia2_type			;%00000100
-			!byte $00
-}
 !if CONFIG_LOADER = 1 {
 			;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 bitfire_send_byte_
@@ -289,6 +238,43 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 ;---------------------------------------------------------------------------------
 
 !if CONFIG_DECOMP = 1 {
+			;------------------
+			;ELIAS FETCH
+			;------------------
+.lz_inc_src2
+			+inc_src_ptr
+			bne .lz_inc_src2_
+.lz_refill_bits
+			tax
+			lda (lz_src),y
+			+set_lz_bit_marker
+			sta <lz_bits
+			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
+			beq .lz_inc_src2
+.lz_inc_src2_
+			txa				;also postpone, so A can be trashed on lz_inc_src above
+			bcs .lz_lend
+.lz_get_loop
+			+get_lz_bit			;fetch payload bit
+.lz_length_16_
+			rol				;can also moved to front and executed once on start
+			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
+			+get_lz_bit
+			bcc .lz_get_loop
+			beq .lz_refill_bits
+.lz_lend
+			rts
+.lz_length_16						;happens very rarely
+			pha				;save LSB
+			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with MSB = 1
+			jsr .lz_length_16_		;get up to 7 more bits
+			sta <lz_len_hi			;save MSB
+			pla				;restore LSB
+			bne +
+			dec <lz_len_hi
+			tya
++
+			rts
 bitfire_decomp_
 link_decomp
 	!if CONFIG_LOADER = 1 {
@@ -331,19 +317,12 @@ bitfire_loadcomp_
 			;------------------
 			;SELDOM STUFF
 			;------------------
-.lz_l_page
-			tya
-			dec <lz_len_hi
-			bcs .lz_l_page_
-.lz_clc
-			clc
-			bcc .lz_clc_back
-.lz_dst_inc
-			inc <lz_dst + 1
-			bcs .lz_dst_inc_
 .lz_inc_src3
 			+inc_src_ptr
 			bcs .lz_inc_src3_
+.lz_dst_inc
+			inc <lz_dst + 1
+			bcs .lz_dst_inc_
 
 !if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
@@ -366,10 +345,16 @@ bitfire_loadcomp_
 }
 }
 
+.lz_clc
+			clc
+			bcc .lz_clc_back
 .lz_m_page
-			tya					;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
+.lz_l_page
 			dec <lz_len_hi
-			bcs .lz_m_page_				;as Y = 0, we can skip the part that does Y = A xor $ff
+			txa				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
+			beq .lz_l_page_
+			tya
+			bcs .lz_m_page_			;as Y = 0, we can skip the part that does Y = A xor $ff
 
 			;------------------
 			;POLLING
@@ -397,10 +382,9 @@ bitfire_loadcomp_
 
 			bne +
 			jsr .lz_refill_bits
-			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
-.lz_l_page_
 +
 			tax
+.lz_l_page_
 .lz_cp_lit
 			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks, loading in order reveals that
 			sta (lz_dst),y
@@ -436,10 +420,9 @@ bitfire_loadcomp_
 			bcc .lz_repeat
 +
 			bne +
-			jsr .lz_refill_bits
-			beq .lz_m_page
+			jsr .lz_refill_bits		;fetch more bits
 +
-			sbc #$01
+			sbc #$01			;subtract 1, will be added again on adc as C = 1
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
@@ -543,6 +526,8 @@ lz_next_page
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
+			bne .lz_match_big
+			inc <lz_len_hi
 			bcs .lz_match_big		;and enter match copy loop
 
 			;------------------
@@ -551,42 +536,60 @@ lz_next_page
 .lz_inc_src1
 			+inc_src_ptr
 			bne .lz_inc_src1_
-.lz_inc_src2
-			+inc_src_ptr
-			bne .lz_inc_src2_
 
-			;------------------
-			;ELIAS FETCH
-			;------------------
-.lz_refill_bits
+!if CONFIG_FRAMEWORK = 1 {
+
+;XXX TODO move away frameworkstuff to $0105 onwards
+	!if CONFIG_FRAMEWORK_BASEIRQ = 1 {
+link_player
+			pha
+			tya
+			pha
+			txa
+			pha
+			inc $01				;should be save with $01 == $34/$35, except when music is @ >= $e000
+	!if CONFIG_FRAMEWORK_MUSIC_NMI = 1 {
+			lda $dd0d
+	} else {
+			dec $d019
+	}
+			jsr link_music_play
+			dec $01
+
+			pla
 			tax
-			lda (lz_src),y
-			+set_lz_bit_marker
-			sta <lz_bits
-			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
-			beq .lz_inc_src2
-.lz_inc_src2_
-			txa				;also postpone, so A can be trashed on lz_inc_src above
-			bcs .lz_lend
-.lz_get_loop
-			+get_lz_bit			;fetch payload bit
-.lz_length_16_
-			rol				;can also moved to front and executed once on start
-			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
-			+get_lz_bit
-			bcc .lz_get_loop
-			beq .lz_refill_bits
-.lz_lend
-			rts
-.lz_length_16						;happens very rarely
-			pha				;save LSB
-			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with MSB = 1
-			jsr .lz_length_16_		;get up to 7 more bits
-			sta <lz_len_hi			;save MSB
-			pla				;restore LSB
-			rts
+			pla
+			tay
+			pla
+			rti
+	}
+}
 }
 
+!if CONFIG_FRAMEWORK = 1 {
+link_music_play
+	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
+			inc link_frame_count + 0
+			bne +
+			inc link_frame_count + 1
++
+link_music_addr = * + 1
+			jmp link_music_play_side1
+	}
+}
+
+!if CONFIG_FRAMEWORK = 1 & CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
+link_frame_count
+			!word 0
+}
+
+!if CONFIG_AUTODETECT = 1 {
+link_chip_types
+link_sid_type			;%00000001		;bit set = new, bit cleared = old
+link_cia1_type			;%00000010
+link_cia2_type			;%00000100
+			!byte $00
+}
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
 ;XXX TODO
