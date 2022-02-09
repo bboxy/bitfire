@@ -73,10 +73,9 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 
 			bne +
 			jsr .lz_refill_bits
-			beq .lz_l_page			;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
-.lz_l_page_
 +
 			tax
+.lz_l_page_
 .lz_cp_lit
 			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks, loading in order reveals that
 			sta (lz_dst),y
@@ -113,7 +112,6 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 +
 			bne +
 			jsr .lz_refill_bits		;fetch more bits
-			beq .lz_m_page			;if > 8 bits are fetched, correct page_couter if lowbyte == 0
 +
 			sbc #$01			;subtract 1, will be added again on adc as C = 1
 .lz_match_big						;we enter with length - 1 here from normal match
@@ -163,20 +161,19 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			;------------------
 			;SELDOM STUFF
 			;------------------
+.lz_m_page
 .lz_l_page
-			tya
 			dec <lz_len_hi
-			bcs .lz_cp_lit
+			txa				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
+			beq .lz_l_page_
+			tya
+			bcs .lz_m_page_			;as Y = 0, we can skip the part that does Y = A xor $ff
 .lz_clc
 			clc
 			bcc .lz_clc_back
-.lz_m_page
-			tya
-			dec lz_len_hi
-			bcs .lz_m_page_
 
 			;------------------
-			;FETCH A NEW OFFSET
+			;MATCH
 			;------------------
 -							;lz_length as inline
 			+get_lz_bit			;fetch payload bit
@@ -212,6 +209,8 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			bne .lz_match_big
 			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
+			bne .lz_match_big
+			inc <lz_len_hi
 			bcs .lz_match_big		;and enter match copy loop
 
 			;------------------
@@ -253,4 +252,8 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;save MSB
 			pla				;restore LSB
+			bne +
+			dec <lz_len_hi
+			tya
++
 			rts
