@@ -150,6 +150,8 @@ l
 .endm
 
 start_music_nmi .macro
+			;lda #$20
+			;sta link_music_play_jmp
 			ldx #<link_player
 			lda #>link_player
 
@@ -178,10 +180,14 @@ stop_music_nmi .macro
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
+			;lda #$4c
+			;sta link_music_play_jmp
 .endm
 
 restart_music_nmi .macro
 			lda $dd0d
 			lda #$81
 			sta $dd0d
+			;lda #$4c
+			;sta link_music_play_jmp
 .endm

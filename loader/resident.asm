@@ -491,7 +491,7 @@ bitfire_loadcomp_
 
 			bne +
 			jsr .lz_refill_bits
-			beq .lz_eof			;underflow, so offset was $100
+			beq .lz_eof			;so offset was $100 as lowbyte is $00
 +
 			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
 			lsr				;set bit 15 to 0 while shifting hibyte
@@ -499,15 +499,15 @@ bitfire_loadcomp_
 
 			lda (lz_src),y			;fetch another byte directly, same as refill_bits...
 			ror				;and shift -> first bit for lenth is in carry, and we have %0xxxxxxx xxxxxxxx as offset
-			sta .lz_offset_lo + 1
+			sta .lz_offset_lo + 1		;lobyte of offset
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
 			beq .lz_inc_src1
 .lz_inc_src1_
-			lda #$01
+			lda #$01			;fetch new number, start with 1
 			bcs .lz_match_big		;length = 1, do it the very short way
 -
-			+get_lz_bit
+			+get_lz_bit			;fetch more bits
 			rol
 			+get_lz_bit
 			bcc -
@@ -515,13 +515,14 @@ bitfire_loadcomp_
 			;ldy #$00			;only now y = 0 is needed
 .lz_jsr_addr = * + 2
 			jsr .lz_refill_bits		;fetch remaining bits
-			bne .lz_match_big
-			inc <lz_len_hi			;correct <lz_len_hi
-			bcs .lz_match_big		;and enter match copy loop
+			bne .lz_match_big		;lobyte != 0?
 
 			;------------------
-			;POINTER HIGHBYTE HANDLING
+			;SELDOM STUFF
 			;------------------
+
+			inc <lz_len_hi			;need to correct <lz_len_hi
+			bcs .lz_match_big		;and enter match copy loop
 .lz_inc_src1
 			+inc_src_ptr
 			bne .lz_inc_src1_
@@ -584,6 +585,8 @@ link_player
 }
 
 !if CONFIG_FRAMEWORK = 1 {
+;add to link_player
+;stop music nmi sets jsr link_music_play_side1 to jmp, start_music to jsr?
 link_music_play
 	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
 			inc link_frame_count + 0

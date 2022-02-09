@@ -169,6 +169,8 @@ l
 
 		.macro start_music_nmi 
 		.local l
+			;lda #$20
+			;sta link_music_play_jmp
 			ldx #<link_player
 			lda #>link_player
 
@@ -198,6 +200,8 @@ l
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
+			;lda #$4c
+			;sta link_music_play_jmp
 		.endmacro
 
 		.macro restart_music_nmi 
@@ -205,4 +209,6 @@ l
 			lda $dd0d
 			lda #$81
 			sta $dd0d
+			;lda #$4c
+			;sta link_music_play_jmp
 		.endmacro
