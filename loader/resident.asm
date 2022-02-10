@@ -92,8 +92,17 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR	;define that label here, as we only agg
 
 			* = CONFIG_RESIDENT_ADDR
 .lz_gap1
+!if CONFIG_AUTODETECT = 1 {
+link_chip_types
+link_sid_type		;%00000001		;bit set = new, bit cleared = old
+link_cia1_type		;%00000010
+link_cia2_type		;%00000100
+			!byte $00
+}
 !if CONFIG_NMI_GAPS = 1 {
+	!if CONFIG_AUTODETECT = 0 {
 			nop
+	}
 			nop
 			nop
 			nop
@@ -393,9 +402,11 @@ bitfire_loadcomp_
 .lz_literal
 			+get_lz_bit
 			bcs +
+-
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
-			bne .lz_literal
+			+get_lz_bit			;fetch payload bit
+			bcc -
 +
 			bne +
 			jsr .lz_refill_bits
@@ -430,11 +441,13 @@ bitfire_loadcomp_
 			;REPEAT LAST OFFSET
 			;------------------
 .lz_repeat
-			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
+			+get_lz_bit
 			bcs +
+-
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
-			bcc .lz_repeat
+			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
+			bcc -
 +
 			bne +
 			jsr .lz_refill_bits		;fetch more bits
@@ -443,8 +456,8 @@ bitfire_loadcomp_
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
-.lz_m_page
-			eor #$ff			;restore A
+.lz_m_page		eor #$ff			;restore A
+
 			adc <lz_dst + 0
 			sta <lz_dst + 0
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
@@ -471,8 +484,8 @@ bitfire_loadcomp_
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
 
-			ldx <lz_dst + 0
-			cpx <lz_src + 0
+			lda <lz_dst + 0
+			eor <lz_src + 0
 			bne .lz_start_over
 			beq lz_next_page
 							;XXX TODO, save one byte above and the beq lz_next_page can be omitted and lz_next_page copied here again
@@ -512,7 +525,6 @@ bitfire_loadcomp_
 			+get_lz_bit
 			bcc -
 			bne .lz_match_big
-			;ldy #$00			;only now y = 0 is needed
 .lz_jsr_addr = * + 2
 			jsr .lz_refill_bits		;fetch remaining bits
 			bne .lz_match_big		;lobyte != 0?
@@ -603,13 +615,6 @@ link_frame_count
 			!word 0
 }
 
-!if CONFIG_AUTODETECT = 1 {
-link_chip_types
-link_sid_type		;%00000001		;bit set = new, bit cleared = old
-link_cia1_type		;%00000010
-link_cia2_type		;%00000100
-			!byte $00
-}
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
 ;XXX TODO
