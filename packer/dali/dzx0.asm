@@ -55,14 +55,24 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
                         stx .lz_offset_lo + 1           ;initialize offset with $0000
                         stx .lz_offset_hi + 1
                         stx <lz_len_hi
-
-			;------------------
-			;LITERAL
-			;------------------
+			beq .lz_start_over
+.lz_end_check_
+			ldx <lz_dst + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
+			cpx <lz_src + 0
+			bne .lz_start_over
+.lz_eof
+			rts				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+.lz_end_check
+			cpx <lz_src + 1
+			beq .lz_end_check_		;we could check against src >= dst XXX TODO
 .lz_start_over
 			lda #$01			;we fall through this check on entry and start with literal
 			+get_lz_bit
 			bcs .lz_match			;after each match check for another match or literal?
+
+			;------------------
+			;LITERAL
+			;------------------
 .lz_literal
 			+get_lz_bit
 			bcs +
@@ -107,9 +117,11 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 .lz_repeat
 			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
 			bcs +
+-
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
-			bcc .lz_repeat
+			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
+			bcc -
 +
 			bne +
 			jsr .lz_refill_bits		;fetch more bits
@@ -142,26 +154,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
 
 			lda <lz_len_hi			;check for more loop runs
-			bne .lz_m_page			;do more page runs? Yes? Fall through
-
-			cpx <lz_src + 1
-			bne .lz_start_over		;we could check against src >= dst XXX TODO
-			ldx <lz_dst + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
-			cpx <lz_src + 0
-			bne .lz_start_over
-.lz_eof
-			rts				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
-
-.lz_dst_inc
-			inc <lz_dst + 1
-			bcs .lz_dst_inc_
-.lz_inc_src3
-			inc <lz_src + 1
-			bcs .lz_inc_src3_
-
-			;------------------
-			;SELDOM STUFF
-			;------------------
+			beq .lz_end_check		;do more page runs? Yes? Fall through
 .lz_m_page
 .lz_l_page
 			dec <lz_len_hi
@@ -169,6 +162,17 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			beq .lz_l_page_
 			tya
 			bcs .lz_m_page_			;as Y = 0, we can skip the part that does Y = A xor $ff
+
+
+			;------------------
+			;SELDOM STUFF
+			;------------------
+.lz_dst_inc
+			inc <lz_dst + 1
+			bcs .lz_dst_inc_
+.lz_inc_src3
+			inc <lz_src + 1
+			bcs .lz_inc_src3_
 
 			;------------------
 			;MATCH
@@ -182,7 +186,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 
 			bne +
 			jsr .lz_refill_bits
-			beq .lz_eof			;underflow, so offset was $100
+			beq .lz_lend			;underflow, so offset was $100
 +
 			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
 
