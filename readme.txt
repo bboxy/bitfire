@@ -127,7 +127,7 @@ Add/remove functionality
 ------------------------
 
 In config.inc you may turn off certain functionality and by that save memory (is it necessary with that size however?). The plain loadraw-function will consume $7e bytes only. With all functions enabled the resident size is still smaller than $200 bytes, small, isn't it?
-The config.inc as well as the music.inc can also be placed in the root folder outside of the repository, so that you can include bitfire as a submodule, but you retain your own config within your project. The config outside the repo will be preferred and will verrule the config that comes with this repository.
+The config.inc as well as the music.inc can also be placed in the root folder outside of the repository, so that you can include bitfire as a submodule, but you retain your own config within your project. The config outside the repo will be preferred and will overrule the config that comes with this repository.
 
 Else, choose from the following functions:
 CONFIG_INCLUDE_DECOMP          = 1             ;Include decompressor including on the fly decompression capabilities

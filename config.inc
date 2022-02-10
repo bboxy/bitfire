@@ -2,7 +2,7 @@
 
 ;options for resident part
 CONFIG_RESIDENT_ADDR		= $0200
-CONFIG_ZP_ADDR			= $02		;maximum 7 bytes needed
+CONFIG_ZP_ADDR			= $02		;maximum 11 bytes needed, 5 for loader, 6 for depacker
 CONFIG_LAX_ADDR			= $00		;Usually save to have the value $37 here, but can be also set elsewhere, but must stay persistent during loading
 
 ;options for installer
@@ -23,13 +23,13 @@ CONFIG_LOADER			= 1		;Include the loader or maybe decide for a standalone depack
 
 CONFIG_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resident part for later use, so upcoming parts do not need an own detection anymore but can read out that values again
 
-CONFIG_NMI_GAPS			= 0		;If you have Ninjy-style NMI-handlers @ $0200 and $0300 to install while still using the loader, choose that option and 10 bytes will be reserved at each location for your code to stay.
+CONFIG_NMI_GAPS			= 1		;If you have Ninjy-style NMI-handlers @ $0200 and $0300 to install while still using the loader, choose that option and 10 bytes will be reserved at each location for your code to stay.
 
 ;options for drivecode
 CONFIG_MOTOR_ALWAYS_ON		= 0		;If you want to be annoying, let the motor spin during the whole demo :-D
 
 CONFIG_DEBUG			= 0		;transfer retry-counts to c64 for benchmarking
 
-CONFIG_LOADED			= 1
+CONFIG_LOADED			= 1		;avoid including config twice
 
 }
