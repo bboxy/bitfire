@@ -10,7 +10,7 @@ else
 VR:=@
 endif
 
-all: loader dali zx0 d64write
+all: loader dali d64write
 
 #zx0-play: FORCE
 #	@$(MAKE) $(MAKE_OPTS) -C packer/$@
@@ -22,6 +22,7 @@ bitnax: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 dali: FORCE
+	@git submodule update --init --recursive
 	@$(MAKE) $(MAKE_OPTS) -C packer/$@
 
 d64write: FORCE
