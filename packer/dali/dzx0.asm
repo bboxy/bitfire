@@ -62,15 +62,16 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 .lz_start_over
 			lda #$01			;we fall through this check on entry and start with literal
 			+get_lz_bit
-			bcc .lz_literal
-			jmp .lz_match			;after each match check for another match or literal?
+			bcs .lz_match			;after each match check for another match or literal?
+.lz_literal
+			+get_lz_bit
+			bcs +
 -							;lz_length as inline
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
-.lz_literal
 			+get_lz_bit
 			bcc -
-
++
 			bne +
 			jsr .lz_refill_bits
 +
@@ -168,9 +169,6 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			beq .lz_l_page_
 			tya
 			bcs .lz_m_page_			;as Y = 0, we can skip the part that does Y = A xor $ff
-.lz_clc
-			clc
-			bcc .lz_clc_back
 
 			;------------------
 			;MATCH
@@ -214,8 +212,11 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			bcs .lz_match_big		;and enter match copy loop
 
 			;------------------
-			;POINTER HIGHBYTE HANDLING
+			;SELDOM STUFF
 			;------------------
+.lz_clc
+			clc
+			bcc .lz_clc_back
 .lz_inc_src1
 			inc <lz_src + 1			;preserves carry, all sane
 			bne .lz_inc_src1_
