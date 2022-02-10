@@ -33,9 +33,10 @@ WAIT_SPIN_DOWN = 0
 
 TIME_RAW = 0
 TIME_LOADCOMP = 0
-TIME_DECOMP = 1
+TIME_RAW_DECOMP = 1
+TIME_DECOMP = 0
 
-TIME_STRICT = 0
+TIME_STRICT = 1
 
 num_files	= $16
 ;num_files	= $11
@@ -284,11 +285,16 @@ numb		lda #$00		;file number
 		pha
 		jsr bitfire_loadraw_
 }
-!if TIME_DECOMP = 1 {
+!if TIME_DECOMP = 1 or TIME_RAW_DECOMP = 1 {
+!if TIME_RAW_DECOMP = 1 {
+		jsr .start_timer
+}
 		pla
 		pha
 		jsr bitfire_loadraw_
+!if TIME_RAW_DECOMP = 0 {
 		jsr .start_timer
+}
 		jsr bitfire_decomp_
 }
 !if TIME_LOADCOMP = 1 {
