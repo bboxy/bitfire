@@ -79,7 +79,7 @@ Most notably changes in the encoding are the drop of the xor 0xff on the LSB of 
 
 Also inplace depacking was added, so that files can be directly loaded and depacked within the memory range the unpacked data would land anyway. So no more safety-margins. deltas, overlap or however you name it, has to be taken care of, except, if you depack out of another location. To achieve that, the end-marker is clamped off, and encoding is interupted as soon as a match or literal would overwrite the still packed data, from there on the data is output as plain unencoded literal. It is there in memory, where it belongs anyway.
 
-Besides the adopted version there's also a compatible version for the original zx0 format used by the original zx0 and salvador, it can be found [here](https://github.com/bboxy/bitfire/tree/master/bitfire/zx0/6502) for either versions, v1 and v2.
+Besides the adopted version there's also a compatible version for the original zx0 format used by the original zx0 and salvador, it can be found [here](https://github.com/bboxy/bitfire/tree/master/packer/zx0/6502) for either versions, v1 and v2.
 
 ## future work
 
