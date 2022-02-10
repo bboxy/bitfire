@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "sfx_small.h"
 #include "sfx_fast.h"
 
@@ -32,6 +33,9 @@ typedef struct ctx {
     size_t unpacked_index;
     size_t unpacked_size;
     int inplace;
+    char *output_name;
+    char *input_name;
+    char *prefix_name;
 } ctx;
 
 void salvador_main();
@@ -314,9 +318,11 @@ int main(int argc, char *argv[]) {
     int sfx_size;
     char *sfx_code = NULL;
 
-    char *output_name = NULL;
-    char *input_name = NULL;
-    char *prefix_name = NULL;
+    char tmp_name[] = "dict-XXXXXX";
+    int dict_file = 0;
+    unsigned char *dict_data = NULL;
+    int dict_size = 0;
+
     //char *compressor_path = NULL;
     //char *shell_call = NULL;
 
@@ -328,6 +334,9 @@ int main(int argc, char *argv[]) {
     ctx ctx = { 0 };
 
     ctx.inplace = TRUE;
+    ctx.output_name = NULL;
+    ctx.input_name = NULL;
+    ctx.prefix_name = NULL;
     cbm = TRUE;
     sfx = FALSE;
 
@@ -369,13 +378,13 @@ int main(int argc, char *argv[]) {
      //           compressor_path = argv[i];
             } else if (!strcmp(argv[i], "-o")) {
                 i++;
-                output_name = argv[i];
+                ctx.output_name = argv[i];
             } else {
                 fprintf(stderr, "Error: Unknown option %s\n", argv[i]);
                 exit(1);
             }
         } else if (i == argc - 1) {
-            input_name = argv[i];
+            ctx.input_name = argv[i];
         } else {
             fprintf(stderr, "Error: Unknown option %s\n", argv[i]);
             exit(1);
@@ -418,7 +427,7 @@ int main(int argc, char *argv[]) {
     //    exit(1);
    // }
 
-    if (input_name == NULL) {
+    if (ctx.input_name == NULL) {
         fprintf(stderr, "Error: No input-filename given\n");
         exit(1);
     }
@@ -429,11 +438,11 @@ int main(int argc, char *argv[]) {
     }
 
     /* determine output filename */
-    if (output_name == NULL) {
-        output_name = (char *)malloc(strlen(input_name) + 4);
-        strcpy(output_name, input_name);
-        strcat(output_name, ".lz");
-        printf("output name: %s\n", output_name);
+    if (ctx.output_name == NULL) {
+        ctx.output_name = (char *)malloc(strlen(ctx.input_name) + 4);
+        strcpy(ctx.output_name, ctx.input_name);
+        strcat(ctx.output_name, ".lz");
+        printf("output name: %s\n", ctx.output_name);
     }
 
     ctx.packed_data = (unsigned char *)malloc(BUFFER_SIZE);
@@ -446,7 +455,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* load unpacked file */
-    ctx.unpacked_fp = fopen(input_name, "rb");
+    ctx.unpacked_fp = fopen(ctx.input_name, "rb");
     if (!ctx.unpacked_fp) {
         fprintf(stderr, "Error: Cannot access input file\n");
         perror("fopen");
@@ -487,29 +496,15 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    /* determine dict filename and handling --prefix-from */
+    /* setup dict lengths and position */
     if (cbm_prefix_from >= 0) {
         /* if range is below start_address, adopt range */
         if (cbm_prefix_from < cbm_orig_addr) {
             cbm_prefix_from = cbm_orig_addr;
             fprintf(stderr, "Warning: File starts at $%04x, adopting --prefix-from value\n", cbm_prefix_from);
         }
-        if (prefix_name == NULL) {
-            prefix_name = (char *)malloc(strlen(output_name) + 6);
-            strcpy(prefix_name, output_name);
-            strcat(prefix_name, ".dict");
-            printf("prefix ($%04x - $%04x): %s\n", cbm_prefix_from, cbm_range_from, prefix_name);
-            ctx.clamped_fp = fopen(prefix_name, "wb");	//could be wxb and we do a check on overwrite?
-            if (!ctx.clamped_fp) {
-                fprintf(stderr, "Error: Cannot write dict file %s\n", prefix_name);
-                exit(1);
-            }
-            if (fwrite(ctx.unpacked_data + cbm_prefix_from - cbm_orig_addr, sizeof(char), cbm_range_from - cbm_prefix_from, ctx.clamped_fp) != cbm_range_from - cbm_prefix_from) {
-                fprintf(stderr, "Error: Cannot write dict file %s\n", prefix_name);
-                exit(1);
-            }
-            fclose(ctx.clamped_fp);
-        }
+        dict_data = ctx.unpacked_data + cbm_prefix_from - cbm_orig_addr;
+        dict_size = cbm_range_from - cbm_prefix_from;
     }
 
     /* load file from start_pos on only, so skip bytes on input */
@@ -536,9 +531,9 @@ int main(int argc, char *argv[]) {
     }
 
     /* write clamped raw data */
-    ctx.clamped_fp = fopen(output_name, "wb");
+    ctx.clamped_fp = fopen(ctx.output_name, "wb");
     if (!ctx.clamped_fp) {
-        fprintf(stderr, "Error: Cannot create clamped file (%s)\n", output_name);
+        fprintf(stderr, "Error: Cannot create clamped file (%s)\n", ctx.output_name);
         perror("fopen");
         exit(1);
     }
@@ -551,27 +546,48 @@ int main(int argc, char *argv[]) {
     }
     fclose(ctx.clamped_fp);
 
+    /* ctreate temp file for dict */
+    if (cbm_prefix_from >= 0) {
+        if (ctx.prefix_name == NULL) {
+            ctx.prefix_name = (char*)malloc(sizeof(tmp_name) + 1);
+            strcpy(ctx.prefix_name, tmp_name);
+            dict_file = mkstemp(ctx.prefix_name);
+            printf("using prefix: $%04x - $%04x\n", cbm_prefix_from, cbm_prefix_from + dict_size);
+            if (!dict_file) {
+                fprintf(stderr, "Error: Cannot create dict file %s\n", ctx.prefix_name);
+                exit(1);
+            }
+            if (!dict_data || write(dict_file, dict_data, dict_size) == - 1) {
+                fprintf(stderr, "Error: Cannot write dict file %s\n", ctx.prefix_name);
+                unlink(ctx.prefix_name);
+                exit(1);
+            }
+        }
+    }
+
     /* compress data with salvador */
     salvador_argv[salvador_argc++] = "salvador";
     if (cbm_prefix_from >= 0) {
         salvador_argv[salvador_argc++] = "-D";
-        salvador_argv[salvador_argc++] = prefix_name;
+        salvador_argv[salvador_argc++] = ctx.prefix_name;
     }
-    salvador_argv[salvador_argc++] = output_name;
-    salvador_argv[salvador_argc++] = output_name;
+    salvador_argv[salvador_argc++] = ctx.output_name;
+    salvador_argv[salvador_argc++] = ctx.output_name;
     salvador_main(salvador_argc, salvador_argv);
-    //shell_call = (char *)malloc(strlen(output_name) + strlen(output_name) + strlen(compressor_path) + 3);
-    //sprintf(shell_call, "%s %s %s", compressor_path, output_name, output_name);
+    //shell_call = (char *)malloc(strlen(ctx.output_name) + strlen(ctx.output_name) + strlen(compressor_path) + 3);
+    //sprintf(shell_call, "%s %s %s", compressor_path, ctx.output_name, ctx.output_name);
     //if (system(shell_call) == -1) {
     //    fprintf(stderr, "Error: Cannot execute %s\n", shell_call);
     //    exit(1);
     //}
 
+    /* delete dict */
+    unlink(ctx.prefix_name);
+
     /* read packed data */
-    ctx.packed_fp = fopen(output_name, "rb");
+    ctx.packed_fp = fopen(ctx.output_name, "rb");
     if (!ctx.packed_fp) {
         fprintf(stderr, "Error: Cannot access input file\n");
-        perror("fopen");
         exit(1);
     }
     ctx.packed_size = fread(ctx.packed_data, sizeof(char), BUFFER_SIZE, ctx.packed_fp);
@@ -582,10 +598,9 @@ int main(int argc, char *argv[]) {
     else ctx.packed_size -= 2;
 
     /* write reencoded output file */
-    ctx.reencoded_fp = fopen(output_name, "wb");
+    ctx.reencoded_fp = fopen(ctx.output_name, "wb");
     if (!ctx.reencoded_fp) {
-        fprintf(stderr, "Error: Cannot create reencoded file (%s)\n", output_name);
-        perror("fopen");
+        fprintf(stderr, "Error: Cannot create reencoded file (%s)\n", ctx.output_name);
         exit(1);
     }
     reencode(&ctx);
@@ -648,11 +663,11 @@ int main(int argc, char *argv[]) {
         printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sfx_size + ctx.packed_index, (int)sfx_size + ctx.packed_index, ((float)(ctx.packed_index + (int)sfx_size) / (float)(ctx.unpacked_size) * 100.0));
 
         if (fwrite(sfx_code, sizeof(char), sfx_size, ctx.reencoded_fp) != sfx_size) {
-            fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
+            fprintf(stderr, "Error: Cannot write output file %s\n", ctx.output_name);
             exit(1);
         }
         if (fwrite(ctx.reencoded_data, sizeof(char), ctx.reencoded_index, ctx.reencoded_fp) != ctx.reencoded_index) {
-            fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
+            fprintf(stderr, "Error: Cannot write output file %s\n", ctx.output_name);
             exit(1);
         }
     /* or standard compressed */
