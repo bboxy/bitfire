@@ -302,6 +302,7 @@ int main(int argc, char *argv[]) {
     int cbm_range_to = -1;
     int cbm_relocate_packed_addr = -1;
     int cbm_relocate_origin_addr = -1;
+    int cbm_prefix_from = -1;
 
     int cbm;
 
@@ -315,12 +316,14 @@ int main(int argc, char *argv[]) {
 
     char *output_name = NULL;
     char *input_name = NULL;
+    char *prefix_name = NULL;
     //char *compressor_path = NULL;
     //char *shell_call = NULL;
 
     int i;
 
-    char *salvador_argv[3];
+    char *salvador_argv[5];
+    int salvador_argc = 0;
 
     ctx ctx = { 0 };
 
@@ -332,6 +335,9 @@ int main(int argc, char *argv[]) {
         if (!strncmp(argv[i], "-", 1) || !strncmp(argv[i], "--", 2)) {
             if (!strcmp(argv[i], "--binfile")) {
                 cbm = FALSE;
+            } else if (!strcmp(argv[i], "--prefix-from")) {
+                cbm_prefix_from = read_number(argv[i + 1], argv[i], 65536);
+                i++;
             } else if (!strcmp(argv[i], "--no-inplace")) {
                 ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "--small")) {
@@ -382,17 +388,17 @@ int main(int argc, char *argv[]) {
     if (argc == 1) {
         fprintf(stderr, "Usage: %s [options] input\n"
                         "  -o [filename]               Set output filename\n"
-                        "  --sfx [$num]                Create a c64 compatible sfx-executable\n"
-                        "  --01 [$num]                 Set $01 to [num] after sfx\n"
-                        "  --cli [$num]                Do a CLI after sfx, default is SEI\n"
+                        "  --sfx [num]                 Create a c64 compatible sfx-executable\n"
+                        "  --01 [num]                  Set 01 to [num] after sfx\n"
+                        "  --cli [num]                 Do a CLI after sfx, default is SEI\n"
                         "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!)\n"
                         "  --no-inplace                Disable inplace-decompression\n"
                         "  --binfile                   Input file is a raw binary without load-address\n"
-                        "  --from [$num]               Compress file from [num] on\n"
-                        "  --to [$num]                 Compress file until position [num]\n"
-                        "  --use-prefix                Use preceeding data of file as dictionary\n"
-                        "  --relocate-packed [$num]    Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
-                        "  --relocate-origin [$num]    Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
+                        "  --from [num]                Compress file from [num] on\n"
+                        "  --to [num]                  Compress file until position [num]\n"
+                        "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from)\n"
+                        "  --relocate-packed [num]     Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
+                        "  --relocate-origin [num]     Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
 
                         ,argv[0]);
         exit(1);
@@ -415,6 +421,11 @@ int main(int argc, char *argv[]) {
 
     if (input_name == NULL) {
         fprintf(stderr, "Error: No input-filename given\n");
+        exit(1);
+    }
+
+    if (cbm_prefix_from >= 0 && cbm_range_from <= 0) {
+        fprintf(stderr, "Error: Dict is zero size (use --from)\n");
         exit(1);
     }
 
@@ -445,6 +456,7 @@ int main(int argc, char *argv[]) {
     ctx.unpacked_size = fread(ctx.unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx.unpacked_fp);
     fclose(ctx.unpacked_fp);
 
+    /* cbm address handling */
     if (cbm_relocate_origin_addr >= 0) {
         cbm_orig_addr = cbm_relocate_origin_addr;
     } else {
@@ -456,6 +468,7 @@ int main(int argc, char *argv[]) {
       ctx.unpacked_size -= 2;
     }
 
+    /* take care of range (--from --to) */
     if (cbm_range_from < 0) cbm_range_from = cbm_orig_addr;
     if (cbm_range_to < 0) cbm_range_to = cbm_orig_addr + ctx.unpacked_size;
 
@@ -470,17 +483,38 @@ int main(int argc, char *argv[]) {
         cbm_range_from = cbm_orig_addr;
         fprintf(stderr, "Warning: File starts at $%04x, adopting --from value\n", cbm_range_from);
     }
+    if (cbm_range_from > cbm_range_to) {
+        fprintf(stderr, "Error: --from beyond fileend ($%04x - $%04x)\n", cbm_range_from, cbm_range_to);
+        exit(1);
+    }
+
+    /* determine dict filename and handling --prefix-from */
+    if (cbm_prefix_from >= 0) {
+        /* if range is below start_address, adopt range */
+        if (cbm_prefix_from < cbm_orig_addr) {
+            cbm_prefix_from = cbm_orig_addr;
+            fprintf(stderr, "Warning: File starts at $%04x, adopting --prefix-from value\n", cbm_prefix_from);
+        }
+        if (prefix_name == NULL) {
+            prefix_name = (char *)malloc(strlen(output_name) + 6);
+            strcpy(prefix_name, output_name);
+            strcat(prefix_name, ".dict");
+            printf("prefix ($%04x - $%04x): %s\n", cbm_prefix_from, cbm_range_from, prefix_name);
+            ctx.clamped_fp = fopen(prefix_name, "wb");
+            if (fwrite(ctx.unpacked_data + cbm_prefix_from - cbm_orig_addr, sizeof(char), cbm_range_from - cbm_prefix_from, ctx.clamped_fp) != cbm_range_from - cbm_prefix_from) {
+                fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
+                exit(1);
+            }
+            fclose(ctx.clamped_fp);
+        }
+    }
+
     /* load file from start_pos on only, so skip bytes on input */
     ctx.unpacked_data += (cbm_range_from - cbm_orig_addr);
     /* also adopt ctx.unpacked_size */
     ctx.unpacked_size -= (cbm_range_from - cbm_orig_addr);
 
     cbm_orig_addr = cbm_range_from;
-
-    if (cbm_range_from > cbm_range_to) {
-        fprintf(stderr, "Error: --from beyond fileend ($%04x - $%04x)\n", cbm_range_from, cbm_range_to);
-        exit(1);
-    }
 
     if (ctx.unpacked_size < 2) {
         fprintf(stderr, "Error: Input too small\n");
@@ -515,10 +549,14 @@ int main(int argc, char *argv[]) {
     fclose(ctx.clamped_fp);
 
     /* compress data with salvador */
-    salvador_argv[0] = "salvador";
-    salvador_argv[1] = output_name;
-    salvador_argv[2] = output_name;
-    salvador_main(3, salvador_argv);
+    salvador_argv[salvador_argc++] = "salvador";
+    if (cbm_prefix_from >= 0) {
+        salvador_argv[salvador_argc++] = "-D";
+        salvador_argv[salvador_argc++] = prefix_name;
+    }
+    salvador_argv[salvador_argc++] = output_name;
+    salvador_argv[salvador_argc++] = output_name;
+    salvador_main(salvador_argc, salvador_argv);
     //shell_call = (char *)malloc(strlen(output_name) + strlen(output_name) + strlen(compressor_path) + 3);
     //sprintf(shell_call, "%s %s %s", compressor_path, output_name, output_name);
     //if (system(shell_call) == -1) {
