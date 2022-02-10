@@ -387,19 +387,18 @@ int main(int argc, char *argv[]) {
 
     if (argc == 1) {
         fprintf(stderr, "Usage: %s [options] input\n"
-                        "  -o [filename]               Set output filename\n"
-                        "  --sfx [num]                 Create a c64 compatible sfx-executable\n"
-                        "  --01 [num]                  Set 01 to [num] after sfx\n"
-                        "  --cli [num]                 Do a CLI after sfx, default is SEI\n"
+                        "  -o [filename]               Set output filename.\n"
+                        "  --sfx [num]                 Create a c64 compatible sfx-executable.\n"
+                        "  --01 [num]                  Set 01 to [num] after sfx.\n"
+                        "  --cli [num]                 Do a CLI after sfx, default is SEI.\n"
                         "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!)\n"
-                        "  --no-inplace                Disable inplace-decompression\n"
-                        "  --binfile                   Input file is a raw binary without load-address\n"
-                        "  --from [num]                Compress file from [num] on\n"
-                        "  --to [num]                  Compress file until position [num]\n"
-                        "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from)\n"
+                        "  --no-inplace                Disable inplace-decompression.\n"
+                        "  --binfile                   Input file is a raw binary without load-address.\n"
+                        "  --from [num]                Compress file from [num] on.\n"
+                        "  --to [num]                  Compress file until position [num].\n"
+                        "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from). Creates a file named '[input].dict'.\n"
                         "  --relocate-packed [num]     Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
                         "  --relocate-origin [num]     Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
-
                         ,argv[0]);
         exit(1);
     }
@@ -500,9 +499,13 @@ int main(int argc, char *argv[]) {
             strcpy(prefix_name, output_name);
             strcat(prefix_name, ".dict");
             printf("prefix ($%04x - $%04x): %s\n", cbm_prefix_from, cbm_range_from, prefix_name);
-            ctx.clamped_fp = fopen(prefix_name, "wb");
+            ctx.clamped_fp = fopen(prefix_name, "wb");	//could be wxb and we do a check on overwrite?
+            if (!ctx.clamped_fp) {
+                fprintf(stderr, "Error: Cannot write dict file %s\n", prefix_name);
+                exit(1);
+            }
             if (fwrite(ctx.unpacked_data + cbm_prefix_from - cbm_orig_addr, sizeof(char), cbm_range_from - cbm_prefix_from, ctx.clamped_fp) != cbm_range_from - cbm_prefix_from) {
-                fprintf(stderr, "Error: Cannot write output file %s\n", output_name);
+                fprintf(stderr, "Error: Cannot write dict file %s\n", prefix_name);
                 exit(1);
             }
             fclose(ctx.clamped_fp);
