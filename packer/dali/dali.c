@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include "sfx_small.h"
 #include "sfx_fast.h"
 
@@ -319,7 +318,7 @@ int main(int argc, char *argv[]) {
     char *sfx_code = NULL;
 
     char tmp_name[] = "dict-XXXXXX";
-    int dict_file = 0;
+    FILE *dict_file = NULL;
     unsigned char *dict_data = NULL;
     int dict_size = 0;
 
@@ -549,17 +548,17 @@ int main(int argc, char *argv[]) {
     /* ctreate temp file for dict */
     if (cbm_prefix_from >= 0) {
         if (ctx.prefix_name == NULL) {
-            ctx.prefix_name = (char*)malloc(sizeof(tmp_name) + 1);
+            ctx.prefix_name = (char*)malloc(sizeof(tmp_name));
             strcpy(ctx.prefix_name, tmp_name);
-            dict_file = mkstemp(ctx.prefix_name);
+            dict_file = fdopen(mkstemp(ctx.prefix_name),"wb");
             printf("using prefix: $%04x - $%04x\n", cbm_prefix_from, cbm_prefix_from + dict_size);
             if (!dict_file) {
                 fprintf(stderr, "Error: Cannot create dict file %s\n", ctx.prefix_name);
                 exit(1);
             }
-            if (!dict_data || write(dict_file, dict_data, dict_size) == - 1) {
+            if (!dict_data || fwrite(dict_data, sizeof(char), dict_size, dict_file) != dict_size) {
                 fprintf(stderr, "Error: Cannot write dict file %s\n", ctx.prefix_name);
-                unlink(ctx.prefix_name);
+                remove(ctx.prefix_name);
                 exit(1);
             }
         }
@@ -582,7 +581,7 @@ int main(int argc, char *argv[]) {
     //}
 
     /* delete dict */
-    unlink(ctx.prefix_name);
+    remove(ctx.prefix_name);
 
     /* read packed data */
     ctx.packed_fp = fopen(ctx.output_name, "rb");
