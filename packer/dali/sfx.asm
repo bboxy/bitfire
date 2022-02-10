@@ -229,13 +229,13 @@ lz_src = * + 1
 		sta <lz_dst + 0
 !ifdef SFX_FAST {
 		bcs .lz_clc			;/!\ branch happens less than fall through, only in case of branch carry needs to be cleared :-(
-} else {
-		bcc +
-		clc
-		top
-+
-}
 		dec <lz_dst + 1
+} else {
+		bcs +
+		dec <lz_dst + 1
++
+		clc
+}
 .lz_clc_
 .lz_offset_lo = * + 1
 		sbc #$00
