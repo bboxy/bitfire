@@ -128,3 +128,4 @@ v1.1
 - decomp: ~20% faster than with v0.7
 - pack ratio: ~5,5% smaller than bitnax
 - add --prefix-from to dali
+- add --prefix-file to dali

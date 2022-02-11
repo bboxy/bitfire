@@ -37,8 +37,11 @@ Input file is a raw binary without load-address, the load-address needed is take
 --to [$num]
 With those two flags the file can be cut into desired slices that are then fed to the packer. This way the file can easily split up into a portion that gies up until $d000 and a portion that gies from $d000-$ffff (remember, no loading under i/o possible)
 
---use-prefix
-Use preceeding data of file as dictionary. This requires, that the data referenced here is also in memory at the same location when depacking.
+--prefix-from [$num]
+Use preceeding data of file as dictionary. This requires, that the data referenced here is also in memory at the same location when depacking. You can specify from which address on the dictionary should be used.
+
+--prefix-file [filename]
+Same as above, but by handing over a file that contains the preceeding dictionary data.
 
 --relocate-packed [$num]
 Relocate packed data to desired address [$num]. The resulting file can't de decompressed inplace anymore after that, as it requires an end-marker then.
@@ -267,9 +270,20 @@ This will result in two files that can be loaded/depacked in one go by link_load
 Basically the load_next_double call is loading the first part and decrunching it on the fly, then loading the next part raw, switching off the IO, depacking that and turning on IO again.
 
 Other interesting options are:
---use-prefix
+--prefix-from [addr]
+--prefix-file [filename]
 
-If you split a file and load both parts one after another, you can add this switch to the second part. It will then be packed with using the already loaded data as dictionary, what will result in smaller files.
+If you split a file and load both parts one after another, you can add this switch to the second part. It will then be packed with using the already loaded data as dictionary from the given address on, what will result in smaller files. Alternatively you can also give a file taht is prepended and used as dictionary.
+
+Example:
+dali -o demopart1.prg --from 0x2000 --to 0x8000 demopart.prg
+dali -o demopart2.prg --prefix-from 0x2000 --from 0x8000 --to 0xd000 demopart.prg
+dali -o demopart3.prg --prefix-from 0x2000 --from 0xd000 --to 0xffff demopart.prg
+
+This will split up demopart.prg into three chunks that can be loaded one after another as soon as the memory is free. Part2 can already refer to data from part1 and part3 can refer to data from part2 and part1. If there's code inbetween that changes while loading, just choose another memory range for the dict:
+dali -o demopart1.prg --from 0x2000 --to 0x8000 demopart.prg
+dali -o demopart2.prg --prefix-from 0x2000 --from 0x8000 --to 0xd000 demopart.prg	#code from $2000-$4000 is changed while loading demopart3
+dali -o demopart3.prg --prefix-from 0x4000 --from 0xd000 --to 0xffff demopart.prg
 
 NMI-gaps
 --------
