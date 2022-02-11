@@ -18,6 +18,7 @@ typedef struct ctx {
     FILE *reencoded_fp;
     FILE *unpacked_fp;
     FILE *clamped_fp;
+
     unsigned char *packed_data;
     unsigned char *reencoded_data;
     unsigned char *unpacked_data;
@@ -32,9 +33,27 @@ typedef struct ctx {
     size_t unpacked_index;
     size_t unpacked_size;
     int inplace;
+
     char *output_name;
     char *input_name;
     char *prefix_name;
+
+    int cbm;
+    int cbm_orig_addr;
+    int cbm_packed_addr;
+    int cbm_range_from;
+    int cbm_range_to;
+    int cbm_relocate_packed_addr;
+    int cbm_relocate_origin_addr;
+    int cbm_prefix_from;
+
+    int sfx;
+    int sfx_addr;
+    int sfx_01;
+    int sfx_cli;
+    int sfx_small;
+    int sfx_size;
+    char *sfx_code;
 } ctx;
 
 void salvador_main();
@@ -151,21 +170,7 @@ int read_interlaced_elias_gamma(ctx* ctx, int inverted, int skip) {
     return value;
 }
 
-void save_reencoded(ctx* ctx, int cbm_orig_addr, int cbm_packed_addr) {
-    if (ctx->packed_index != 0) {
-        /* little endian */
-        file_write_byte(cbm_packed_addr & 255, ctx->reencoded_fp);
-        file_write_byte((cbm_packed_addr >> 8) & 255, ctx->reencoded_fp);
-        /* big endian, as read backwards by depacker */
-        file_write_byte((cbm_orig_addr >> 8) & 255, ctx->reencoded_fp);
-        file_write_byte(cbm_orig_addr & 255, ctx->reencoded_fp);
-
-        if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, ctx->reencoded_fp) != ctx->packed_index) {
-            fprintf(stderr, "Error: Cannot write output file\n");
-            perror("fwrite");
-            exit(1);
-        }
-    }
+void save_reencoded_stream(ctx* ctx) {
 }
 
 void copy_inplace_literal(ctx* ctx) {
@@ -197,7 +202,7 @@ void encode_match(ctx* ctx, int length, int offset) {
     write_reencoded_interlaced_elias_gamma(ctx, length - 1, 1);
 }
 
-void reencode(ctx* ctx) {
+void reencode_packed_stream(ctx* ctx) {
     int last_offset = INITIAL_OFFSET;
     int length;
     int overwrite;
@@ -298,83 +303,353 @@ void reencode(ctx* ctx) {
     }
 }
 
-int main(int argc, char *argv[]) {
-    int cbm_orig_addr = 0;
-    int cbm_packed_addr = 0;
-    int cbm_range_from = -1;
-    int cbm_range_to = -1;
-    int cbm_relocate_packed_addr = -1;
-    int cbm_relocate_origin_addr = -1;
-    int cbm_prefix_from = -1;
+void write_reencoded_stream(ctx* ctx) {
+    /* write reencoded output file */
+    ctx->reencoded_fp = fopen(ctx->output_name, "wb");
+    if (!ctx->reencoded_fp) {
+        fprintf(stderr, "Error: Cannot create reencoded file (%s)\n", ctx->output_name);
+        exit(1);
+    }
 
-    int cbm;
+    /* as sfx */
+    if (ctx->sfx) {
+        printf("Creating sfx with start-address $%04x\n", ctx->sfx_addr);
+        if (ctx->sfx_small) {
+            ctx->sfx_size = sizeof(decruncher_small);
+            /* copy over to change values in code */
+            ctx->sfx_code = (char *)malloc(ctx->sfx_size);
+            memcpy (ctx->sfx_code, decruncher_small, ctx->sfx_size);
 
-    int sfx;
-    int sfx_addr = -1;
-    int sfx_01 = -1;
-    int sfx_cli = FALSE;
-    int sfx_small = FALSE;
-    int sfx_size;
-    char *sfx_code = NULL;
+            /* setup jmp target after decompression */
+            ctx->sfx_code[DALI_SMALL_SFX_ADDR + 0] = ctx->sfx_addr & 0xff;
+            ctx->sfx_code[DALI_SMALL_SFX_ADDR + 1] = (ctx->sfx_addr >> 8) & 0xff;
 
+            /* setup decompression destination */
+            ctx->sfx_code[DALI_SMALL_DST + 0] = ctx->cbm_orig_addr & 0xff;
+            ctx->sfx_code[DALI_SMALL_DST + 1] = (ctx->cbm_orig_addr >> 8) & 0xff;
+
+            /* setup compressed data src */
+            ctx->sfx_code[DALI_SMALL_SRC + 0] = (0x10000 - ctx->reencoded_index) & 0xff;
+            ctx->sfx_code[DALI_SMALL_SRC + 1] = ((0x10000 - ctx->reencoded_index) >> 8) & 0xff;
+
+            /* setup compressed data end */
+            ctx->sfx_code[DALI_SMALL_DATA_END + 0] = (0x0801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
+            ctx->sfx_code[DALI_SMALL_DATA_END + 1] = ((0x0801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
+
+            ctx->sfx_code[DALI_SMALL_DATA_SIZE_HI] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
+        } else {
+            ctx->sfx_size = sizeof(decruncher);
+            /* copy over to change values in code */
+            ctx->sfx_code = (char *)malloc(ctx->sfx_size);
+            memcpy (ctx->sfx_code, decruncher, ctx->sfx_size);
+
+            if (ctx->sfx_01 < 0) ctx->sfx_01 = 0x37;
+
+            /* setup jmp target after decompression */
+            ctx->sfx_code[DALI_FAST_SFX_ADDR + 0] = ctx->sfx_addr & 0xff;
+            ctx->sfx_code[DALI_FAST_SFX_ADDR + 1] = (ctx->sfx_addr >> 8) & 0xff;
+
+            /* setup decompression destination */
+            ctx->sfx_code[DALI_FAST_DST + 0] = ctx->cbm_orig_addr & 0xff;
+            ctx->sfx_code[DALI_FAST_DST + 1] = (ctx->cbm_orig_addr >> 8) & 0xff;
+
+            /* setup compressed data src */
+            ctx->sfx_code[DALI_FAST_SRC + 0] = (0x10000 - ctx->reencoded_index) & 0xff;
+            ctx->sfx_code[DALI_FAST_SRC + 1] = ((0x10000 - ctx->reencoded_index) >> 8) & 0xff;
+
+            /* setup compressed data end */
+            ctx->sfx_code[DALI_FAST_DATA_END + 0] = (0x0801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
+            ctx->sfx_code[DALI_FAST_DATA_END + 1] = ((0x0801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
+
+            ctx->sfx_code[DALI_FAST_DATA_SIZE_HI] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
+
+            ctx->sfx_code[DALI_FAST_01] = ctx->sfx_01;
+            if (ctx->sfx_cli) ctx->sfx_code[DALI_FAST_CLI] = 0x58;
+        }
+        printf("original: $%04x-$%04lx ($%04lx) 100%%\n", ctx->cbm_orig_addr, ctx->cbm_orig_addr + ctx->unpacked_size, ctx->unpacked_size);
+        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)ctx->sfx_size + ctx->packed_index, (int)ctx->sfx_size + ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
+
+        if (fwrite(ctx->sfx_code, sizeof(char), ctx->sfx_size, ctx->reencoded_fp) != ctx->sfx_size) {
+            fprintf(stderr, "Error: Cannot write output file %s\n", ctx->output_name);
+            exit(1);
+        }
+    /* or standard compressed */
+    } else {
+        if (ctx->cbm_relocate_origin_addr >= 0) {
+            ctx->cbm_orig_addr = ctx->cbm_relocate_origin_addr;
+            ctx->cbm = TRUE;
+        }
+
+        if (ctx->inplace) {
+            ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2;
+        } else {
+            if (ctx->cbm_relocate_packed_addr >= 0) {
+                ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
+            } else {
+                ctx->cbm_packed_addr = ctx->cbm_orig_addr;
+            }
+        }
+
+        printf("original: $%04x-$%04lx ($%04lx) 100%%\n", ctx->cbm_orig_addr, ctx->cbm_orig_addr + ctx->unpacked_size, ctx->unpacked_size);
+        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", ctx->cbm_packed_addr, ctx->cbm_packed_addr + ctx->packed_index + 2, ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
+
+        if (ctx->cbm) {
+            if ((ctx->cbm_packed_addr >= 0xd000 && ctx->cbm_packed_addr < 0xe000) || (ctx->cbm_packed_addr < 0xd000 && ctx->cbm_packed_addr + ctx->packed_index + 2 > 0xd000)) {
+                fprintf(stderr, "Error: Packed file lies in I/O-range from $d000-$dfff\n");
+                exit(1);
+            }
+        }
+
+        /* little endian */
+        file_write_byte(ctx->cbm_packed_addr & 255, ctx->reencoded_fp);
+        file_write_byte((ctx->cbm_packed_addr >> 8) & 255, ctx->reencoded_fp);
+
+        /* big endian, as read backwards by depacker */
+        file_write_byte((ctx->cbm_orig_addr >> 8) & 255, ctx->reencoded_fp);
+        file_write_byte(ctx->cbm_orig_addr & 255, ctx->reencoded_fp);
+
+    }
+
+    if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, ctx->reencoded_fp) != ctx->packed_index) {
+        fprintf(stderr, "Error: Cannot write output file\n");
+        exit(1);
+    }
+    fclose(ctx->reencoded_fp);
+}
+
+void do_reencode(ctx* ctx) {
     char tmp_name[] = "dict-XXXXXX";
     FILE *dict_file = NULL;
     unsigned char *dict_data = NULL;
     int dict_size = 0;
-
-    //char *compressor_path = NULL;
-    //char *shell_call = NULL;
-
-    int i;
-
     char *salvador_argv[5];
     int salvador_argc = 0;
+    int dict_temp = FALSE;
+
+    /* determine output filename */
+    if (ctx->output_name == NULL) {
+        ctx->output_name = (char *)malloc(strlen(ctx->input_name) + 4);
+        strcpy(ctx->output_name, ctx->input_name);
+        strcat(ctx->output_name, ".lz");
+        printf("output name: %s\n", ctx->output_name);
+    }
+
+    /* allocate buffers */
+    ctx->packed_data = (unsigned char *)malloc(BUFFER_SIZE);
+    ctx->unpacked_data = (unsigned char *)malloc(BUFFER_SIZE + 2);
+    ctx->reencoded_data = (unsigned char *)malloc(BUFFER_SIZE);
+
+    if (!ctx->packed_data || !ctx->unpacked_data || !ctx->reencoded_data) {
+        fprintf(stderr, "Error: Insufficient memory\n");
+        exit(1);
+    }
+
+    /* load unpacked file */
+    ctx->unpacked_fp = fopen(ctx->input_name, "rb");
+    if (!ctx->unpacked_fp) {
+        fprintf(stderr, "Error: Cannot access input file\n");
+        exit(1);
+    }
+    ctx->unpacked_size = fread(ctx->unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx->unpacked_fp);
+    fclose(ctx->unpacked_fp);
+
+    /* ctx->cbm address handling */
+    if (ctx->cbm_relocate_origin_addr >= 0) {
+        ctx->cbm_orig_addr = ctx->cbm_relocate_origin_addr;
+    } else {
+        ctx->cbm_orig_addr = ctx->unpacked_data[0] + (ctx->unpacked_data[1] << 8);
+    }
+
+    if (ctx->cbm) {
+      ctx->unpacked_data += 2;
+      ctx->unpacked_size -= 2;
+    }
+
+    /* take care of range (--from --to) */
+    if (ctx->cbm_range_from < 0) ctx->cbm_range_from = ctx->cbm_orig_addr;
+    if (ctx->cbm_range_to < 0) ctx->cbm_range_to = ctx->cbm_orig_addr + ctx->unpacked_size;
+
+    if ((ctx->cbm_range_to - ctx->cbm_orig_addr) > ctx->unpacked_size) {
+        ctx->cbm_range_to = ctx->unpacked_size + ctx->cbm_orig_addr;
+        fprintf(stderr, "Warning: File ends at $%04x, adopting --to value\n", ctx->cbm_range_to);
+    }
+    ctx->unpacked_size = (ctx->cbm_range_to - ctx->cbm_orig_addr);
+
+    /* if range is below start_address, adopt range */
+    if (ctx->cbm_range_from < ctx->cbm_orig_addr) {
+        ctx->cbm_range_from = ctx->cbm_orig_addr;
+        fprintf(stderr, "Warning: File starts at $%04x, adopting --from value\n", ctx->cbm_range_from);
+    }
+    if (ctx->cbm_range_from > ctx->cbm_range_to) {
+        fprintf(stderr, "Error: --from beyond fileend ($%04x - $%04x)\n", ctx->cbm_range_from, ctx->cbm_range_to);
+        exit(1);
+    }
+
+    /* setup dict lengths and position */
+    if (ctx->cbm_prefix_from >= 0) {
+        /* if range is below start_address, adopt range */
+        if (ctx->cbm_prefix_from < ctx->cbm_orig_addr) {
+            ctx->cbm_prefix_from = ctx->cbm_orig_addr;
+            fprintf(stderr, "Warning: File starts at $%04x, adopting --prefix-from value\n", ctx->cbm_prefix_from);
+        }
+        dict_data = ctx->unpacked_data + ctx->cbm_prefix_from - ctx->cbm_orig_addr;
+        dict_size = ctx->cbm_range_from - ctx->cbm_prefix_from;
+    }
+
+    /* load file from start_pos on only, so skip bytes on input */
+    ctx->unpacked_data += (ctx->cbm_range_from - ctx->cbm_orig_addr);
+    /* also adopt ctx->unpacked_size */
+    ctx->unpacked_size -= (ctx->cbm_range_from - ctx->cbm_orig_addr);
+    /* and set up new load-address */
+    ctx->cbm_orig_addr = ctx->cbm_range_from;
+
+    if (ctx->unpacked_size <= 0) {
+        fprintf(stderr, "Error: Input too small\n");
+        exit(1);
+    }
+
+    printf("Compressing from $%04x to $%04x = $%04lx bytes\n", ctx->cbm_range_from, ctx->cbm_range_to, ctx->unpacked_size);
+
+    if (ctx->cbm_relocate_packed_addr >= 0 || ctx->sfx) {
+        ctx->inplace = FALSE;
+    }
+
+    /* write clamped raw data */
+    ctx->clamped_fp = fopen(ctx->output_name, "wb");
+    if (!ctx->clamped_fp) {
+        fprintf(stderr, "Error: Cannot create clamped file (%s)\n", ctx->output_name);
+        perror("fopen");
+        exit(1);
+    }
+    if (ctx->unpacked_size != 0) {
+        if (fwrite(ctx->unpacked_data, sizeof(char), ctx->unpacked_size, ctx->clamped_fp) != ctx->unpacked_size) {
+            fprintf(stderr, "Error: Cannot write clamped file\n");
+            perror("fwrite");
+            exit(1);
+        }
+    }
+    fclose(ctx->clamped_fp);
+
+    /* ctreate temp file for dict */
+    if (ctx->cbm_prefix_from >= 0) {
+        if (ctx->prefix_name == NULL) {
+            ctx->prefix_name = (char*)malloc(sizeof(tmp_name));
+            strcpy(ctx->prefix_name, tmp_name);
+            dict_file = fdopen(mkstemp(ctx->prefix_name),"wb");
+            printf("using prefix: $%04x - $%04x\n", ctx->cbm_prefix_from, ctx->cbm_prefix_from + dict_size);
+            if (!dict_file) {
+                fprintf(stderr, "Error: Cannot create dict file %s\n", ctx->prefix_name);
+                exit(1);
+            }
+            if (!dict_data || fwrite(dict_data, sizeof(char), dict_size, dict_file) != dict_size) {
+                fprintf(stderr, "Error: Cannot write dict file %s\n", ctx->prefix_name);
+                remove(ctx->prefix_name);
+                exit(1);
+            }
+            dict_temp = TRUE;
+        }
+    }
+
+    /* compress data with salvador */
+    salvador_argv[salvador_argc++] = "salvador";
+    if (ctx->prefix_name) {
+        salvador_argv[salvador_argc++] = "-D";
+        salvador_argv[salvador_argc++] = ctx->prefix_name;
+    }
+    salvador_argv[salvador_argc++] = ctx->output_name;
+    salvador_argv[salvador_argc++] = ctx->output_name;
+    salvador_main(salvador_argc, salvador_argv);
+
+    /* delete dict */
+    if (dict_temp) remove(ctx->prefix_name);
+
+    /* read packed data */
+    ctx->packed_fp = fopen(ctx->output_name, "rb");
+    if (!ctx->packed_fp) {
+        fprintf(stderr, "Error: Cannot access input file\n");
+        exit(1);
+    }
+    ctx->packed_size = fread(ctx->packed_data, sizeof(char), BUFFER_SIZE, ctx->packed_fp);
+    fclose(ctx->packed_fp);
+
+    /* determine size without eof-marker -> remove 18 bits, either 2 byte or three byte depending on position of last bitpair */
+    if (ctx->packed_data[ctx->packed_size - 1] & 0x80) ctx->packed_size -= 3;
+    else ctx->packed_size -= 2;
+
+    reencode_packed_stream(ctx);
+
+    if (ctx->packed_index + 2 > ctx->unpacked_size) {
+        fprintf(stderr, "Error: Packed file larger than original\n");
+        exit(1);
+    }
+
+    write_reencoded_stream(ctx);
+    return;
+}
+
+int main(int argc, char *argv[]) {
+    int i;
 
     ctx ctx = { 0 };
 
-    ctx.inplace = TRUE;
     ctx.output_name = NULL;
     ctx.input_name = NULL;
     ctx.prefix_name = NULL;
-    cbm = TRUE;
-    sfx = FALSE;
+
+    ctx.inplace = TRUE;
+
+    ctx.cbm = TRUE;
+    ctx.cbm_orig_addr = 0;
+    ctx.cbm_packed_addr = 0;
+    ctx.cbm_range_from = -1;
+    ctx.cbm_range_to = -1;
+    ctx.cbm_relocate_packed_addr = -1;
+    ctx.cbm_relocate_origin_addr = -1;
+    ctx.cbm_prefix_from = -1;
+
+    ctx.sfx = FALSE;
+    ctx.sfx_addr = -1;
+    ctx.sfx_01 = -1;
+    ctx.sfx_cli = FALSE;
+    ctx.sfx_small = FALSE;
+    ctx.sfx_code = NULL;
 
     for (i = 1; i < argc; i++) {
         if (!strncmp(argv[i], "-", 1) || !strncmp(argv[i], "--", 2)) {
             if (!strcmp(argv[i], "--binfile")) {
-                cbm = FALSE;
+                ctx.cbm = FALSE;
             } else if (!strcmp(argv[i], "--prefix-from")) {
-                cbm_prefix_from = read_number(argv[i + 1], argv[i], 65536);
+                ctx.cbm_prefix_from = read_number(argv[i + 1], argv[i], 65536);
                 i++;
+            } else if (!strcmp(argv[i], "--prefix-file")) {
+                i++;
+                ctx.prefix_name = argv[i];
             } else if (!strcmp(argv[i], "--no-inplace")) {
                 ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "--small")) {
-                sfx_small = TRUE;
+                ctx.sfx_small = TRUE;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
-                cbm_relocate_packed_addr = read_number(argv[i + 1], argv[i], 65536);
+                ctx.cbm_relocate_packed_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
             } else if (!strcmp(argv[i], "--relocate-origin")) {
-                cbm_relocate_origin_addr = read_number(argv[i + 1], argv[i], 65536);
+                ctx.cbm_relocate_origin_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
             } else if (!strcmp(argv[i], "--from")) {
-                cbm_range_from = read_number(argv[i + 1], argv[i], 65536);
+                ctx.cbm_range_from = read_number(argv[i + 1], argv[i], 65536);
                 i++;
             } else if (!strcmp(argv[i], "--to")) {
-                cbm_range_to = read_number(argv[i + 1], argv[i], 65536);
+                ctx.cbm_range_to = read_number(argv[i + 1], argv[i], 65536);
                 i++;
             } else if (!strcmp(argv[i], "--01")) {
-                sfx_01 = read_number(argv[i + 1], argv[i], 256);
+                ctx.sfx_01 = read_number(argv[i + 1], argv[i], 256);
                 i++;
             } else if (!strcmp(argv[i], "--cli")) {
-                sfx_cli = TRUE;
+                ctx.sfx_cli = TRUE;
             } else if (!strcmp(argv[i], "--sfx")) {
-                sfx_addr = read_number(argv[i + 1], argv[i], 65536);
+                ctx.sfx_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
-                sfx = TRUE;
+                ctx.sfx = TRUE;
                 ctx.inplace = FALSE;
-     //       } else if (!strcmp(argv[i], "-x")) {
-     //           i++;
-     //           compressor_path = argv[i];
             } else if (!strcmp(argv[i], "-o")) {
                 i++;
                 ctx.output_name = argv[i];
@@ -390,7 +665,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("dali v0.2 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
+    printf("dali v0.3 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
     printf("underlying zx0-packer salvador by Emmanuel Marty\n");
 
     if (argc == 1) {
@@ -404,305 +679,34 @@ int main(int argc, char *argv[]) {
                         "  --binfile                   Input file is a raw binary without load-address.\n"
                         "  --from [num]                Compress file from [num] on.\n"
                         "  --to [num]                  Compress file until position [num].\n"
-                        "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from). Creates a file named '[input].dict'.\n"
+                        "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from).\n"
+                        "  --prefix-file [file]        Use preceeding data from [file] as dictionary.\n"
                         "  --relocate-packed [num]     Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
                         "  --relocate-origin [num]     Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
                         ,argv[0]);
         exit(1);
     }
 
-    if (!sfx && sfx_small) {
+    if (!ctx.sfx && ctx.sfx_small) {
         fprintf(stderr, "Info: No sfx, ignoring --small option\n");
     }
-    if (!sfx && sfx_01 >= 0) {
+    if (!ctx.sfx && ctx.sfx_01 >= 0) {
         fprintf(stderr, "Info: No sfx, ignoring --01 option\n");
     }
-    if (!sfx && sfx_cli) {
+    if (!ctx.sfx && ctx.sfx_cli) {
         fprintf(stderr, "Info: No sfx, ignoring --cli option\n");
     }
-
-    //if (compressor_path == NULL) {
-    //    fprintf(stderr, "Error: No compressor path given\n");
-    //    exit(1);
-   // }
 
     if (ctx.input_name == NULL) {
         fprintf(stderr, "Error: No input-filename given\n");
         exit(1);
     }
 
-    if (cbm_prefix_from >= 0 && cbm_range_from <= 0) {
+    if (ctx.cbm_prefix_from >= 0 && ctx.cbm_range_from <= 0) {
         fprintf(stderr, "Error: Dict is zero size (use --from)\n");
         exit(1);
     }
 
-    /* determine output filename */
-    if (ctx.output_name == NULL) {
-        ctx.output_name = (char *)malloc(strlen(ctx.input_name) + 4);
-        strcpy(ctx.output_name, ctx.input_name);
-        strcat(ctx.output_name, ".lz");
-        printf("output name: %s\n", ctx.output_name);
-    }
-
-    ctx.packed_data = (unsigned char *)malloc(BUFFER_SIZE);
-    ctx.unpacked_data = (unsigned char *)malloc(BUFFER_SIZE + 2);
-    ctx.reencoded_data = (unsigned char *)malloc(BUFFER_SIZE);
-
-    if (!ctx.packed_data || !ctx.unpacked_data || !ctx.reencoded_data) {
-        fprintf(stderr, "Error: Insufficient memory\n");
-        exit(1);
-    }
-
-    /* load unpacked file */
-    ctx.unpacked_fp = fopen(ctx.input_name, "rb");
-    if (!ctx.unpacked_fp) {
-        fprintf(stderr, "Error: Cannot access input file\n");
-        perror("fopen");
-        exit(1);
-    }
-    ctx.unpacked_size = fread(ctx.unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx.unpacked_fp);
-    fclose(ctx.unpacked_fp);
-
-    /* cbm address handling */
-    if (cbm_relocate_origin_addr >= 0) {
-        cbm_orig_addr = cbm_relocate_origin_addr;
-    } else {
-        cbm_orig_addr = ctx.unpacked_data[0] + (ctx.unpacked_data[1] << 8);
-    }
-
-    if (cbm) {
-      ctx.unpacked_data += 2;
-      ctx.unpacked_size -= 2;
-    }
-
-    /* take care of range (--from --to) */
-    if (cbm_range_from < 0) cbm_range_from = cbm_orig_addr;
-    if (cbm_range_to < 0) cbm_range_to = cbm_orig_addr + ctx.unpacked_size;
-
-    if ((cbm_range_to - cbm_orig_addr) > ctx.unpacked_size) {
-        cbm_range_to = ctx.unpacked_size + cbm_orig_addr;
-        fprintf(stderr, "Warning: File ends at $%04x, adopting --to value\n", cbm_range_to);
-    }
-    ctx.unpacked_size = (cbm_range_to - cbm_orig_addr);
-
-    /* if range is below start_address, adopt range */
-    if (cbm_range_from < cbm_orig_addr) {
-        cbm_range_from = cbm_orig_addr;
-        fprintf(stderr, "Warning: File starts at $%04x, adopting --from value\n", cbm_range_from);
-    }
-    if (cbm_range_from > cbm_range_to) {
-        fprintf(stderr, "Error: --from beyond fileend ($%04x - $%04x)\n", cbm_range_from, cbm_range_to);
-        exit(1);
-    }
-
-    /* setup dict lengths and position */
-    if (cbm_prefix_from >= 0) {
-        /* if range is below start_address, adopt range */
-        if (cbm_prefix_from < cbm_orig_addr) {
-            cbm_prefix_from = cbm_orig_addr;
-            fprintf(stderr, "Warning: File starts at $%04x, adopting --prefix-from value\n", cbm_prefix_from);
-        }
-        dict_data = ctx.unpacked_data + cbm_prefix_from - cbm_orig_addr;
-        dict_size = cbm_range_from - cbm_prefix_from;
-    }
-
-    /* load file from start_pos on only, so skip bytes on input */
-    ctx.unpacked_data += (cbm_range_from - cbm_orig_addr);
-    /* also adopt ctx.unpacked_size */
-    ctx.unpacked_size -= (cbm_range_from - cbm_orig_addr);
-
-    cbm_orig_addr = cbm_range_from;
-
-    if (ctx.unpacked_size < 2) {
-        fprintf(stderr, "Error: Input too small\n");
-        exit(1);
-    }
-
-    printf("Compressing from $%04x to $%04x = $%04lx bytes\n", cbm_range_from, cbm_range_to, ctx.unpacked_size);
-
-    if (cbm_relocate_packed_addr >= 0) {
-        ctx.inplace = FALSE;
-    }
-
-    if (sfx) {
-        ctx.inplace = FALSE;
-        printf("Creating sfx with start-address $%04x\n", sfx_addr);
-    }
-
-    /* write clamped raw data */
-    ctx.clamped_fp = fopen(ctx.output_name, "wb");
-    if (!ctx.clamped_fp) {
-        fprintf(stderr, "Error: Cannot create clamped file (%s)\n", ctx.output_name);
-        perror("fopen");
-        exit(1);
-    }
-    if (ctx.unpacked_size != 0) {
-        if (fwrite(ctx.unpacked_data, sizeof(char), ctx.unpacked_size, ctx.clamped_fp) != ctx.unpacked_size) {
-            fprintf(stderr, "Error: Cannot write clamped file\n");
-            perror("fwrite");
-            exit(1);
-        }
-    }
-    fclose(ctx.clamped_fp);
-
-    /* ctreate temp file for dict */
-    if (cbm_prefix_from >= 0) {
-        if (ctx.prefix_name == NULL) {
-            ctx.prefix_name = (char*)malloc(sizeof(tmp_name));
-            strcpy(ctx.prefix_name, tmp_name);
-            dict_file = fdopen(mkstemp(ctx.prefix_name),"wb");
-            printf("using prefix: $%04x - $%04x\n", cbm_prefix_from, cbm_prefix_from + dict_size);
-            if (!dict_file) {
-                fprintf(stderr, "Error: Cannot create dict file %s\n", ctx.prefix_name);
-                exit(1);
-            }
-            if (!dict_data || fwrite(dict_data, sizeof(char), dict_size, dict_file) != dict_size) {
-                fprintf(stderr, "Error: Cannot write dict file %s\n", ctx.prefix_name);
-                remove(ctx.prefix_name);
-                exit(1);
-            }
-        }
-    }
-
-    /* compress data with salvador */
-    salvador_argv[salvador_argc++] = "salvador";
-    if (cbm_prefix_from >= 0) {
-        salvador_argv[salvador_argc++] = "-D";
-        salvador_argv[salvador_argc++] = ctx.prefix_name;
-    }
-    salvador_argv[salvador_argc++] = ctx.output_name;
-    salvador_argv[salvador_argc++] = ctx.output_name;
-    salvador_main(salvador_argc, salvador_argv);
-    //shell_call = (char *)malloc(strlen(ctx.output_name) + strlen(ctx.output_name) + strlen(compressor_path) + 3);
-    //sprintf(shell_call, "%s %s %s", compressor_path, ctx.output_name, ctx.output_name);
-    //if (system(shell_call) == -1) {
-    //    fprintf(stderr, "Error: Cannot execute %s\n", shell_call);
-    //    exit(1);
-    //}
-
-    /* delete dict */
-    remove(ctx.prefix_name);
-
-    /* read packed data */
-    ctx.packed_fp = fopen(ctx.output_name, "rb");
-    if (!ctx.packed_fp) {
-        fprintf(stderr, "Error: Cannot access input file\n");
-        exit(1);
-    }
-    ctx.packed_size = fread(ctx.packed_data, sizeof(char), BUFFER_SIZE, ctx.packed_fp);
-    fclose(ctx.packed_fp);
-
-    /* determine size without eof-marker -> remove 18 bits, either 2 byte or three byte depending on position of last bitpair */
-    if (ctx.packed_data[ctx.packed_size - 1] & 0x80) ctx.packed_size -= 3;
-    else ctx.packed_size -= 2;
-
-    /* write reencoded output file */
-    ctx.reencoded_fp = fopen(ctx.output_name, "wb");
-    if (!ctx.reencoded_fp) {
-        fprintf(stderr, "Error: Cannot create reencoded file (%s)\n", ctx.output_name);
-        exit(1);
-    }
-    reencode(&ctx);
-
-    /* as sfx */
-    if (sfx) {
-        if (sfx_small) {
-            sfx_size = sizeof(decruncher_small);
-            /* copy over to change values in code */
-            sfx_code = (char *)malloc(sfx_size);
-            memcpy (sfx_code, decruncher_small, sfx_size);
-
-            /* setup jmp target after decompression */
-            sfx_code[DALI_SMALL_SFX_ADDR + 0] = sfx_addr & 0xff;
-            sfx_code[DALI_SMALL_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
-
-            /* setup decompression destination */
-            sfx_code[DALI_SMALL_DST + 0] = cbm_orig_addr & 0xff;
-            sfx_code[DALI_SMALL_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
-
-            /* setup compressed data src */
-            sfx_code[DALI_SMALL_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
-            sfx_code[DALI_SMALL_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
-
-            /* setup compressed data end */
-            sfx_code[DALI_SMALL_DATA_END + 0] = (0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) & 0xff;
-            sfx_code[DALI_SMALL_DATA_END + 1] = ((0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
-
-            sfx_code[DALI_SMALL_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
-        } else {
-            sfx_size = sizeof(decruncher);
-            /* copy over to change values in code */
-            sfx_code = (char *)malloc(sfx_size);
-            memcpy (sfx_code, decruncher, sfx_size);
-
-            if (sfx_01 < 0) sfx_01 = 0x37;
-
-            /* setup jmp target after decompression */
-            sfx_code[DALI_FAST_SFX_ADDR + 0] = sfx_addr & 0xff;
-            sfx_code[DALI_FAST_SFX_ADDR + 1] = (sfx_addr >> 8) & 0xff;
-
-            /* setup decompression destination */
-            sfx_code[DALI_FAST_DST + 0] = cbm_orig_addr & 0xff;
-            sfx_code[DALI_FAST_DST + 1] = (cbm_orig_addr >> 8) & 0xff;
-
-            /* setup compressed data src */
-            sfx_code[DALI_FAST_SRC + 0] = (0x10000 - ctx.reencoded_index) & 0xff;
-            sfx_code[DALI_FAST_SRC + 1] = ((0x10000 - ctx.reencoded_index) >> 8) & 0xff;
-
-            /* setup compressed data end */
-            sfx_code[DALI_FAST_DATA_END + 0] = (0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) & 0xff;
-            sfx_code[DALI_FAST_DATA_END + 1] = ((0x0801 + sfx_size - 2 + ctx.reencoded_index - 0x100) >> 8) & 0xff;
-
-            sfx_code[DALI_FAST_DATA_SIZE_HI] = 0xff - (((ctx.reencoded_index + 0x100) >> 8) & 0xff);
-
-            sfx_code[DALI_FAST_01] = sfx_01;
-            if (sfx_cli) sfx_code[DALI_FAST_CLI] = 0x58;
-        }
-        printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
-        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)sfx_size + ctx.packed_index, (int)sfx_size + ctx.packed_index, ((float)(ctx.packed_index + (int)sfx_size) / (float)(ctx.unpacked_size) * 100.0));
-
-        if (fwrite(sfx_code, sizeof(char), sfx_size, ctx.reencoded_fp) != sfx_size) {
-            fprintf(stderr, "Error: Cannot write output file %s\n", ctx.output_name);
-            exit(1);
-        }
-        if (fwrite(ctx.reencoded_data, sizeof(char), ctx.reencoded_index, ctx.reencoded_fp) != ctx.reencoded_index) {
-            fprintf(stderr, "Error: Cannot write output file %s\n", ctx.output_name);
-            exit(1);
-        }
-    /* or standard compressed */
-    } else {
-        if (cbm_relocate_origin_addr >= 0) {
-            cbm_orig_addr = cbm_relocate_origin_addr;
-            cbm = TRUE;
-        }
-
-        if (ctx.inplace) {
-            cbm_packed_addr = cbm_range_to - ctx.packed_index - 2;
-        } else {
-            if (cbm_relocate_packed_addr >= 0) {
-                cbm_packed_addr = cbm_relocate_packed_addr;
-            } else {
-                cbm_packed_addr = cbm_orig_addr;
-            }
-        }
-
-        printf("original: $%04x-$%04lx ($%04lx) 100%%\n", cbm_orig_addr, cbm_orig_addr + ctx.unpacked_size, ctx.unpacked_size);
-        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", cbm_packed_addr, cbm_packed_addr + ctx.packed_index + 2, ctx.packed_index + 2, ((float)(ctx.packed_index) / (float)(ctx.unpacked_size) * 100.0));
-
-        if (cbm) {
-            if ((cbm_packed_addr >= 0xd000 && cbm_packed_addr < 0xe000) || (cbm_packed_addr < 0xd000 && cbm_packed_addr + ctx.packed_index + 2 > 0xd000)) {
-                fprintf(stderr, "Error: Packed file lies in I/O-range from $d000-$dfff\n");
-                exit(1);
-            }
-        }
-        save_reencoded(&ctx, cbm_orig_addr, cbm_packed_addr);
-    }
-    fclose(ctx.reencoded_fp);
-
-    if (ctx.packed_index + 2 > ctx.unpacked_size) {
-        fprintf(stderr, "Error: Packed file larger than original\n");
-        exit(1);
-    }
-
+    do_reencode(&ctx);
     return 0;
 }
