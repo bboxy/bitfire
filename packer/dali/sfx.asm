@@ -364,8 +364,11 @@ lz_sfx_addr = * + 1
 .depacker_end
 }
 
+!ifdef .second_pass {				;emmit warnings only once in second pass
 !ifdef SFX_FAST {
 !warn "zp saved/restored up to: ",.restore_end - .depacker
 }
 !warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start
+}
+.second_pass
