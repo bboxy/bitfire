@@ -390,24 +390,26 @@ void write_reencoded_stream(ctx* ctx) {
             }
         }
 
-        printf("original: $%04x-$%04lx ($%04lx) 100%%\n", ctx->cbm_orig_addr, ctx->cbm_orig_addr + ctx->unpacked_size, ctx->unpacked_size);
-        printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", ctx->cbm_packed_addr, ctx->cbm_packed_addr + ctx->packed_index + 2, ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
 
         if (ctx->cbm) {
+            printf("original: $%04x-$%04lx ($%04lx) 100%%\n", ctx->cbm_orig_addr, ctx->cbm_orig_addr + ctx->unpacked_size, ctx->unpacked_size);
+            printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", ctx->cbm_packed_addr, ctx->cbm_packed_addr + ctx->packed_index + 2, ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
             if ((ctx->cbm_packed_addr >= 0xd000 && ctx->cbm_packed_addr < 0xe000) || (ctx->cbm_packed_addr < 0xd000 && ctx->cbm_packed_addr + ctx->packed_index + 2 > 0xd000)) {
                 fprintf(stderr, "Error: Packed file lies in I/O-range from $d000-$dfff\n");
                 exit(1);
             }
+
+            /* little endian */
+            file_write_byte(ctx->cbm_packed_addr & 255, ctx->reencoded_fp);
+            file_write_byte((ctx->cbm_packed_addr >> 8) & 255, ctx->reencoded_fp);
+
+            /* big endian, as read backwards by depacker */
+            file_write_byte((ctx->cbm_orig_addr >> 8) & 255, ctx->reencoded_fp);
+            file_write_byte(ctx->cbm_orig_addr & 255, ctx->reencoded_fp);
+        } else {
+            printf("original: $%04x-$%04lx ($%04lx) 100%%\n", 0, ctx->unpacked_size, ctx->unpacked_size);
+            printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0, ctx->packed_index, ctx->packed_index, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
         }
-
-        /* little endian */
-        file_write_byte(ctx->cbm_packed_addr & 255, ctx->reencoded_fp);
-        file_write_byte((ctx->cbm_packed_addr >> 8) & 255, ctx->reencoded_fp);
-
-        /* big endian, as read backwards by depacker */
-        file_write_byte((ctx->cbm_orig_addr >> 8) & 255, ctx->reencoded_fp);
-        file_write_byte(ctx->cbm_orig_addr & 255, ctx->reencoded_fp);
-
     }
 
     if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, ctx->reencoded_fp) != ctx->packed_index) {
