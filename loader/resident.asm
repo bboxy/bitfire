@@ -432,6 +432,7 @@ bitfire_loadcomp_
 			;------------------
 			;NEW OR OLD OFFSET
 			;------------------
+							;XXX TODO fetch length first and then decide if literal, match, repeat? But brings our checks for last bit to the end? need to check then on typebit? therefore entry for fetch is straight?
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
 			rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
 			+get_lz_bit
@@ -555,7 +556,7 @@ lz_next_page
 			bcs .lz_fetch_eof		;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 							;XXX TODO send a high enough barrier on last block being sent
 			lda <lz_src + 1			;get current depack position
-			cmp <block_barrier			;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
+			cmp <block_barrier		;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
 							;on first successful .ld_pblock they will be set with valid values and things will be checked against correct barrier
 			bcs .lz_fetch_sector		;already reached, loop
 .lz_fetch_eof						;not reached, go on depacking

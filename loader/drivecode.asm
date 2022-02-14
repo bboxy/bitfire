@@ -38,9 +38,10 @@
 !src "constants.inc"
 
 ;config params
-.LOAD_IN_ORDER		= 0 ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 1 ;postpone xfer of block until first halfstep to cover settle time for head transport
-.CACHED_SECTOR		= 1 ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
+.LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
+.LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
+.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport
+.CACHED_SECTOR		= 1   ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
 ;ldy <.last_block_num
 ;inc .wanted,y
@@ -193,7 +194,7 @@
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .spin_count		= .zp_start + $18
 .spin_up		= .zp_start + $19
-.last_sect		= .zp_start + $20
+.desired_sect		= .zp_start + $20
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 .blocks 		= .zp_start + $28			;2 bytes
 .wanted			= .zp_start + $3e			;21 bytes
@@ -566,10 +567,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-!if .LOAD_IN_ORDER = 1 {
-			ldy #$00
-			sty .last_sect
-}
 .get_byte
 
 			ldy #$80				;expect a whole new byte and start with a free bus
@@ -631,6 +628,10 @@ ___			= $ff
 
 			;load file, file number is in A
 .load_file
+!if .LOAD_IN_ORDER = 1 {
+			ldy #$00
+			sty .desired_sect
+}
 			cmp #BITFIRE_RESET
 			bne *+5
 			jmp (.reset_drive)
@@ -1122,8 +1123,12 @@ ___			= $ff
 								;96 cycles
 			ldy <.wanted,x				;sector on list?
 !if .LOAD_IN_ORDER = 1 {
-			cpy .last_sect
+			lda <.desired_sect
+			cmp #.LOAD_IN_ORDER_LIMIT
+			bcs +
+			cpy <.desired_sect
 			bne .retry_no_count
++
 }
 
 !if .FORCE_LAST_BLOCK = 1 {
@@ -1244,7 +1249,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 .setup_send
 !if .LOAD_IN_ORDER = 1 {
-			inc .last_sect
+			inc .desired_sect
 }
 			cmp <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
 			sta <.block_num
