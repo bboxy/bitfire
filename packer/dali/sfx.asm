@@ -208,11 +208,11 @@ lz_src = * + 1
 		;------------------
 .lz_match
 		jsr get_length
-!ifndef SFX_FAST {
-.lz_m_page_
-}
+!ifdef SFX_FAST {
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
-!ifndef SFX_FAST {
+} else {
+.lz_m_page_
+		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
 		bcs .lz_match_
 		dcp <lz_len_hi			;as a = $ff this will decrement <lz_len_hi and set carry again in any case
 }
