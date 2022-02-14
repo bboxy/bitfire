@@ -3,6 +3,7 @@
 CONFIG_ZP_ADDR		= $f0
 LZ_BITS_LEFT            = 0
 INPLACE			= 0
+SETUP_LZ_DST		= 0
 
 lz_bits			= CONFIG_ZP_ADDR + 0
 lz_dst			= CONFIG_ZP_ADDR + 1
@@ -45,9 +46,15 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			sta <lz_src + 1
 			stx <lz_src + 0
 
-                        ldy #$00                        ;needs to be set in any case, also plain decomp enters here
+			lda #$00
+			sta <lz_dst + 0
+			lda #$a0
+			sta <lz_dst + 1
+
                         ldx #$02
 			+init_lz_bits
+                        ldy #$00                        ;needs to be set in any case, also plain decomp enters here
+!if SETUP_LZ_DST = 1 {
 -
                         lda (lz_src),y
                         sta <lz_dst + 0 - 1, x
@@ -57,11 +64,12 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 +
                         dex
                         bne -
-                        stx .lz_offset_lo + 1           ;initialize offset with $0000
-                        stx .lz_offset_hi + 1
-                        stx <lz_len_hi
-			beq .lz_start_over
+}
+                        sty .lz_offset_lo + 1           ;initialize offset with $0000
+                        sty .lz_offset_hi + 1
+                        sty <lz_len_hi
 !if INPLACE = 1 {
+			beq .lz_start_over
 .lz_end_check_
 			ldx <lz_dst + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
 			cpx <lz_src + 0

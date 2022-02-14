@@ -103,4 +103,4 @@ depack
 
 ;		* = $6a61
 data_start
-!bin "testfile.lz",,2
+!bin "testfile.lz",,4
