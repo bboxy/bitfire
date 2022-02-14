@@ -208,7 +208,9 @@ lz_src = * + 1
 		;------------------
 .lz_match
 		jsr get_length
+!ifndef SFX_FAST {
 .lz_m_page_
+}
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
 !ifndef SFX_FAST {
 		bcs .lz_match_
@@ -217,6 +219,9 @@ lz_src = * + 1
 .lz_match_
 		eor #$ff
 		tay
+!ifdef SFX_FAST {
+.lz_m_page_
+}
 		eor #$ff			;restore A
 .lz_match__					;entry from new_offset handling
 		adc <lz_dst + 0
