@@ -2,6 +2,7 @@
 
 CONFIG_ZP_ADDR		= $f0
 LZ_BITS_LEFT            = 0
+INPLACE			= 0
 
 lz_bits			= CONFIG_ZP_ADDR + 0
 lz_dst			= CONFIG_ZP_ADDR + 1
@@ -33,6 +34,10 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
         }
 }
 
+!macro inc_lz_src {
+			inc <lz_src + 1
+}
+
 ;---------------------------------------------------------------------------------
 ;DEPACKER STUFF
 ;---------------------------------------------------------------------------------
@@ -48,7 +53,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
                         sta <lz_dst + 0 - 1, x
                         inc <lz_src + 0
                         bne +
-                        inc <lz_src + 1
+                        +inc_lz_src
 +
                         dex
                         bne -
@@ -56,6 +61,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
                         stx .lz_offset_hi + 1
                         stx <lz_len_hi
 			beq .lz_start_over
+!if INPLACE = 1 {
 .lz_end_check_
 			ldx <lz_dst + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
 			cpx <lz_src + 0
@@ -65,6 +71,9 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 .lz_end_check
 			cpx <lz_src + 1
 			beq .lz_end_check_		;we could check against src >= dst XXX TODO
+} else {
+.lz_end_check
+}
 .lz_start_over
 			lda #$01			;we fall through this check on entry and start with literal
 			+get_lz_bit
@@ -171,7 +180,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			inc <lz_dst + 1
 			bcs .lz_dst_inc_
 .lz_inc_src3
-			inc <lz_src + 1
+			+inc_lz_src
 			bcs .lz_inc_src3_
 
 			;------------------
@@ -222,10 +231,10 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			clc
 			bcc .lz_clc_back
 .lz_inc_src1
-			inc <lz_src + 1			;preserves carry, all sane
+			+inc_lz_src			;preserves carry, all sane
 			bne .lz_inc_src1_
 .lz_inc_src2
-			inc <lz_src + 1			;preserves carry and A, clears X, Y, all sane
+			+inc_lz_src			;preserves carry and A, clears X, Y, all sane
 			bne .lz_inc_src2_
 
 			;------------------

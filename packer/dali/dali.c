@@ -54,6 +54,7 @@ typedef struct ctx {
     int sfx_small;
     int sfx_size;
     char *sfx_code;
+    int lz_bits;
 } ctx;
 
 void salvador_main();
@@ -112,6 +113,7 @@ void write_reencoded_bit(ctx* ctx, int value) {
         }
         /* remember position of bit-buffer */
         ctx->reencoded_bit_index = ctx->reencoded_index;
+        ctx->lz_bits++;
         write_reencoded_byte(ctx, 0);
     }
     if (value)
@@ -227,6 +229,7 @@ void reencode_packed_stream(ctx* ctx) {
     ctx->unpacked_index = 0;
 
     ctx->packed_bit_mask = 0;
+    ctx->lz_bits = 0;
 
     while (1) {
         /* literal */
@@ -584,6 +587,8 @@ void do_reencode(ctx* ctx) {
         fprintf(stderr, "Error: Packed file larger than original\n");
         exit(1);
     }
+
+    //printf("control-bytes: $%04x\n", ctx->lz_bits);
 
     write_reencoded_stream(ctx);
     return;
