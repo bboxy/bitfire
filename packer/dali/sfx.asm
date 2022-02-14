@@ -199,11 +199,7 @@ lz_src = * + 1
 		;NEW OR OLD OFFSET
 		;------------------
 
-!ifdef SFX_FAST {
-		lda #$01
-} else {
 		rol				;A = 0, C = 1 -> same as lda #$01
-}
 		+get_lz_bit
 		bcs .lz_new_offset		;either match with new offset or old offset
 
@@ -212,11 +208,9 @@ lz_src = * + 1
 		;------------------
 .lz_match
 		jsr get_length
-.lz_m_page
+.lz_m_page_
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
-!ifdef SFX_FAST {
-		bcc .lz_dcp
-} else {
+!ifndef SFX_FAST {
 		bcs .lz_match_
 		dcp <lz_len_hi			;as a = $ff this will decrement <lz_len_hi and set carry again in any case
 }
@@ -240,7 +234,11 @@ lz_src = * + 1
 .lz_offset_lo = * + 1
 		sbc #$00
 		sta <.lz_msrcr + 0
+!ifdef SFX_FAST {
+		lax <lz_dst + 1
+} else {
 		lda <lz_dst + 1
+}
 .lz_offset_hi = * + 1
 		sbc #$00
 		sta <.lz_msrcr + 1
@@ -257,25 +255,24 @@ lz_len_hi = * + 1
 		lda #$00			;check for more loop runs
 		beq .lz_start_over
 !ifdef SFX_FAST {
-		lda #$ff
-.lz_dcp
-		dcp <lz_len_hi			;as a = $ff this will decrement <lz_len_hi and set carry again in any case
-		bcs .lz_match_
+.lz_l_page
+.lz_m_page
+		dec <lz_len_hi
+		txa
+		beq .lz_l_page_
+		tya
+		beq .lz_m_page_
+
 .lz_clc
 		clc
 		bcc .lz_clc_
-
 } else {
 		tya
-		beq .lz_m_page
-}
+		beq .lz_m_page_
 .lz_l_page
-!ifdef SFX_FAST {
-		tya
-}
 		dec <lz_len_hi
 		bcs cp_literal
-
+}
 		;------------------
 		;FETCH A NEW OFFSET
 		;------------------
@@ -305,6 +302,8 @@ lz_len_hi = * + 1
 		bne .lz_match_
 		ldy #$00
 		jsr lz_refill_bits		;fetch remaining bits
+		bne .lz_match_
+		inc <lz_len_hi
 } else {
 		jsr .get_length_bt
 }
@@ -341,6 +340,11 @@ get_length
 		jsr .get_length_		;get up to 7 more bits
 		sta <lz_len_hi			;save MSB
 		pla				;restore LSB
+!ifdef SFX_FAST {
+		bne .end_bit_16
+		dec <lz_len_hi
+		tya
+}
 .end_bit_16
 		rts
 lz_eof
