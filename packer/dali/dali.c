@@ -37,6 +37,7 @@ typedef struct ctx {
     char *output_name;
     char *input_name;
     char *prefix_name;
+    char *clamped_name;
 
     int cbm;
     int cbm_orig_addr;
@@ -424,12 +425,15 @@ void write_reencoded_stream(ctx* ctx) {
 
 void do_reencode(ctx* ctx) {
     char tmp_name[] = "dict-XXXXXX";
+    char src_name[] = "src-XXXXXX";
     FILE *dict_file = NULL;
+    FILE *src_file = NULL;
     unsigned char *dict_data = NULL;
     int dict_size = 0;
     char *salvador_argv[5];
     int salvador_argc = 0;
     int dict_temp = FALSE;
+
 
     /* determine output filename */
     if (ctx->output_name == NULL) {
@@ -492,6 +496,18 @@ void do_reencode(ctx* ctx) {
 
     /* setup dict lengths and position */
     if (ctx->cbm_prefix_from >= 0) {
+        if (ctx->cbm_range_from < 0) {
+            fprintf(stderr, "Error: Dict is zero size (use --from)\n");
+            exit(1);
+        }
+        else if (ctx->cbm_prefix_from >= ctx->cbm_range_from) {
+            fprintf(stderr, "Error: --from must be greater than --prefix-from\n");
+            exit(1);
+        }
+        if (ctx->cbm_range_from >= 0 && ctx->cbm_range_from - ctx->cbm_prefix_from > 32640) {
+            //ctx->cbm_prefix_from = ctx->cbm_range_from - 32640;
+            fprintf(stderr, "Info: --prefix-from  exceeds max offset, not all bytes can be used\n");
+        }
         /* if range is below start_address, adopt range */
         if (ctx->cbm_prefix_from < ctx->cbm_orig_addr) {
             ctx->cbm_prefix_from = ctx->cbm_orig_addr;
@@ -520,20 +536,21 @@ void do_reencode(ctx* ctx) {
     }
 
     /* write clamped raw data */
-    ctx->clamped_fp = fopen(ctx->output_name, "wb");
-    if (!ctx->clamped_fp) {
-        fprintf(stderr, "Error: Cannot create clamped file (%s)\n", ctx->output_name);
-        perror("fopen");
+    ctx->clamped_name = (char*)malloc(sizeof(src_name));
+    strcpy(ctx->clamped_name, src_name);
+    src_file = fdopen(mkstemp(ctx->clamped_name),"wb");
+    if (!src_file) {
+        fprintf(stderr, "Error: Cannot create clamped file %s\n", ctx->clamped_name);
         exit(1);
     }
     if (ctx->unpacked_size != 0) {
-        if (fwrite(ctx->unpacked_data, sizeof(char), ctx->unpacked_size, ctx->clamped_fp) != ctx->unpacked_size) {
+        if (fwrite(ctx->unpacked_data, sizeof(char), ctx->unpacked_size, src_file) != ctx->unpacked_size) {
             fprintf(stderr, "Error: Cannot write clamped file\n");
             perror("fwrite");
             exit(1);
         }
     }
-    fclose(ctx->clamped_fp);
+    fclose(src_file);
 
     /* ctreate temp file for dict */
     if (ctx->cbm_prefix_from >= 0) {
@@ -552,6 +569,7 @@ void do_reencode(ctx* ctx) {
                 exit(1);
             }
             dict_temp = TRUE;
+            fclose(dict_file);
         }
     }
 
@@ -561,12 +579,14 @@ void do_reencode(ctx* ctx) {
         salvador_argv[salvador_argc++] = "-D";
         salvador_argv[salvador_argc++] = ctx->prefix_name;
     }
-    salvador_argv[salvador_argc++] = ctx->output_name;
+    salvador_argv[salvador_argc++] = ctx->clamped_name;
     salvador_argv[salvador_argc++] = ctx->output_name;
     salvador_main(salvador_argc, salvador_argv);
 
     /* delete dict */
     if (dict_temp) remove(ctx->prefix_name);
+    /* remove clamped */
+    remove(ctx->clamped_name);
 
     /* read packed data */
     ctx->packed_fp = fopen(ctx->output_name, "rb");
@@ -706,11 +726,6 @@ int main(int argc, char *argv[]) {
 
     if (ctx.input_name == NULL) {
         fprintf(stderr, "Error: No input-filename given\n");
-        exit(1);
-    }
-
-    if (ctx.cbm_prefix_from >= 0 && ctx.cbm_range_from <= 0) {
-        fprintf(stderr, "Error: Dict is zero size (use --from)\n");
         exit(1);
     }
 
