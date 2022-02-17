@@ -14,11 +14,6 @@
 #define DALI_ELIAS_LE 1
 
 typedef struct ctx {
-    FILE *packed_fp;
-    FILE *reencoded_fp;
-    FILE *unpacked_fp;
-    FILE *clamped_fp;
-
     unsigned char *packed_data;
     unsigned char *reencoded_data;
     unsigned char *unpacked_data;
@@ -308,9 +303,10 @@ void reencode_packed_stream(ctx* ctx) {
 }
 
 void write_reencoded_stream(ctx* ctx) {
+    FILE *fp = NULL;
     /* write reencoded output file */
-    ctx->reencoded_fp = fopen(ctx->output_name, "wb");
-    if (!ctx->reencoded_fp) {
+    fp = fopen(ctx->output_name, "wb");
+    if (!fp) {
         fprintf(stderr, "Error: Cannot create reencoded file (%s)\n", ctx->output_name);
         exit(1);
     }
@@ -373,7 +369,7 @@ void write_reencoded_stream(ctx* ctx) {
         printf("original: $%04x-$%04lx ($%04lx) 100%%\n", ctx->cbm_orig_addr, ctx->cbm_orig_addr + ctx->unpacked_size, ctx->unpacked_size);
         printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0x0801, 0x0801 + (int)ctx->sfx_size + ctx->packed_index, (int)ctx->sfx_size + ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
 
-        if (fwrite(ctx->sfx_code, sizeof(char), ctx->sfx_size, ctx->reencoded_fp) != ctx->sfx_size) {
+        if (fwrite(ctx->sfx_code, sizeof(char), ctx->sfx_size, fp) != ctx->sfx_size) {
             fprintf(stderr, "Error: Cannot write output file %s\n", ctx->output_name);
             exit(1);
         }
@@ -404,35 +400,37 @@ void write_reencoded_stream(ctx* ctx) {
             }
 
             /* little endian */
-            file_write_byte(ctx->cbm_packed_addr & 255, ctx->reencoded_fp);
-            file_write_byte((ctx->cbm_packed_addr >> 8) & 255, ctx->reencoded_fp);
+            file_write_byte(ctx->cbm_packed_addr & 255, fp);
+            file_write_byte((ctx->cbm_packed_addr >> 8) & 255, fp);
 
             /* big endian, as read backwards by depacker */
-            file_write_byte((ctx->cbm_orig_addr >> 8) & 255, ctx->reencoded_fp);
-            file_write_byte(ctx->cbm_orig_addr & 255, ctx->reencoded_fp);
+            file_write_byte((ctx->cbm_orig_addr >> 8) & 255, fp);
+            file_write_byte(ctx->cbm_orig_addr & 255, fp);
         } else {
             printf("original: $%04x-$%04lx ($%04lx) 100%%\n", 0, ctx->unpacked_size, ctx->unpacked_size);
             printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0, ctx->packed_index, ctx->packed_index, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
         }
     }
 
-    if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, ctx->reencoded_fp) != ctx->packed_index) {
+    if (fwrite(ctx->reencoded_data, sizeof(char), ctx->packed_index, fp) != ctx->packed_index) {
         fprintf(stderr, "Error: Cannot write output file\n");
         exit(1);
     }
-    fclose(ctx->reencoded_fp);
+    fclose(fp);
 }
 
 void do_reencode(ctx* ctx) {
     char tmp_name[] = "dict-XXXXXX";
     char src_name[] = "src-XXXXXX";
-    FILE *dict_file = NULL;
-    FILE *src_file = NULL;
     unsigned char *dict_data = NULL;
     int dict_size = 0;
     char *salvador_argv[5];
     int salvador_argc = 0;
     int dict_temp = FALSE;
+    FILE *dfp = NULL;
+    FILE *sfp = NULL;
+    FILE* ufp = NULL;
+    FILE* pfp = NULL;
 
 
     /* determine output filename */
@@ -454,13 +452,13 @@ void do_reencode(ctx* ctx) {
     }
 
     /* load unpacked file */
-    ctx->unpacked_fp = fopen(ctx->input_name, "rb");
-    if (!ctx->unpacked_fp) {
+    ufp = fopen(ctx->input_name, "rb");
+    if (!ufp) {
         fprintf(stderr, "Error: Cannot access input file\n");
         exit(1);
     }
-    ctx->unpacked_size = fread(ctx->unpacked_data, sizeof(char), BUFFER_SIZE + 2, ctx->unpacked_fp);
-    fclose(ctx->unpacked_fp);
+    ctx->unpacked_size = fread(ctx->unpacked_data, sizeof(char), BUFFER_SIZE + 2, ufp);
+    fclose(ufp);
 
     /* ctx->cbm address handling */
     if (ctx->cbm_relocate_origin_addr >= 0) {
@@ -538,38 +536,38 @@ void do_reencode(ctx* ctx) {
     /* write clamped raw data */
     ctx->clamped_name = (char*)malloc(sizeof(src_name));
     strcpy(ctx->clamped_name, src_name);
-    src_file = fdopen(mkstemp(ctx->clamped_name),"wb");
-    if (!src_file) {
+    sfp = fdopen(mkstemp(ctx->clamped_name),"wb");
+    if (!sfp) {
         fprintf(stderr, "Error: Cannot create clamped file %s\n", ctx->clamped_name);
         exit(1);
     }
     if (ctx->unpacked_size != 0) {
-        if (fwrite(ctx->unpacked_data, sizeof(char), ctx->unpacked_size, src_file) != ctx->unpacked_size) {
+        if (fwrite(ctx->unpacked_data, sizeof(char), ctx->unpacked_size, sfp) != ctx->unpacked_size) {
             fprintf(stderr, "Error: Cannot write clamped file\n");
             perror("fwrite");
             exit(1);
         }
     }
-    fclose(src_file);
+    fclose(sfp);
 
     /* ctreate temp file for dict */
     if (ctx->cbm_prefix_from >= 0) {
         if (ctx->prefix_name == NULL) {
             ctx->prefix_name = (char*)malloc(sizeof(tmp_name));
             strcpy(ctx->prefix_name, tmp_name);
-            dict_file = fdopen(mkstemp(ctx->prefix_name),"wb");
+            dfp = fdopen(mkstemp(ctx->prefix_name),"wb");
             printf("using prefix: $%04x - $%04x\n", ctx->cbm_prefix_from, ctx->cbm_prefix_from + dict_size);
-            if (!dict_file) {
+            if (!dfp) {
                 fprintf(stderr, "Error: Cannot create dict file %s\n", ctx->prefix_name);
                 exit(1);
             }
-            if (!dict_data || fwrite(dict_data, sizeof(char), dict_size, dict_file) != dict_size) {
+            if (!dict_data || fwrite(dict_data, sizeof(char), dict_size, dfp) != dict_size) {
                 fprintf(stderr, "Error: Cannot write dict file %s\n", ctx->prefix_name);
                 remove(ctx->prefix_name);
                 exit(1);
             }
             dict_temp = TRUE;
-            fclose(dict_file);
+            fclose(dfp);
         }
     }
 
@@ -589,13 +587,13 @@ void do_reencode(ctx* ctx) {
     remove(ctx->clamped_name);
 
     /* read packed data */
-    ctx->packed_fp = fopen(ctx->output_name, "rb");
-    if (!ctx->packed_fp) {
+    pfp = fopen(ctx->output_name, "rb");
+    if (!pfp) {
         fprintf(stderr, "Error: Cannot access input file\n");
         exit(1);
     }
-    ctx->packed_size = fread(ctx->packed_data, sizeof(char), BUFFER_SIZE, ctx->packed_fp);
-    fclose(ctx->packed_fp);
+    ctx->packed_size = fread(ctx->packed_data, sizeof(char), BUFFER_SIZE, pfp);
+    fclose(pfp);
 
     /* determine size without eof-marker -> remove 18 bits, either 2 byte or three byte depending on position of last bitpair */
     if (ctx->packed_data[ctx->packed_size - 1] & 0x80) ctx->packed_size -= 3;
