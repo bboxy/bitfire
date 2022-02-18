@@ -144,6 +144,7 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			jsr .lz_refill_bits		;fetch more bits
 +
 			sbc #$01			;subtract 1, will be added again on adc as C = 1
+			sec				;needed if underflow is happening
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
