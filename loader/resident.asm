@@ -250,48 +250,46 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			;------------------
 			;ELIAS FETCH
 			;------------------
-.lz_inc_src2
-			+inc_src_ptr
-			bne .lz_inc_src2_
 .lz_refill_bits
-			tax
-			lda (lz_src),y
+			tax				;save bits fetched so far
+			lda (lz_src),y			;fetch another lz_bits byte from stream
 			+set_lz_bit_marker
 			sta <lz_bits
-			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
+			inc <lz_src + 0 		;postponed pointer increment, so no need to save A on next_page call
 			beq .lz_inc_src2
 .lz_inc_src2_
-			txa				;also postpone, so A can be trashed on lz_inc_src above
-			bcs .lz_lend
+			txa				;restore fetched bits, also postponed, so A can be trashed on lz_inc_src above
+			bcs .lz_lend			;last bit fetched?
 .lz_get_loop
 			+get_lz_bit			;fetch payload bit
 .lz_length_16_
-			rol				;can also moved to front and executed once on start
+			rol				;shift in new payload bit
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
-			+get_lz_bit
-			bcc .lz_get_loop
-			beq .lz_refill_bits
-.lz_lend
+			+get_lz_bit			;fetch control bit
+			bcc .lz_get_loop		;need more bits
+			beq .lz_refill_bits		;buffer is empty, fetch new bits
+.lz_lend						;was the last bit
 			rts
-.lz_length_16						;happens very rarely
-			pha				;save LSB
-			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with MSB = 1
+.lz_length_16						;this routine happens very rarely, so we can waste cycles
+			pha				;save so far received lobyte
+			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with A = 1
 			jsr .lz_length_16_		;get up to 7 more bits
-			sta <lz_len_hi			;save MSB
-			pla				;restore LSB
-;			bne .lz_not_zero		;lobyte is zero? nope, continue as normal
-;			tsx
-;			lda $0101,x
-;			eor #<.lz_jsr_addr		;check from where the call came from
-;			beq +				;was from new match, no decrement then
+			sta <lz_len_hi			;and save hibyte
+			pla				;restore lobyte
+;			bne .lz_not_zero		;was the lobyte zero?
+;			pla				;pull lowbyte of last jsr-call from stack
+;			pha				;restore
+;			;eor #<.lz_jsr_addr
+;			bmi +				;eof and match case, no need to decrement lz_len_hi
 ;			dec <lz_len_hi			;decrement lz_len_hi
-;			tya
 ;+
-;.lz_not_zero
-			bne +
-			dec <lz_len_hi
-			tya				;keep Z = 0, but not needed, in case of eof, the dec also results in 0, else this flag check is not needed
-+
+;			tya
+
+			bne .lz_not_zero		;was the lobyte zero?
+			dec <lz_len_hi			;yes, so decrement hibyte beforehand to avoid expensive checks later on, except for one case
+			tya				;keep Z = 0, (but not needed in case of eof, the dec also results in 0 there)
+
+.lz_not_zero
 			rts
 
 			;------------------
@@ -339,6 +337,9 @@ bitfire_loadcomp_
 			;------------------
 			;SELDOM STUFF
 			;------------------
+.lz_inc_src2
+			+inc_src_ptr
+			bne .lz_inc_src2_
 .lz_inc_src3
 			+inc_src_ptr
 			bcs .lz_inc_src3_
@@ -413,7 +414,7 @@ bitfire_loadcomp_
 +
 			tax
 .lz_l_page
-.lz_cp_lit
+.lz_cp_lit						;XXX TODO copy with Y += 1 but have lz_src + 0 eor #$ff in x and countdown x, so that lz_src + 1 can be incremented in time?
 			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks, loading in order reveals that
 			sta (lz_dst),y
 
@@ -425,7 +426,7 @@ bitfire_loadcomp_
 .lz_dst_inc_
 			dex
 			bne .lz_cp_lit
-
+							;XXX TODO we could also just manipulate a branch and make it go to either page handling or fall through? enable branch if 16 bits are fetched and lz_len  > 0? dop or bcs to disable and enable, 80 or b0
 			lda <lz_len_hi			;more pages to copy?
 			bne .lz_cp_page			;happens very seldom
 
@@ -454,23 +455,24 @@ bitfire_loadcomp_
 			jsr .lz_refill_bits		;fetch more bits
 +
 			sbc #$01			;subtract 1, will be added again on adc as C = 1
+			sec				;avoid underflow :-(
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
-.lz_m_page		eor #$ff			;restore A
+.lz_m_page
+			eor #$ff			;restore A
 
-			adc <lz_dst + 0
+			adc <lz_dst + 0			;add length
 			sta <lz_dst + 0
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
 			dec <lz_dst + 1			;subtract one more in this case
 .lz_clc_back
-.lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1) in fact we could use sbx here, but would not respect carry, but a and x are same, but need x later anyway for other purpose
+.lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1)
 			sta .lz_msrcr + 0
 			lax <lz_dst + 1
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
-.lz_cp_match
-			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
+.lz_cp_match						;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
 			lda $beef,y
 			sta (lz_dst),y
@@ -496,16 +498,16 @@ bitfire_loadcomp_
 			;------------------
 			;MATCH
 			;------------------
--							;lz_length as inline
+-
 			+get_lz_bit			;fetch payload bit
-			rol				;can also moved to front and executed once on start
+			rol				;add bit to number
 .lz_match
-			+get_lz_bit
-			bcc -
+			+get_lz_bit			;fetch control bit
+			bcc -				;not yet done, fetch more bits
 
-			bne +
-			jsr .lz_refill_bits
-			beq .lz_eof			;so offset was $100 as lowbyte is $00
+			bne +				;last bit or bitbuffer empty? fetched 1 to 4 bits now
+			jsr .lz_refill_bits		;refill bitbuffer
+			beq .lz_eof			;so offset was $100 as lowbyte is $00, only here 4-8 bits are fetched
 +
 			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
 			lsr				;set bit 15 to 0 while shifting hibyte
@@ -526,8 +528,9 @@ bitfire_loadcomp_
 			+get_lz_bit
 			bcc -
 			bne .lz_match_big
-.lz_jsr_addr = * + 2
 			jsr .lz_refill_bits		;fetch remaining bits
+;.lz_jsr_addr = * - 1
+;			bcs .lz_match_big		;lobyte != 0?
 			bne .lz_match_big		;lobyte != 0?
 
 			;------------------

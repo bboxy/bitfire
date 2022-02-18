@@ -27,8 +27,8 @@
 
 BITS_LEFT		= 0
 
-.depacker		= $01
-.smc_offsetd 		= .depacker - (.dali_code_end - .dali_code_start)
+.depacker_dst		= $01
+.smc_offsetd 		= .depacker_dst - (.dali_code_end - .dali_code_start)
 !ifdef SFX_FAST {
 DALI_FAST_SRC		= lz_src 		- .smc_offsetd + 2
 DALI_FAST_DST		= lz_dst		- .smc_offsetd + 2
@@ -85,6 +85,7 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 		* = $0801
 .dali_code_start
                 !byte $0b,$08
+		;could place opcodes in linenumber and do sys 2051? 2049? -> anc $08 would not hurt, but $9e hurts
 		!word 1602
 		!byte $9e
 		!text "2061"
@@ -103,10 +104,10 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 -
 !ifdef SFX_FAST {
 		pha				;saved zp to stack down to $02
-		lax <.depacker - 1,y		;saves a byte, 2 byte compared to lda $0000,y
+		lax <.depacker_dst - 1,y	;saves a byte, 2 byte compared to lda $0000,y
 }
 		ldx .depacker_code - 1,y
-		stx <.depacker - 1,y
+		stx <.depacker_dst - 1,y
 		dey
 		bne -
                 jmp .depack
@@ -116,7 +117,7 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 		;------------------
 .dali_code_end
 .depacker_code
-!pseudopc .depacker {
+!pseudopc .depacker_dst {
 .depacker_start
 		!byte $34
 lz_bits
@@ -210,6 +211,7 @@ lz_src = * + 1
 		jsr get_length
 !ifdef SFX_FAST {
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
+		sec
 } else {
 .lz_m_page_
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
@@ -362,7 +364,7 @@ lz_eof
 -
 		pla
 		tsx
-		sta <(.depacker - ($100 - (.restore_end - .depacker_start))),x
+		sta <(.depacker_dst - ($100 - (.restore_end - .depacker_start))),x
 		bne -
 		pha				;end up with SP = $ff, let's be nice :-)
 lz_cli
@@ -375,7 +377,7 @@ lz_sfx_addr = * + 1
 
 !ifdef .second_pass {				;emmit warnings only once in second pass
 !ifdef SFX_FAST {
-!warn "zp saved/restored up to: ",.restore_end - .depacker
+!warn "zp saved/restored up to: ",.restore_end - .depacker_dst
 }
 !warn "sfx zp size: ", .depacker_end - .depacker_start
 !warn "sfx size: ", * - .dali_code_start

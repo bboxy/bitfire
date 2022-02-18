@@ -460,7 +460,7 @@ void do_reencode(ctx* ctx) {
     ctx->unpacked_size = fread(ctx->unpacked_data, sizeof(char), BUFFER_SIZE + 2, ufp);
     fclose(ufp);
 
-    /* ctx->cbm address handling */
+    /* cbm address handling */
     if (ctx->cbm_relocate_origin_addr >= 0) {
         ctx->cbm_orig_addr = ctx->cbm_relocate_origin_addr;
     } else {
