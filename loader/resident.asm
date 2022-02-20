@@ -69,15 +69,6 @@ filenum			= block_barrier
 	                ror
         }
 }
-
-!macro init_lz_bits {
-	!if LZ_BITS_LEFT = 1 {
-			lda #$40
-			sta <lz_bits			;start with an empty lz_bits, first +get_lz_bit leads to literal this way and bits are refilled upon next shift
-	} else {
-			stx <lz_bits
-	}
-}
 }
 
 !macro inc_src_ptr {
@@ -114,6 +105,10 @@ link_cia2_type		;%00000100
 			nop
 }
 
+!if CONFIG_FRAMEWORK = 1 & CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
+link_frame_count
+			!word 0
+}
 			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
 			;and advances the frame counter if needed
 
@@ -152,10 +147,12 @@ bitfire_send_byte_
 			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive to fast @floppy
 			lsr <filenum
 			bne .ld_loop
+			jsr .ld_set_dd02		;seems to be enough cycles to wait (16)
 			tax				;x is always $3f after 8 rounds (8 times eor #$20)
--
-			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
-			bmi -				;waiting with pha/pla would also help, or even a jsr call to waste 12 cycles
+;-
+;							;XXX TODO possibly still save here? how many cycles does it take for busy to become high and bit to count?
+;			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
+;			bmi -				;waiting with pha/pla would also help, or even a jsr call to waste 12 cycles
 .ld_set_dd02
 			stx $dd02			;restore $dd02
 							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
@@ -319,7 +316,6 @@ bitfire_loadcomp_
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
 			ldx #$02
-			+init_lz_bits
 -
 			lda (lz_src),y
 			sta <lz_dst + 0 - 1, x
@@ -327,12 +323,14 @@ bitfire_loadcomp_
 			bne +
 			+inc_src_ptr
 +
+			txa				;A = 1 after loop ends, in case fetch another byte? First byte should be lz_bits?
 			dex
 			bne -
 			stx .lz_offset_lo + 1		;initialize offset with $0000
 			stx .lz_offset_hi + 1
 			stx <lz_len_hi			;reset len - XXX TODO could also be cleared upon installer, as the depacker leaves that value clean again
-			beq .lz_start_over		;start with a literal, X = 0, still annoying
+			sec				;needs to be set, is set after send_byte but not if entering via link_decomp
+			beq .lz_start_depack		;start with a literal, X = 0, still annoying
 
 			;------------------
 			;SELDOM STUFF
@@ -410,6 +408,7 @@ bitfire_loadcomp_
 			bcc -
 +
 			bne +
+.lz_start_depack
 			jsr .lz_refill_bits
 +
 			tax
@@ -453,9 +452,9 @@ bitfire_loadcomp_
 +
 			bne +
 			jsr .lz_refill_bits		;fetch more bits
+			beq .lz_m_page			;XXX TODO sec after sbc #1 is also sufficient, but slower
 +
 			sbc #$01			;subtract 1, will be added again on adc as C = 1
-			sec				;avoid underflow :-(
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
@@ -614,10 +613,6 @@ link_music_addr = * + 1
 	}
 }
 
-!if CONFIG_FRAMEWORK = 1 & CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
-link_frame_count
-			!word 0
-}
 
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
 
