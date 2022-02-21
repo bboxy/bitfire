@@ -98,7 +98,7 @@
 
 !align 255,0
 depack
-!src "dzx0.asm"
+!src "dzx0_dali.asm"
 !warn "depacker size: ", * - depack
 
 ;		* = $6a61
