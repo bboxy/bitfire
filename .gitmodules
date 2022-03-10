@@ -2,4 +2,4 @@
 	path = packer/dali/salvador
 	url = https://github.com/emmanuel-marty/salvador.git
 	branch = main
-	update = merge
+	update = checkout
