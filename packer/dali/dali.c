@@ -51,6 +51,8 @@ typedef struct ctx {
     int sfx_size;
     char *sfx_code;
     int lz_bits;
+
+    int exit_on_warn;
 } ctx;
 
 void salvador_main();
@@ -395,8 +397,8 @@ void write_reencoded_stream(ctx* ctx) {
             printf("original: $%04x-$%04lx ($%04lx) 100%%\n", ctx->cbm_orig_addr, ctx->cbm_orig_addr + ctx->unpacked_size, ctx->unpacked_size);
             printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", ctx->cbm_packed_addr, ctx->cbm_packed_addr + ctx->packed_index + 2, ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
             if ((ctx->cbm_packed_addr >= 0xd000 && ctx->cbm_packed_addr < 0xe000) || (ctx->cbm_packed_addr < 0xd000 && ctx->cbm_packed_addr + ctx->packed_index + 2 > 0xd000)) {
-                fprintf(stderr, "Error: Packed file lies in I/O-range from $d000-$dfff\n");
-                exit(1);
+                fprintf(stderr, "Warning: Packed file lies in I/O-range from $d000-$dfff\n");
+                if (ctx->exit_on_warn) exit(1);
             }
 
             /* little endian */
@@ -638,6 +640,7 @@ int main(int argc, char *argv[]) {
     ctx.sfx_cli = FALSE;
     ctx.sfx_small = FALSE;
     ctx.sfx_code = NULL;
+    ctx.exit_on_warn = FALSE;
 
     for (i = 1; i < argc; i++) {
         if (!strncmp(argv[i], "-", 1) || !strncmp(argv[i], "--", 2)) {
@@ -649,6 +652,8 @@ int main(int argc, char *argv[]) {
             } else if (!strcmp(argv[i], "--prefix-file")) {
                 i++;
                 ctx.prefix_name = argv[i];
+            } else if (!strcmp(argv[i], "--exit_on_warn")) {
+                ctx.exit_on_warn = TRUE;
             } else if (!strcmp(argv[i], "--no-inplace")) {
                 ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "--small")) {
@@ -708,6 +713,7 @@ int main(int argc, char *argv[]) {
                         "  --prefix-file [file]        Use preceeding data from [file] as dictionary.\n"
                         "  --relocate-packed [num]     Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
                         "  --relocate-origin [num]     Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
+                        "  --exit_on_warn              Exit on warnings like they happen when crossing the i/o-range.\n"
                         ,argv[0]);
         exit(1);
     }
