@@ -21,6 +21,11 @@
 
 		jsr .timer_start
 
+		lda #$00
+		sta <lz_dst + 0
+		lda #$a0
+		sta <lz_dst + 1
+
 		ldx #<data_start
 		lda #>data_start
 
@@ -97,9 +102,9 @@
 		!scr "0123456789abcdef"
 
 !align 255,0
-depack
+depack_
 !src "dzx0_dali.asm"
-!warn "depacker size: ", * - depack
+!warn "depacker size: ", * - depack_
 
 ;		* = $6a61
 data_start

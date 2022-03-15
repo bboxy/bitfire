@@ -1,110 +1,116 @@
+;
+; (c) Copyright 2021 by Tobias Bindhammer. All rights reserved.
+;
+; Redistribution and use in source and binary forms, with or without
+; modification, are permitted provided that the following conditions are met:
+;     * Redistributions of source code must retain the above copyright
+;       notice, this list of conditions and the following disclaimer.
+;     * Redistributions in binary form must reproduce the above copyright
+;       notice, this list of conditions and the following disclaimer in the
+;       documentation and/or other materials provided with the distribution.
+;     * The name of its author may not be used to endorse or promote products
+;       derived from this software without specific prior written permission.
+;
+; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+; ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+; WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+; DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+; DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+; (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+; ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;
+
 !cpu 6510
 
-CONFIG_ZP_ADDR		= $f0
-LZ_BITS_LEFT            = 0
+LZ_BITS_LEFT		= 0
 INPLACE			= 0
-SETUP_LZ_DST		= 0
+CONFIG_ZP_ADDR		= $f0
 
-lz_bits			= CONFIG_ZP_ADDR + 0
-lz_dst			= CONFIG_ZP_ADDR + 1
-lz_src			= CONFIG_ZP_ADDR + 3
-lz_len_hi		= CONFIG_ZP_ADDR + 5
+lz_bits			= CONFIG_ZP_ADDR + 0		;1 byte
+lz_dst			= CONFIG_ZP_ADDR + 1		;2 byte
+lz_src			= CONFIG_ZP_ADDR + 3		;2 byte
+lz_len_hi		= CONFIG_ZP_ADDR + 5		;1 byte
 
 !macro get_lz_bit {
         !if LZ_BITS_LEFT = 1 {
-                asl <lz_bits
+			asl <lz_bits
         } else {
-                lsr <lz_bits
+			lsr <lz_bits
         }
 }
 
 !macro set_lz_bit_marker {
-        !if LZ_BITS_LEFT = 1{
-                rol
-        } else {
-                ror
-        }
-}
-
-!macro init_lz_bits {
         !if LZ_BITS_LEFT = 1 {
-                        lda #$40
-                        sta <lz_bits                    ;start with an empty lz_bits, first +get_lz_bit leads to literal this way and bits are refilled upon next shift
+        	        rol
         } else {
-                        stx <lz_bits
+	                ror
         }
 }
 
-!macro inc_lz_src {
+!macro inc_src_ptr {
 			inc <lz_src + 1
 }
 
-;---------------------------------------------------------------------------------
-;DEPACKER STUFF
-;---------------------------------------------------------------------------------
-
-			sta <lz_src + 1
+depack
 			stx <lz_src + 0
+			sta <lz_src + 1
 
-			lda #$00
-			sta <lz_dst + 0
-			lda #$a0
-			sta <lz_dst + 1
+			ldy #$00			;needs to be set in any case, also plain decomp enters here
+			sty .lz_offset_lo + 1		;initialize offset with $0000
+			sty .lz_offset_hi + 1
+			lda #$01
+			sec				;needs to be set, is set after send_byte but not if entering via link_decomp
+			bcs .lz_start_depack		;start with a literal, X = 0, still annoying
 
-                        ldx #$02
-			+init_lz_bits
-                        ldy #$00                        ;needs to be set in any case, also plain decomp enters here
-!if SETUP_LZ_DST = 1 {
--
-                        lda (lz_src),y
-                        sta <lz_dst + 0 - 1, x
-                        inc <lz_src + 0
-                        bne +
-                        +inc_lz_src
+			;------------------
+			;SELDOM STUFF
+			;------------------
+.lz_inc_src3
+			+inc_src_ptr
+			bcs .lz_inc_src3_
+.lz_dst_inc
+			inc <lz_dst + 1
+			bcs .lz_dst_inc_
+
+			;------------------
+			;SELDOM STUFF
+			;------------------
+.lz_clc
+			clc
+			bcc .lz_clc_back
+.lz_cp_page_
+			tax
+.lz_cp_page
+			dec <lz_len_hi
+			bne +
+			jsr .disable
 +
-                        dex
-                        bne -
-}
-                        sty .lz_offset_lo + 1           ;initialize offset with $0000
-                        sty .lz_offset_hi + 1
-                        sty <lz_len_hi
-!if INPLACE = 1 {
-			beq .lz_start_over
-.lz_end_check_
-			ldx <lz_dst + 0			;check for end condition when depacking inplace, lz_dst + 0 still in X
-			cpx <lz_src + 0
-			bne .lz_start_over
-.lz_eof
-			rts				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
-.lz_end_check
-			cpx <lz_src + 1
-			beq .lz_end_check_		;we could check against src >= dst XXX TODO
-} else {
-.lz_end_check
-}
-.lz_start_over
-			lda #$01			;we fall through this check on entry and start with literal
-			+get_lz_bit
-			bcs .lz_match			;after each match check for another match or literal?
+			txa
+			beq .lz_l_page			;as Y = 0, we can skip the part that does Y = A xor $ff
+			tya				;if entered from a match, x is anything between $01 and $ff due to inx stx <lz_dst + 1, except if we would depack to zp?
+			beq .lz_m_page			;as Y = 0, we can skip the part that does Y = A xor $ff
 
 			;------------------
 			;LITERAL
 			;------------------
-.lz_literal
-			+get_lz_bit
-			bcs +
--							;lz_length as inline
+-
 			+get_lz_bit			;fetch payload bit
 			rol				;can also moved to front and executed once on start
-			+get_lz_bit
+.lz_literal
+			+get_lz_bit			;fetch payload bit
 			bcc -
 +
 			bne +
+.lz_start_depack
 			jsr .lz_refill_bits
+			beq .lz_cp_page_
 +
 			tax
-.lz_l_page_
-.lz_cp_lit
+.lz_l_page
+.lz_cp_lit						;XXX TODO copy with Y += 1 but have lz_src + 0 eor #$ff in x and countdown x, so that lz_src + 1 can be incremented in time?
 			lda (lz_src),y			;/!\ Need to copy this way, or we run into danger to copy from an area that is yet blocked by barrier, this totally sucks, loading in order reveals that
 			sta (lz_dst),y
 
@@ -116,23 +122,23 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 .lz_dst_inc_
 			dex
 			bne .lz_cp_lit
-
-			lda <lz_len_hi			;more pages to copy?
-			bne .lz_l_page			;happens very seldom
+							;XXX TODO we could also just manipulate a branch and make it go to either page handling or fall through? enable branch if 16 bits are fetched and lz_len  > 0? dop or bcs to disable and enable, 80 or b0
+.lz_set1		bcc .lz_cp_page
 
 			;------------------
 			;NEW OR OLD OFFSET
 			;------------------
+							;XXX TODO fetch length first and then decide if literal, match, repeat? But brings our checks for last bit to the end? need to check then on typebit? therefore entry for fetch is straight?
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
-			rol				;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
+			lda #$01			;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
 			+get_lz_bit
-			bcs .lz_match			;either match with new offset or old offset
+			bcs .lz_match
 
 			;------------------
 			;REPEAT LAST OFFSET
 			;------------------
 .lz_repeat
-			+get_lz_bit			;cheaper with 2 branches, as initial branch to .lz_literal therefore is removed
+			+get_lz_bit
 			bcs +
 -
 			+get_lz_bit			;fetch payload bit
@@ -142,27 +148,26 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 +
 			bne +
 			jsr .lz_refill_bits		;fetch more bits
-			beq .lz_m_page			;avoid underflow of A on sbc #$01 faster than forcing carry to 1 with a sec all times
+			beq .lz_cp_page			;XXX TODO sec after sbc #1 is also sufficient, but slower
 +
 			sbc #$01			;subtract 1, will be added again on adc as C = 1
 .lz_match_big						;we enter with length - 1 here from normal match
 			eor #$ff
 			tay
-.lz_m_page_
+.lz_m_page
 			eor #$ff			;restore A
-.lz_match_len2						;entry from new_offset handling
-			adc <lz_dst + 0
+
+			adc <lz_dst + 0			;add length
 			sta <lz_dst + 0
-			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry
+			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry, XXX TODO if we would branch to * + 3 and we use $18 as lz_dst, we have our clc there :-( but we want zp usage to be configureable
 			dec <lz_dst + 1			;subtract one more in this case
 .lz_clc_back
-.lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1) in fact we could use sbx here, but would not respect carry, but a and x are same, but need x later anyway for other purpose
+.lz_offset_lo		sbc #$00			;carry is cleared, subtract (offset + 1)
 			sta .lz_msrcr + 0
 			lax <lz_dst + 1
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
-.lz_cp_match
-			;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
+.lz_cp_match						;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
 .lz_msrcr = * + 1
 			lda $beef,y
 			sta (lz_dst),y
@@ -171,112 +176,111 @@ lz_len_hi		= CONFIG_ZP_ADDR + 5
 			inx
 			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
 
-			lda <lz_len_hi			;check for more loop runs
-			beq .lz_end_check		;do more page runs? Yes? Fall through
-.lz_m_page
-.lz_l_page
-			dec <lz_len_hi
-			txa				;much shorter this way. if we recalculate m_src and dst, endcheck also hits in if we end with an multipage match, else maybe buggy?
-			beq .lz_l_page_
-			tya
-			bcs .lz_m_page_			;as Y = 0, we can skip the part that does Y = A xor $ff
+.lz_set2		bcc .lz_cp_page
+!if INPLACE = 1 {
+			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
+			bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
 
-
+			lda <lz_dst + 0
+			eor <lz_src + 0
+			bne .lz_start_over
+			rts
+} else {
+}
 			;------------------
-			;SELDOM STUFF
+			;ENTRY POINT DEPACKER
 			;------------------
-.lz_dst_inc
-			inc <lz_dst + 1
-			bcs .lz_dst_inc_
-.lz_inc_src3
-			+inc_lz_src
-			bcs .lz_inc_src3_
+.lz_start_over
+			lda #$01			;we fall through this check on entry and start with literal
+			+get_lz_bit
+			bcc .lz_literal
 
 			;------------------
 			;MATCH
 			;------------------
--							;lz_length as inline
-			+get_lz_bit			;fetch payload bit
-			rol				;can also moved to front and executed once on start
 .lz_match
 			+get_lz_bit
-			bcc -
-
-			bne +
-			jsr .lz_refill_bits
-			beq .lz_lend			;underflow, so offset was $100
+			bcs +
+-
+			+get_lz_bit			;fetch payload bit
+			rol				;add bit to number
+			+get_lz_bit			;fetch control bit
+			bcc -				;not yet done, fetch more bits
++
+			bne +				;last bit or bitbuffer empty? fetched 1 to 4 bits now
+			jsr .lz_refill_bits		;refill bitbuffer
+			beq .disable			;so offset was $100 as lowbyte is $00, only here 4-8 bits are fetched
 +
 			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
-
 			lsr				;set bit 15 to 0 while shifting hibyte
 			sta .lz_offset_hi + 1		;hibyte of offset
 
 			lda (lz_src),y			;fetch another byte directly, same as refill_bits...
 			ror				;and shift -> first bit for lenth is in carry, and we have %0xxxxxxx xxxxxxxx as offset
-			sta .lz_offset_lo + 1
+			sta .lz_offset_lo + 1		;lobyte of offset
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
 			beq .lz_inc_src1
 .lz_inc_src1_
-			lda #$01
-			ldy #$fe
-			bcs .lz_match_len2		;length = 1 ^ $ff, do it the very short way :-)
+			lda #$01			;fetch new number, start with 1
+			bcs .lz_match_big		;length = 1, do it the very short way
 -
-			+get_lz_bit
+			+get_lz_bit			;fetch more bits
 			rol
 			+get_lz_bit
 			bcc -
 			bne .lz_match_big
-			ldy #$00			;only now y = 0 is needed
 			jsr .lz_refill_bits		;fetch remaining bits
-			bne .lz_match_big
-			inc <lz_len_hi
-			bcs .lz_match_big		;and enter match copy loop
+;.lz_jsr_addr = * - 1
+;			bcs .lz_match_big		;lobyte != 0?
+			bcs .lz_match_big		;lobyte != 0? If zero, fall through
 
 			;------------------
 			;SELDOM STUFF
 			;------------------
-.lz_clc
-			clc
-			bcc .lz_clc_back
+
 .lz_inc_src1
-			+inc_lz_src			;preserves carry, all sane
+			+inc_src_ptr
 			bne .lz_inc_src1_
 .lz_inc_src2
-			+inc_lz_src			;preserves carry and A, clears X, Y, all sane
+			+inc_src_ptr
 			bne .lz_inc_src2_
 
 			;------------------
 			;ELIAS FETCH
 			;------------------
 .lz_refill_bits
-			tax
-			lda (lz_src),y
+			tax				;save bits fetched so far
+			lda (lz_src),y			;fetch another lz_bits byte from stream
 			+set_lz_bit_marker
 			sta <lz_bits
-			inc <lz_src + 0 		;postponed, so no need to save A on next_page call
+			inc <lz_src + 0 		;postponed pointer increment, so no need to save A on next_page call
 			beq .lz_inc_src2
 .lz_inc_src2_
-			txa				;also postpone, so A can be trashed on lz_inc_src above
-			bcs .lz_lend
+			txa				;restore fetched bits, also postponed, so A can be trashed on lz_inc_src above
+			bcs .lz_lend			;last bit fetched?
 .lz_get_loop
 			+get_lz_bit			;fetch payload bit
 .lz_length_16_
-			rol				;can also moved to front and executed once on start
+			rol				;shift in new payload bit
 			bcs .lz_length_16		;first 1 drops out from lowbyte, need to extend to 16 bit, unfortunatedly this does not work with inverted numbers
-			+get_lz_bit
-			bcc .lz_get_loop
-			beq .lz_refill_bits
-.lz_lend
+			+get_lz_bit			;fetch control bit
+			bcc .lz_get_loop		;need more bits
+			beq .lz_refill_bits		;buffer is empty, fetch new bits
+.lz_lend						;was the last bit
 			rts
-.lz_length_16						;happens very rarely
-			pha				;save LSB
-			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with MSB = 1
+.lz_length_16						;this routine happens very rarely, so we can waste cycles
+			pha				;save so far received lobyte
+			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with A = 1
 			jsr .lz_length_16_		;get up to 7 more bits
-			sta <lz_len_hi			;save MSB
-			pla				;restore LSB
-			bne +
-			dec <lz_len_hi
-			tya
-+
+			sta <lz_len_hi			;and save hibyte
+			lda #$b0
+			bne .enable
+.disable
+			pha
+			lda #$90
+.enable
+			sta .lz_set1
+			sta .lz_set2
+			pla				;restore lobyte
 			rts
