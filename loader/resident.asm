@@ -105,9 +105,6 @@ link_cia2_type		;%00000100
 			nop
 }
 
-			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
-			;and advances the frame counter if needed
-
 			;those calls could be a macro, but they are handy to be jumped to so loading happens while having all mem free, and code is entered afterwards
 ;	!if CONFIG_DECOMP = 1 {
 ;;			;expect $01 to be $35
@@ -126,6 +123,10 @@ link_cia2_type		;%00000100
 ;			inc $01				;bank in again
 ;			rts
 ;	}
+
+;---------------------------------------------------------------------------------
+;LOADER STUFF
+;---------------------------------------------------------------------------------
 
 !if CONFIG_LOADER = 1 {
 			;XXX we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
@@ -149,7 +150,7 @@ bitfire_send_byte_
 ;			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
 ;			bmi -				;waiting with pha/pla would also help, or even a jsr call to waste 12 cycles
 .ld_set_dd02
-			sec
+			sec				;waste more cycles
 			stx $dd02			;restore $dd02
 							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
 .ld_pend
@@ -353,10 +354,6 @@ bitfire_loadcomp_
 		!error "code on first page too big, second gap does not fit!"
 }
 }
-.lz_dst_inc
-			inc <lz_dst + 1
-			bcs .lz_dst_inc_
-
 			;------------------
 			;MATCH
 			;------------------
@@ -396,6 +393,9 @@ bitfire_loadcomp_
 			;------------------
 			;SELDOM STUFF
 			;------------------
+.lz_dst_inc
+			inc <lz_dst + 1
+			bcs .lz_dst_inc_
 .lz_clc
 			clc
 			bcc .lz_clc_back
@@ -586,8 +586,9 @@ link_player
 			rti
 	}
 
-;add to link_player
-;stop music nmi sets jsr link_music_play_side1 to jmp, start_music to jsr?
+			;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
+			;and advances the frame counter if needed
+
 link_music_play
 	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
 			inc link_frame_count + 0
@@ -597,8 +598,7 @@ link_music_play
 link_music_addr = * + 1
 			jmp link_music_play_side1
 	}
-}
-!if CONFIG_FRAMEWORK = 1 {
+
 	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
 link_frame_count
 			!word 0
