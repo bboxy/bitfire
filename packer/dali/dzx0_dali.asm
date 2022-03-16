@@ -81,14 +81,14 @@ depack
 .lz_clc
 			clc
 			bcc .lz_clc_back
-.lz_cp_page_
-			tax
 .lz_cp_page
+			txa
+.lz_cp_page_
 			dec <lz_len_hi
 			bne +
 			jsr .disable
 +
-			txa
+			tax
 			beq .lz_l_page			;as Y = 0, we can skip the part that does Y = A xor $ff
 			tya				;if entered from a match, x is anything between $01 and $ff due to inx stx <lz_dst + 1, except if we would depack to zp?
 			beq .lz_m_page			;as Y = 0, we can skip the part that does Y = A xor $ff
@@ -274,13 +274,12 @@ depack
 			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with A = 1
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;and save hibyte
-			lda #$b0
-			bne .enable
-.disable
-			pha
-			lda #$90
-.enable
-			sta .lz_set1
-			sta .lz_set2
+			ldx #$b0
 			pla				;restore lobyte
+			top
+.disable
+			ldx #$80
+.enable
+			stx .lz_set1
+			stx .lz_set2
 			rts
