@@ -137,24 +137,17 @@ bitfire_send_byte_
 			lda #$3f
 .ld_loop
 			eor #$20
-			tax				;$1f/$3f
-			bcc +
-			sbx #$10			;$0f/$2f
-+
-			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive to fast @floppy
+			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive too fast @floppy
 			lsr <filenum
 			bne .ld_loop
-			tax				;x is always $3f after 8 rounds (8 times eor #$20)
-;-
-;							;XXX TODO possibly still save here? how many cycles does it take for busy to become high and bit to count?
-;			bit $dd00			;/!\ ATTENTION wait for drive to become busy, also needed, do not remove, do not try again to save cycles/bytes here :-(
-;			bmi -				;waiting with pha/pla would also help, or even a jsr call to waste 12 cycles
-.ld_set_dd02
-			sec				;waste more cycles
+			clc				;force final value to be $3f again (bcc will hit in later on)
+.ld_set_dd02						;moved loop code to here, so that enough cycles pass by until $dd02 is set back to $3f after whole byte is transferred, also saves a byte \o/
+			tax				;x = $1f/$3f / finally x is always $3f after 8 rounds (8 times eor #$20)
+			bcc +
+			sbx #$10			;x = $0f/$2f
++
 			stx $dd02			;restore $dd02
-							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
-.ld_pend
-			rts
+			rts				;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
 
 	!if CONFIG_FRAMEWORK = 1 {
 link_load_next_raw
@@ -170,9 +163,9 @@ bitfire_loadraw_
 			bcc -
 			;rts				;just run into ld_pblock code again that will then jump to .ld_pend and rts
 .ld_pblock
-			lda $dd00			;bit 6 is always set if not ready or idle/EOF so no problem with just an ASL
+			lda $dd00			;bit 6 is always set if not ready or idle/EOF
 			anc #$c0			;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
-			bne .ld_pend			;block ready? if so, a = 0 (block ready + busy)
+			bne .ld_en_exit + 1		;block ready? if so, a = 0 (block ready + busy) if not -> rts
 .ld_pblock_
 			ldy #$05			;5 bytes
 			;lda #$00
@@ -271,9 +264,10 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;and save hibyte
 			ldx #$b0			;enable lenchk, as lz_len_hi > 0
-			pla				;restore lobyte
+			pla				;restore lobyte and set flags accordingly
 			top				;skip upcoming ldx #$80
 .lz_lenchk_dis
+.lz_eof
 			ldx #$80			;nop #imm, disables branch to len-check
 			stx .lz_set1
 			stx .lz_set2
@@ -301,10 +295,12 @@ bitfire_loadcomp_
 			sta .lz_skip_poll + 1
 			stx .lz_skip_fetch
 
-			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with Y = 0, X = 0
+			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with Y = 0, but on loadcomp only, so take care!
 	}
 							;copy over end_pos and lz_dst from stream
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
+			sty .lz_offset_lo + 1		;initialize offset with $0000
+			sty .lz_offset_hi + 1
 			ldx #$02
 -
 			lda (lz_src),y
@@ -313,13 +309,10 @@ bitfire_loadcomp_
 			bne +
 			+inc_src_ptr
 +
-			txa				;A = 1 after loop ends, in case fetch another byte? First byte should be lz_bits?
-			dex
+			txa				;save x prior to decrement, so that A = 1 after loop ends, in case fetch another byte? First byte should be lz_bits?
+			sbx #$01			;dex + sec set
 			bne -
-			stx .lz_offset_lo + 1		;initialize offset with $0000
-			stx .lz_offset_hi + 1
-			sec				;needs to be set, is set after send_byte but not if entering via link_decomp
-			bcs .lz_start_depack		;start with a literal, X = 0, still annoying
+			beq .lz_start_depack		;start with a literal, X = 0, still annoying, but now need to reverse bitorder for lz_bits this way
 
 			;------------------
 			;SELDOM STUFF
@@ -366,7 +359,7 @@ bitfire_loadcomp_
 
 			bne +				;last bit or bitbuffer empty? fetched 1 to 4 bits now
 			jsr .lz_refill_bits		;refill bitbuffer
-			beq .lz_lenchk_dis		;so offset was $100 as lowbyte is $00, only here 4-8 bits are fetched, this is our eof marker -> disable len-check and rts
+			beq .lz_eof			;so offset was $100 as lowbyte is $00, only here 4-8 bits are fetched, this is our eof marker -> disable len-check and rts
 +
 			sbc #$01			;subtract 1, elias numbers range from 1..256, we need 0..255
 			lsr				;set bit 15 to 0 while shifting hibyte
@@ -399,17 +392,17 @@ bitfire_loadcomp_
 .lz_clc
 			clc
 			bcc .lz_clc_back
-.lz_cp_page
-			txa				;x is 0 or $80
-.lz_cp_page_						;a is already 0 here
+.lz_cp_page						;if we enter from a literal, we take care that x = 0 (given after loop run, after length fetch, we force it to zero by tax here), so that we can distinguish the code path later on. If we enter from a match x = $b0 (elias fetch) or >lz_dst_hi + 1, so never zero.
+			txa
+.lz_cp_page_						;a is already 0 if entered here
 			dec <lz_len_hi
 			bne +
 			jsr .lz_lenchk_dis
 +
-			tax
-			beq .lz_l_page			;as Y = 0, we can skip the part that does Y = A xor $ff
-			tya				;if entered from a match, x is anything between $01 and $ff due to inx stx <lz_dst + 1, except if we would depack to zp?
-			beq .lz_m_page			;as Y = 0, we can skip the part that does Y = A xor $ff
+			tax				;check a/x
+			beq .lz_l_page			;do another page
+			tya				;if entered from a match, x is anything between $01 and $ff due to inx stx >lz_dst + 1, except if we would depack to zp on a wrap around?
+			beq .lz_m_page			;as Y = 0 and A = 0 now, we can skip the part that does Y = A xor $ff
 
 			;------------------
 			;POLLING
@@ -443,7 +436,7 @@ bitfire_loadcomp_
 			bne +
 .lz_start_depack
 			jsr .lz_refill_bits
-			beq .lz_cp_page_
+			beq .lz_cp_page_		;handle special case of length being $xx00
 +
 			tax
 .lz_l_page
@@ -460,7 +453,7 @@ bitfire_loadcomp_
 			dex
 			bne .lz_cp_lit
 
-.lz_set1		bcc .lz_cp_page
+.lz_set1		bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
 
 			;------------------
 			;NEW OR OLD OFFSET
@@ -475,7 +468,6 @@ bitfire_loadcomp_
 			;REPEAT LAST OFFSET
 			;------------------
 .lz_repeat
-			;jsr .lz_length
 			+get_lz_bit
 			bcs +
 -
@@ -486,7 +478,7 @@ bitfire_loadcomp_
 +
 			bne +
 			jsr .lz_refill_bits		;fetch more bits
-			beq .lz_cp_page			;XXX TODO sec after sbc #1 is also sufficient, but slower
+			beq .lz_cp_page			;handle special case of length being $xx00
 +
 			sbc #$01			;subtract 1, will be added again on adc as C = 1
 .lz_match_big						;we enter with length - 1 here from normal match
@@ -523,6 +515,10 @@ bitfire_loadcomp_
 			eor <lz_src + 0
 			bne .lz_start_over
 
+							;XXX TODO, save one byte above and the beq lz_next_page can be omitted and lz_next_page copied here again
+			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
+			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
 	!if CONFIG_LOADER = 1 {
 			;------------------
 			;NEXT PAGE IN STREAM
@@ -551,10 +547,6 @@ lz_next_page
 	} else {
 			rts
 	}
-							;XXX TODO, save one byte above and the beq lz_next_page can be omitted and lz_next_page copied here again
-			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
-			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
-							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
 }
 
 ;---------------------------------------------------------------------------------
