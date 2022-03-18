@@ -30,6 +30,7 @@
 !src "constants.inc"
 
 LZ_BITS_LEFT		= 0
+OPT_FULL_SET		= 0
 
 !if CONFIG_DECOMP = 0 {
 bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
@@ -262,14 +263,34 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with A = 1
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;and save hibyte
-			ldx #$b0			;bcc as bra -> enable lenchk, as lz_len_hi > 0
-			pla				;restore lobyte and set flags accordingly
-			top				;skip upcoming ldx #$80
+			;top				;skip upcoming ldx #$80
+			ldx #$b0
+		!if OPT_FULL_SET = 1 {
+			lda #.lz_cp_page - .lz_set1 - 2
+			ldy #.lz_cp_page - .lz_set1 - 2
+			bne +
 .lz_lenchk_dis
 .lz_eof
-			ldx #$80			;nop #imm, disables branch to len-check
+			pha
+			ldx #$a9
+			lda #$01
+			tay
++
 			stx .lz_set1
 			stx .lz_set2
+			sta .lz_set1 + 1
+			sty .lz_set2 + 1
+			ldy #$00
+			pla
+		} else {
+			pla
+			top
+.lz_lenchk_dis
+.lz_eof
+			ldx #$80
+			stx .lz_set1
+			stx .lz_set2
+                }
 			rts
 
 			;------------------
@@ -415,12 +436,17 @@ bitfire_loadcomp_
 			bit $dd00
 			bvs .lz_start_over
 			jsr .ld_pblock			;yes, fetch another block, call is disabled for plain decomp
+		!if OPT_FULL_SET = 1 {
+			lda #$01			;restore initial length val
+                }
 	}
 			;------------------
 			;ENTRY POINT DEPACKER
 			;------------------
 .lz_start_over
+		!if OPT_FULL_SET = 0 {
 			lda #$01			;we fall through this check on entry and start with literal
+                }
 			+get_lz_bit
 			bcs .lz_match			;after each match check for another match or literal?
 
@@ -456,15 +482,19 @@ bitfire_loadcomp_
 			dex
 			bne .lz_cp_lit
 
-			;XXX TODO could be transformed to a lda #1, woudl even save more :-(
+		!if OPT_FULL_SET = 0 {
 .lz_set1		bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
-
+                } else {
+.lz_set1		lda #$01			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+                }
 			;------------------
 			;NEW OR OLD OFFSET
 			;------------------
 							;XXX TODO fetch length first and then decide if literal, match, repeat? But brings our checks for last bit to the end? need to check then on typebit? therefore entry for fetch is straight?
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
+		!if OPT_FULL_SET = 0 {
 			lda #$01			;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
+                }
 			+get_lz_bit
 			bcs .lz_match			;either match with new offset or old offset
 
@@ -510,7 +540,11 @@ bitfire_loadcomp_
 			inx
 			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
 
-.lz_set2		bcc .lz_cp_page
+		!if OPT_FULL_SET = 0 {
+.lz_set2		bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+                } else {
+.lz_set2		lda #$01			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+                }
 .lz_check_poll
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
