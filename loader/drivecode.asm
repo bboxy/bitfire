@@ -612,6 +612,7 @@ ___			= $ff
 			bcc .wait_bit				;more bits to fetch?
 			ldy #.BUSY
 			sty $1800				;set busy bit
+			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
 
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 			ldy #$00

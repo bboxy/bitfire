@@ -140,10 +140,10 @@ bitfire_send_byte_
 			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive too fast @floppy
 			lsr <filenum
 			bne .ld_loop
-			clc				;force final value to be $3f again (bcc will hit in later on)
+			;clc				;force final value to be $3f again (bcc will hit in later on)
 .ld_set_dd02						;moved loop code to here, so that enough cycles pass by until $dd02 is set back to $3f after whole byte is transferred, also saves a byte \o/
 			tax				;x = $1f/$3f / finally x is always $3f after 8 rounds (8 times eor #$20)
-			bcc +
+			bcs +
 			sbx #$10			;x = $0f/$2f
 +
 			stx $dd02			;restore $dd02
@@ -154,7 +154,6 @@ link_load_next_raw
 			lda #BITFIRE_LOAD_NEXT
 link_load_raw
 	}
-
 bitfire_loadraw_
 			jsr bitfire_send_byte_		;easy, open...
 -
@@ -263,7 +262,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with A = 1
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;and save hibyte
-			ldx #$b0			;enable lenchk, as lz_len_hi > 0
+			ldx #$b0			;bcc as bra -> enable lenchk, as lz_len_hi > 0
 			pla				;restore lobyte and set flags accordingly
 			top				;skip upcoming ldx #$80
 .lz_lenchk_dis
@@ -374,6 +373,8 @@ bitfire_loadcomp_
 			beq .lz_inc_src_match
 .lz_inc_src_match_
 			lda #$01			;fetch new number, start with 1
+			;ldy #$fe			;XXX preferring that path gives ~0,1% speed gain
+			;bcs .lz_match_len2
 			bcs .lz_match_big		;length = 1, do it the very short way
 -
 			+get_lz_bit			;fetch more bits
@@ -381,6 +382,7 @@ bitfire_loadcomp_
 			+get_lz_bit
 			bcc -
 			bne .lz_match_big
+			;ldy #$00
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big		;lobyte != 0? If zero, fall through
 
@@ -454,6 +456,7 @@ bitfire_loadcomp_
 			dex
 			bne .lz_cp_lit
 
+			;XXX TODO could be transformed to a lda #1, woudl even save more :-(
 .lz_set1		bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
 
 			;------------------
@@ -487,7 +490,7 @@ bitfire_loadcomp_
 			tay
 .lz_m_page
 			eor #$ff			;restore A
-
+.lz_match_len2
 			adc <lz_dst + 0			;add length
 			sta <lz_dst + 0
 			bcs .lz_clc			;/!\ branch happens very seldom, if so, clear carry, XXX TODO if we would branch to * + 3 and we use $18 as lz_dst, we have our clc there :-( but we want zp usage to be configureable
@@ -512,8 +515,8 @@ bitfire_loadcomp_
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
 
-			lda <lz_dst + 0
-			eor <lz_src + 0
+			ldx <lz_dst + 0
+			cpx <lz_src + 0
 			bne .lz_start_over
 
 							;XXX TODO, save one byte above and the beq lz_next_page can be omitted and lz_next_page copied here again
@@ -588,9 +591,9 @@ link_music_play
 			bne +
 			inc link_frame_count + 1
 +
+	}
 link_music_addr = * + 1
 			jmp link_music_play_side1
-	}
 
 	!if CONFIG_FRAMEWORK_FRAMECOUNTER = 1 {
 link_frame_count
