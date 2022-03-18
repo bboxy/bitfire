@@ -405,9 +405,9 @@ void write_reencoded_stream(ctx* ctx) {
             file_write_byte(ctx->cbm_packed_addr & 255, fp);
             file_write_byte((ctx->cbm_packed_addr >> 8) & 255, fp);
 
-            /* big endian, as read backwards by depacker */
-            file_write_byte((ctx->cbm_orig_addr >> 8) & 255, fp);
+            /* little endian */
             file_write_byte(ctx->cbm_orig_addr & 255, fp);
+            file_write_byte((ctx->cbm_orig_addr >> 8) & 255, fp);
         } else {
             printf("original: $%04x-$%04lx ($%04lx) 100%%\n", 0, ctx->unpacked_size, ctx->unpacked_size);
             printf("packed:   $%04x-$%04lx ($%04lx) %3.2f%%\n", 0, ctx->packed_index, ctx->packed_index, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
@@ -695,7 +695,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("dali v0.3 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
+    printf("dali v0.3.2 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
     printf("underlying zx0-packer salvador by Emmanuel Marty\n");
 
     if (argc == 1) {
