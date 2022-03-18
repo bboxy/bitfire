@@ -216,10 +216,10 @@ bitfire_ntsc2		and $dd00
 .ld_store		sta $b00b,y
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
-bitfire_ntsc3		adc $dd00			;XXX $DD = CMP $xxxx,x  ;a is anything between 38 and 3b after add (37 + 00..03 + carry), so bit 3, 4 and 5 are always set, bits 6 and 7 are given by floppy
+bitfire_ntsc3		adc $dd00
 							;%xx1110xx
 .ld_gend
-			stx $dd02			;carry is cleared now, we can exit here and do our rts with .ld_gend
+			stx $dd02			;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
 			lsr				;%xxx1110x
 			lsr				;%xxxx1110
 bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
@@ -297,22 +297,23 @@ bitfire_loadcomp_
 
 			jsr .lz_next_page_		;shuffle in data first until first block is present, returns with Y = 0, but on loadcomp only, so take care!
 	}
-							;copy over end_pos and lz_dst from stream
+							;copy over end_pos and lz_dst from stream XXX would also work from x = 0 .. 2 -> lax #0 tay txa inx cpx #2 -> a = 1 + sec at end
 			ldy #$00			;needs to be set in any case, also plain decomp enters here
 			sty .lz_offset_lo + 1		;initialize offset with $0000
 			sty .lz_offset_hi + 1
-			ldx #$02
+			ldx #$ff
 -
 			lda (lz_src),y
-			sta <lz_dst + 0 - 1, x
+			sta <lz_dst + 1, x
 			inc <lz_src + 0
 			bne +
 			+inc_src_ptr
 +
+			inx				;dex + sec set
+			beq -
 			txa				;save x prior to decrement, so that A = 1 after loop ends, in case fetch another byte? First byte should be lz_bits?
-			sbx #$01			;dex + sec set
-			bne -
-			beq .lz_start_depack		;start with a literal, X = 0, still annoying, but now need to reverse bitorder for lz_bits this way
+			sec
+			bne .lz_start_depack		;start with a literal, X = 0, still annoying, but now need to reverse bitorder for lz_bits this way
 
 			;------------------
 			;SELDOM STUFF
