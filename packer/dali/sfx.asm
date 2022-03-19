@@ -25,7 +25,7 @@
 
 !cpu 6510
 
-BITS_LEFT		= 0
+BITS_LEFT		= 1
 
 .depacker_dst		= $01
 .smc_offsetd 		= .depacker_dst - (.dali_code_end - .dali_code_start)

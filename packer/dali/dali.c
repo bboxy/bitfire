@@ -10,7 +10,7 @@
 
 #define FALSE 0
 #define TRUE 1
-#define DALI_BITS_LEFT 0
+#define DALI_BITS_LEFT 1
 #define DALI_ELIAS_LE 1
 
 typedef struct ctx {
