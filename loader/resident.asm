@@ -29,8 +29,11 @@
 !src "config.inc"
 !src "constants.inc"
 
-LZ_BITS_LEFT		= 0
-OPT_FULL_SET		= 0
+LZ_BITS_LEFT		= 1				;shift lz_bits left or right, might make a difference on testing and init, left is the original way
+
+;if you do not make use of the nmi-gaps, these optimizations will be enabled
+OPT_FULL_SET		= CONFIG_NMI_GAPS xor 1		;adds 1,4% more performance, needs 15 bytes extra
+OPT_PRIO_LEN2		= CONFIG_NMI_GAPS xor 1		;adds 0,1% more performance, needs 4 bytes extra
 
 !if CONFIG_DECOMP = 0 {
 bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
@@ -265,7 +268,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			sta <lz_len_hi			;and save hibyte
 			;top				;skip upcoming ldx #$80
 			ldx #$b0
-		!if OPT_FULL_SET = 1 {
+		!if OPT_FULL_SET = 1 {			;transform bcs .lz_cp_page to a lda #$01 and by that do not waste a single cycle on a page check if not needed
 			lda #.lz_cp_page - .lz_set1 - 2
 			ldy #.lz_cp_page - .lz_set1 - 2
 			bne +
@@ -282,7 +285,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			sty .lz_set2 + 1
 			ldy #$00
 			pla
-		} else {
+		} else {				;only transform bcs .lz_cp_page to anything that is not executes, like a nop #imm
 			pla
 			top
 .lz_lenchk_dis
@@ -394,16 +397,21 @@ bitfire_loadcomp_
 			beq .lz_inc_src_match
 .lz_inc_src_match_
 			lda #$01			;fetch new number, start with 1
-			;ldy #$fe			;XXX preferring that path gives ~0,1% speed gain
-			;bcs .lz_match_len2
+		!if OPT_PRIO_LEN2 = 1 {
+			ldy #$fe			;XXX preferring that path gives ~0,1% speed gain
+			bcs .lz_match_len2
+                } else {
 			bcs .lz_match_big		;length = 1, do it the very short way
+                }
 -
 			+get_lz_bit			;fetch more bits
 			rol
 			+get_lz_bit
 			bcc -
 			bne .lz_match_big
-			;ldy #$00
+		!if OPT_PRIO_LEN2 = 1 {
+			ldy #$00
+		}
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big		;lobyte != 0? If zero, fall through
 
