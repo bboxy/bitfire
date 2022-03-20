@@ -266,24 +266,24 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			tya				;was lda #$01, but A = 0 + upcoming rol makes this also start with A = 1
 			jsr .lz_length_16_		;get up to 7 more bits
 			sta <lz_len_hi			;and save hibyte
-			;top				;skip upcoming ldx #$80
 			ldx #$b0
 		!if OPT_FULL_SET = 1 {			;transform bcs .lz_cp_page to a lda #$01 and by that do not waste a single cycle on a page check if not needed
-			lda #.lz_cp_page - .lz_set1 - 2
-			ldy #.lz_cp_page - .lz_set1 - 2
-			bne +
+			lda #.lz_cp_page - .lz_set1 - 2	;we are very lucky here, we can jump in two steps to bcs of set1 and then to lz_cp_page, so we can set up both bcs with teh same value ($c0 that is)
+			;ldy #.lz_cp_page - .lz_set2 - 2
+			bne +				;annoying, no dop or top possible, need to skip too many bytes
 .lz_lenchk_dis
 .lz_eof
 			pha
 			ldx #$a9
 			lda #$01
-			tay
+			;iny				;y and a = 1
+			;tya
 +
 			stx .lz_set1
 			stx .lz_set2
 			sta .lz_set1 + 1
-			sty .lz_set2 + 1
-			ldy #$00
+			sta .lz_set2 + 1
+			;ldy #$00
 			pla
 		} else {				;only transform bcs .lz_cp_page to anything that is not executes, like a nop #imm
 			pla
@@ -296,6 +296,30 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
                 }
 			rts
 
+;			ldx #$b0
+;			lda #.lz_cp_page - .lz_set1 - 2
+;			bne .things
+;
+;			pha
+;			ldx #$a9
+;			lda #$01
+;.things
+;			iny
+;-
+;			sta .lz_set1,y
+;			cmp #.lz_cp_page - .lz_set1 - 2
+;			bne +
+;			lda #.lz_cp_page - .lz_set2 - 2
+;+
+;			sta .lz_set2,y
+;			txa
+;			dey
+;			bpl -
+;			iny
+;			sec
+;			pla
+;			rts
+;
 			;------------------
 			;DECOMP INIT
 			;------------------
@@ -408,6 +432,7 @@ bitfire_loadcomp_
 			rol
 			+get_lz_bit
 			bcc -
+
 			bne .lz_match_big
 		!if OPT_PRIO_LEN2 = 1 {
 			ldy #$00
