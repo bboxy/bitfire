@@ -1,7 +1,7 @@
 ACME ?= acme
 ACME_OPTS ?= -f cbm
 DALI_CFLAGS ?= $(CFLAGS) -Os -Wall
-CC ?= gcc
+DALI_CC = gcc
 SALVADOR_PATH = salvador
 SALVADOR_CFLAGS = -O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIC
 SALVADOR_CC = gcc
@@ -18,7 +18,7 @@ all: dali
 
 dali: dali.c sfx_small.h sfx_fast.h salvador.a
 	@echo "Building dali..."
-	$(VR)$(CC) $(DALI_CFLAGS) -o $@ $^
+	$(VR)$(DALI_CC) $(DALI_CFLAGS) -o $@ $^
 	$(VR)strip $@
 
 salvador.a:
