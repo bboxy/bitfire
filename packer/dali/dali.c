@@ -13,7 +13,7 @@
 #define DALI_BITS_LEFT 1
 #define DALI_ELIAS_LE 1
 
-//include salvador
+//include salvador and rename main
 #define main salvador_main
 #include "salvador/src/salvador.c"
 #undef main

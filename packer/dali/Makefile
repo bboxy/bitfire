@@ -1,11 +1,11 @@
 ACME ?= acme
 ACME_OPTS ?= -f cbm
-SALVADOR_PATH = salvador
-SALVADOR_FILES += $(SALVADOR_PATH)/src/shrink.c
-SALVADOR_FILES += $(SALVADOR_PATH)/src/matchfinder.c
-SALVADOR_FILES += $(SALVADOR_PATH)/src/expand.c
-SALVADOR_FILES += $(SALVADOR_PATH)/src/libdivsufsort/lib/*.c
-SALVADOR_INCLUDES = $(SALVADOR_PATH)/src/libdivsufsort/include
+SALVADOR_PATH = salvador/src
+SALVADOR_FILES += $(SALVADOR_PATH)/shrink.c
+SALVADOR_FILES += $(SALVADOR_PATH)/matchfinder.c
+SALVADOR_FILES += $(SALVADOR_PATH)/expand.c
+SALVADOR_FILES += $(SALVADOR_PATH)/libdivsufsort/lib/*.c
+SALVADOR_INCLUDES = $(SALVADOR_PATH)/libdivsufsort/include
 DALI_CFLAGS = -O3 -g -Wall -fomit-frame-pointer -I$(SALVADOR_INCLUDES)
 DALI_CC = gcc
 
