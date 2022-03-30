@@ -1,11 +1,13 @@
 ACME ?= acme
 ACME_OPTS ?= -f cbm
-DALI_CFLAGS ?= $(CFLAGS) -Os -Wall
-DALI_CC = gcc
 SALVADOR_PATH = salvador
-SALVADOR_CFLAGS = -O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc -fPIC
-SALVADOR_CC = gcc
-SALVADOR_OBJS = $(SALVADOR_PATH)/obj/src/*.o $(SALVADOR_PATH)/obj/src/libdivsufsort/lib/*.o
+SALVADOR_FILES += $(SALVADOR_PATH)/src/shrink.c
+SALVADOR_FILES += $(SALVADOR_PATH)/src/matchfinder.c
+SALVADOR_FILES += $(SALVADOR_PATH)/src/expand.c
+SALVADOR_FILES += $(SALVADOR_PATH)/src/libdivsufsort/lib/*.c
+SALVADOR_INCLUDES = $(SALVADOR_PATH)/src/libdivsufsort/include
+DALI_CFLAGS = -O3 -g -Wall -fomit-frame-pointer -I$(SALVADOR_INCLUDES)
+DALI_CC = gcc
 
 V ?= 0
 ifeq ($(V),1)
@@ -16,16 +18,10 @@ endif
 
 all: dali
 
-dali: dali.c sfx_small.h sfx_fast.h salvador.a
+dali: dali.c sfx_small.h sfx_fast.h $(SALVADOR_FILES)
 	@echo "Building dali..."
 	$(VR)$(DALI_CC) $(DALI_CFLAGS) -o $@ $^
 	$(VR)strip $@
-
-salvador.a:
-	@echo "Creating salvador library..."
-	$(VR)make CFLAGS='$(SALVADOR_CFLAGS)' CC='$(SALVADOR_CC)' -C $(SALVADOR_PATH)
-	$(VR)ar rcs $@ $(SALVADOR_OBJS)
-	$(VR)objcopy --redefine-sym main=salvador_main $@
 
 depack.prg: depack.asm dzx0.asm dzx0_dali.asm ../../benchmark/files/a.lz
 	$(ACME) $(ACME_OPTS) -o $@ $<
@@ -51,5 +47,4 @@ sfx_fast.h: sfx.asm
 	$(VR)rm $(basename $@).lst $(basename $@)
 
 clean:
-	$(VR)-rm dali sfx_small.h sfx_fast.h depack.prg salvador.a
-	$(VR)make -C salvador clean
+	$(VR)-rm dali sfx_small.h sfx_fast.h depack.prg

@@ -13,6 +13,11 @@
 #define DALI_BITS_LEFT 1
 #define DALI_ELIAS_LE 1
 
+//include salvador
+#define main salvador_main
+#include "salvador/src/salvador.c"
+#undef main
+
 typedef struct ctx {
     unsigned char *packed_data;
     unsigned char *reencoded_data;
@@ -54,8 +59,6 @@ typedef struct ctx {
 
     int exit_on_warn;
 } ctx;
-
-void salvador_main();
 
 static int read_number(char* arg, char* argname, int limit) {
     int number;
@@ -546,7 +549,7 @@ void do_reencode(ctx* ctx) {
     if (ctx->unpacked_size != 0) {
         if (fwrite(ctx->unpacked_data, sizeof(char), ctx->unpacked_size, sfp) != ctx->unpacked_size) {
             fprintf(stderr, "Error: Cannot write clamped file\n");
-            perror("fwrite");
+            remove(ctx->clamped_name);
             exit(1);
         }
     }
