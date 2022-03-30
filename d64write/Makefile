@@ -1,5 +1,5 @@
 d64write_CFLAGS = $(CFLAGS) -Ofast -Wall
-CC ?= cc
+CC ?= gcc
 
 V ?= 0
 ifeq ($(V),1)
