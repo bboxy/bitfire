@@ -3,7 +3,6 @@ ACME_OPTS ?= -f cbm
 SALVADOR_PATH = salvador/src
 SALVADOR_LIB_PATH = $(SALVADOR_PATH)/libdivsufsort/lib
 DALI_INCLUDES = $(SALVADOR_PATH)/libdivsufsort/include
-DALI_FILES += dali.c
 DALI_CFLAGS = -O3 -g -Wall -fomit-frame-pointer -I$(DALI_INCLUDES)
 DALI_CC = gcc
 DALI_OBJS += $(SALVADOR_PATH)/expand.o
