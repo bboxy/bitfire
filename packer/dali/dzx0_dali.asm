@@ -271,7 +271,7 @@ depack
 			sta <lz_len_hi			;and save hibyte
 			ldx #$b0
 			lda #.lz_cp_page - .lz_set1 - 2
-			ldy #.lz_cp_page - .lz_set1 - 2
+			ldy #.lz_cp_page - .lz_set2 - 2
 			bne +
 .lz_lenchk_dis
 .lz_eof
