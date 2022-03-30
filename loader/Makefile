@@ -19,7 +19,7 @@ gcr_tables: gcr_tables.c
 
 resident: resident.asm ../config.inc constants.inc Makefile
 	@echo "Buidling resident part..."
-	$(VR)$(ACME) $(ACME_OPTS) -I ../../ -I ../ -o resident -l resident_labels.txt resident.asm
+	$(VR)$(ACME) $(ACME_OPTS) -I ../../ -I ../ -o resident --labeldump resident_labels.txt resident.asm
 	@printf "Resident size: $$%04x\n" $$((`wc -c < resident` - 2))
 	@echo "Creating loader_acme.inc..."
 	@#fetch all global labels for resident part

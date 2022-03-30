@@ -23,9 +23,9 @@ dzx0: dzx0.c
 	$(VR)$(CC) $(zx0_CFLAGS) -o $@ $^
 
 sfx.h: sfx.asm
-	@#$(VR)$(ACME) $(ACME_OPTS) -l sau.lst --vicelabels $(basename $@).lst -o $(basename $@) $<
+	@#$(VR)$(ACME) $(ACME_OPTS) --labeldump sau.lst --vicelabels $(basename $@).lst -o $(basename $@) $<
 	@#$(VR)grep 'ZX0' $(basename $@).lst | sed -E 's/al C:([0-9a-f]+)[[:space:]]\.(.*)/#define \2 0x\1/' >> $@
-	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
+	$(VR)$(ACME) $(ACME_OPTS) --labeldump $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'ZX0' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
 	$(VR)echo 'static const char decruncher[] = {' >> $@
 	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
