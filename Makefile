@@ -23,7 +23,7 @@ bitnax: FORCE
 
 dali: FORCE
 	@git submodule update --init --recursive
-	@$(MAKE) $(MAKE_OPTS) -C packer/$@
+	@$(MAKE) $(MAKE_OPTS) -j4 -C packer/$@
 
 d64write: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C $@
@@ -49,7 +49,6 @@ benchmark: FORCE zx0 dali d64write loader
 clean:
 	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
 	@$(MAKE) $(MAKE_OPTS) -C packer/dali/ clean
-	@$(MAKE) $(MAKE_OPTS) -C packer/bitnax/ clean
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
