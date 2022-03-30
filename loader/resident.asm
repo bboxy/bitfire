@@ -31,9 +31,10 @@
 
 LZ_BITS_LEFT		= 1				;shift lz_bits left or right, might make a difference on testing and init, left is the original way
 
-;if you do not make use of the nmi-gaps, these optimizations will be enabled
-OPT_FULL_SET		= CONFIG_NMI_GAPS xor 1		;adds 1,4% more performance, needs 15 bytes extra
+;if you do not make use of the nmi-gaps, these optimizations will be enabled, with gaps, they don't fit :-(
+OPT_FULL_SET		= CONFIG_NMI_GAPS xor 1		;adds 1,4% more performance, needs 10 bytes extra
 OPT_PRIO_LEN2		= CONFIG_NMI_GAPS xor 1		;adds 0,1% more performance, needs 4 bytes extra
+OPT_LZ_INC_SRC		= 1				;give non equal case priority on lz_src checks
 
 !if CONFIG_DECOMP = 0 {
 bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
@@ -170,9 +171,9 @@ bitfire_loadraw_
 			anc #$c0			;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bne .ld_en_exit + 1		;block ready? if so, a = 0 (block ready + busy) if not -> rts
 .ld_pblock_
-			ldy #$05			;5 bytes
-			;lda #$00
-			ldx #<preamble
+			ldy #$05			;fetch 5 bytes of preamble
+			;lda #$00			;is already zero due to anc #$c0
+			ldx #<preamble			;target for received bytes
 			jsr .ld_set_block_tgt		;load 5 bytes preamble - returns with C = 0 at times
 
 			ldy <block_length		;load blocklength
@@ -246,8 +247,14 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			+set_lz_bit_marker
 			sta <lz_bits
 			inc <lz_src + 0 		;postponed pointer increment, so no need to save A on next_page call
+!if OPT_LZ_INC_SRC = 1 {
 			beq .lz_inc_src_refill
 .lz_inc_src_refill_
+} else {
+			bne +
+			+inc_src_ptr
++
+}
 			txa				;restore fetched bits, also postponed, so A can be trashed on lz_inc_src above
 			bcs .lz_lend			;last bit fetched?
 .lz_get_loop
@@ -268,7 +275,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			sta <lz_len_hi			;and save hibyte
 			ldx #$b0
 		!if OPT_FULL_SET = 1 {			;transform bcs .lz_cp_page to a lda #$01 and by that do not waste a single cycle on a page check if not needed
-			lda #.lz_cp_page - .lz_set1 - 2	;we are very lucky here, we can jump in two steps to bcs of set1 and then to lz_cp_page, so we can set up both bcs with teh same value ($c0 that is)
+			lda #.lz_cp_page - .lz_set1 - 2	;we are very lucky here, we can jump in two steps to bcs of set1 and then to lz_cp_page, so we can set up both bcs with the same value ($c0 that is) and reach or goal in two hops, while keeping the setup code small
 			;ldy #.lz_cp_page - .lz_set2 - 2
 			bne +				;annoying, no dop or top possible, need to skip too many bytes
 .lz_lenchk_dis
@@ -296,30 +303,6 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
                 }
 			rts
 
-;			ldx #$b0
-;			lda #.lz_cp_page - .lz_set1 - 2
-;			bne .things
-;
-;			pha
-;			ldx #$a9
-;			lda #$01
-;.things
-;			iny
-;-
-;			sta .lz_set1,y
-;			cmp #.lz_cp_page - .lz_set1 - 2
-;			bne +
-;			lda #.lz_cp_page - .lz_set2 - 2
-;+
-;			sta .lz_set2,y
-;			txa
-;			dey
-;			bpl -
-;			iny
-;			sec
-;			pla
-;			rts
-;
 			;------------------
 			;DECOMP INIT
 			;------------------
@@ -365,6 +348,7 @@ bitfire_loadcomp_
 			;------------------
 			;SELDOM STUFF
 			;------------------
+!if OPT_LZ_INC_SRC = 1 {
 .lz_inc_src_refill
 			+inc_src_ptr
 			bne .lz_inc_src_refill_
@@ -374,9 +358,11 @@ bitfire_loadcomp_
 .lz_inc_src_lit
 			+inc_src_ptr
 			bcs .lz_inc_src_lit_
+}
 
 !if CONFIG_NMI_GAPS = 1 {
 			!ifdef .lz_gap2 {
+				!warn "disabling some optimizations to make gaps fit"
 				!warn .lz_gap2 - *, " bytes left until gap2"
 			}
 !align 255,0
@@ -418,8 +404,14 @@ bitfire_loadcomp_
 			sta .lz_offset_lo + 1		;lobyte of offset
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
+!if OPT_LZ_INC_SRC = 1 {
 			beq .lz_inc_src_match
 .lz_inc_src_match_
+} else {
+			bne +
+			+inc_src_ptr
++
+}
 			lda #$01			;fetch new number, start with 1
 		!if OPT_PRIO_LEN2 = 1 {
 			ldy #$fe			;XXX preferring that path gives ~0,1% speed gain
@@ -507,27 +499,29 @@ bitfire_loadcomp_
 			sta (lz_dst),y
 
 			inc <lz_src + 0
+!if OPT_LZ_INC_SRC = 1 {
 			beq .lz_inc_src_lit
 .lz_inc_src_lit_
+} else {
+			bne +
+			+inc_src_ptr
++
+}
 			inc <lz_dst + 0
 			beq .lz_dst_inc
 .lz_dst_inc_
 			dex
 			bne .lz_cp_lit
-
-		!if OPT_FULL_SET = 0 {
-.lz_set1		bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
-                } else {
-.lz_set1		lda #$01			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+.lz_set1
+		!if OPT_FULL_SET = 0 {			;if optimization is enabled, the lda #$01 is modified to a bcs .lz_cp_page/lda #$01
+			bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
                 }
 			;------------------
 			;NEW OR OLD OFFSET
 			;------------------
 							;XXX TODO fetch length first and then decide if literal, match, repeat? But brings our checks for last bit to the end? need to check then on typebit? therefore entry for fetch is straight?
 							;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
-		!if OPT_FULL_SET = 0 {
-			lda #$01			;was A = 0, C = 1 -> A = 1 with rol, but not if we copy literal this way
-                }
+			lda #$01
 			+get_lz_bit
 			bcs .lz_match			;either match with new offset or old offset
 
@@ -572,11 +566,11 @@ bitfire_loadcomp_
 			bne .lz_cp_match
 			inx
 			stx <lz_dst + 1			;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
-
+.lz_set2
 		!if OPT_FULL_SET = 0 {
-.lz_set2		bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+			bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
                 } else {
-.lz_set2		lda #$01			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+			lda #$01			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
                 }
 .lz_check_poll
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
