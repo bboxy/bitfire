@@ -1,13 +1,19 @@
 ACME ?= acme
 ACME_OPTS ?= -f cbm
 SALVADOR_PATH = salvador/src
-SALVADOR_FILES += $(SALVADOR_PATH)/shrink.c
-SALVADOR_FILES += $(SALVADOR_PATH)/matchfinder.c
-SALVADOR_FILES += $(SALVADOR_PATH)/expand.c
-SALVADOR_FILES += $(SALVADOR_PATH)/libdivsufsort/lib/*.c
-SALVADOR_INCLUDES = $(SALVADOR_PATH)/libdivsufsort/include
-DALI_CFLAGS = -O3 -g -Wall -fomit-frame-pointer -I$(SALVADOR_INCLUDES)
+SALVADOR_LIB_PATH = $(SALVADOR_PATH)/libdivsufsort/lib
+DALI_INCLUDES = $(SALVADOR_PATH)/libdivsufsort/include
+DALI_FILES += dali.c
+DALI_CFLAGS = -O3 -g -Wall -fomit-frame-pointer -I$(DALI_INCLUDES)
 DALI_CC = gcc
+DALI_OBJS += dali.o
+DALI_OBJS += $(SALVADOR_PATH)/expand.o
+DALI_OBJS += $(SALVADOR_PATH)/matchfinder.o
+DALI_OBJS += $(SALVADOR_PATH)/shrink.o
+DALI_OBJS += $(SALVADOR_LIB_PATH)/divsufsort.o
+DALI_OBJS += $(SALVADOR_LIB_PATH)/divsufsort_utils.o
+DALI_OBJS += $(SALVADOR_LIB_PATH)/sssort.o
+DALI_OBJS += $(SALVADOR_LIB_PATH)/trsort.o
 
 V ?= 0
 ifeq ($(V),1)
@@ -18,16 +24,22 @@ endif
 
 all: dali
 
-dali: dali.c sfx_small.h sfx_fast.h $(SALVADOR_FILES)
+%.o: %.c
+	$(VR)$(DALI_CC) $(DALI_CFLAGS) -c $< -o $@
+
+dali.o:	dali.c sfx_small.h sfx_fast.h
 	@echo "Building dali..."
-	$(VR)$(DALI_CC) $(DALI_CFLAGS) -o $@ $^
+	$(VR)$(DALI_CC) $(DALI_CFLAGS) -c $< -o $@
+
+dali: $(DALI_OBJS)
+	$(VR)$(DALI_CC) $^ $(LDFLAGS) -o $@
 	$(VR)strip $@
 
 depack.prg: depack.asm dzx0.asm dzx0_dali.asm ../../benchmark/files/a.lz
-	$(ACME) $(ACME_OPTS) -o $@ $<
+	$(VR)$(ACME) $(ACME_OPTS) -o $@ $<
 
 sfx_small.h: sfx.asm
-	@echo "Compiling sfx code for dali..."
+	@echo "Creating sfx_small.h..."
 	$(VR)$(ACME) $(ACME_OPTS) -l $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'DALI' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
 	$(VR)echo 'static const char decruncher_small[] = {' >> $@
@@ -37,7 +49,7 @@ sfx_small.h: sfx.asm
 	$(VR)rm $(basename $@).lst $(basename $@)
 
 sfx_fast.h: sfx.asm
-	@echo "Compiling sfx code for dali..."
+	@echo "Creating sfx_fast.h..."
 	$(VR)$(ACME) $(ACME_OPTS) -DSFX_FAST=1 -l $(basename $@).lst -o $(basename $@) $<
 	$(VR)grep 'DALI' $(basename $@).lst | sed -e 's/[[:space:]]*;[[:space:]]*.*//g' -e 's/[[:space:]]*//g' -e 's/\=\$$/ 0x/g' -e 's/^/#define /' > $@
 	$(VR)echo 'static const char decruncher[] = {' >> $@
@@ -47,4 +59,7 @@ sfx_fast.h: sfx.asm
 	$(VR)rm $(basename $@).lst $(basename $@)
 
 clean:
-	$(VR)-rm dali sfx_small.h sfx_fast.h depack.prg
+	$(VR)-rm dali *.o sfx_small.h sfx_fast.h depack.prg
+	$(VR)-rm $(SALVADOR_PATH)/*.o
+	$(VR)-rm $(SALVADOR_LIB_PATH)/*.o
+	$(VR)-make -C salvador clean
