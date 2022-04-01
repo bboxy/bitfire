@@ -71,35 +71,18 @@
 			jsr bitfire_send_byte_
 		.endmacro
 
-		.macro wait_floppy_busy 
-		.local l
-			;wait until floppy is busy
-l
-			bit $dd00
-			bmi l
-		.endmacro
-
-		.macro wait_floppy_idle 
-		.local l
-			;wait until floppy is idle again
-l
-			bit $dd00
-			bpl l
-		.endmacro
-
 		;request next disk side and reset filenum_counter
 		.macro request_disk  arg
 		.local l
 			lda #arg + $f0
-			jsr bitfire_send_byte_
-			pha
-			pla
-			pha
-			pla
-			;+wait_floppy_busy
-			;lda #$3f
-			;sta $dd02
-			+wait_floppy_idle
+			;simply do a bogus loadraw, this will call ld_pblock until eof is raised, nothing is loaded as block_ready never happens :-)
+			jsr bitfire_loadraw_
+			;jsr bitfire_send_byte_
+			;pha
+			;pla
+			;pha
+			;pla
+			;+wait_floppy_idle
 		.endmacro
 
 		;wait for given frame counter value
@@ -200,8 +183,6 @@ l
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
-			;lda #$4c
-			;sta link_music_play_jmp
 		.endmacro
 
 		.macro restart_music_nmi 
@@ -209,6 +190,29 @@ l
 			lda $dd0d
 			lda #$81
 			sta $dd0d
-			;lda #$4c
-			;sta link_music_play_jmp
+		.endmacro
+
+		.macro gaps_setup 
+		.local l
+			ldx #$09
+l
+			lda CONFIG_RESIDENT_ADDR + $000,x
+			pha
+			lda CONFIG_RESIDENT_ADDR + $100,x
+			pha
+			dex
+			bpl l
+		.endmacro
+
+		.macro gaps_restore 
+		.local l
+			ldx #$00
+l
+			pla
+			sta CONFIG_RESIDENT_ADDR + $000,x
+			pla
+			sta CONFIG_RESIDENT_ADDR + $100,x
+			inx
+			cpx #$0a
+			bne l
 		.endmacro

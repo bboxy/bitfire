@@ -63,32 +63,17 @@ reset_drive .macro
 			jsr bitfire_send_byte_
 .endm
 
-wait_floppy_busy .macro
-			;wait until floppy is busy
-l
-			bit $dd00
-			bmi l
-.endm
-
-wait_floppy_idle .macro
-			;wait until floppy is idle again
-l
-			bit $dd00
-			bpl l
-.endm
-
 		;request next disk side and reset filenum_counter
 request_disk .macro
 			lda #\1 + $f0
-			jsr bitfire_send_byte_
-			pha
-			pla
-			pha
-			pla
-			;+wait_floppy_busy
-			;lda #$3f
-			;sta $dd02
-			wait_floppy_idle
+			;simply do a bogus loadraw, this will call ld_pblock until eof is raised, nothing is loaded as block_ready never happens :-)
+			jsr bitfire_loadraw_
+			;jsr bitfire_send_byte_
+			;pha
+			;pla
+			;pha
+			;pla
+			;+wait_floppy_idle
 .endm
 
 		;wait for given frame counter value
@@ -180,14 +165,33 @@ stop_music_nmi .macro
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
-			;lda #$4c
-			;sta link_music_play_jmp
 .endm
 
 restart_music_nmi .macro
 			lda $dd0d
 			lda #$81
 			sta $dd0d
-			;lda #$4c
-			;sta link_music_play_jmp
+.endm
+
+gaps_setup .macro
+			ldx #$09
+l
+			lda CONFIG_RESIDENT_ADDR + $000,x
+			pha
+			lda CONFIG_RESIDENT_ADDR + $100,x
+			pha
+			dex
+			bpl l
+.endm
+
+gaps_restore .macro
+			ldx #$00
+l
+			pla
+			sta CONFIG_RESIDENT_ADDR + $000,x
+			pla
+			sta CONFIG_RESIDENT_ADDR + $100,x
+			inx
+			cpx #$0a
+			bne l
 .endm
