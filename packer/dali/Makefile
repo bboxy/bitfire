@@ -3,7 +3,7 @@ ACME_OPTS ?= -f cbm
 SALVADOR_PATH = salvador/src
 SALVADOR_LIB_PATH = $(SALVADOR_PATH)/libdivsufsort/lib
 DALI_INCLUDES = $(SALVADOR_PATH)/libdivsufsort/include
-DALI_CFLAGS = -O3 -g -Wall -fomit-frame-pointer -I$(DALI_INCLUDES)
+DALI_CFLAGS ?= $(CFLAGS) -O3 -g -Wall -fomit-frame-pointer -I$(DALI_INCLUDES)
 DALI_CC = gcc
 DALI_OBJS += $(SALVADOR_PATH)/expand.o
 DALI_OBJS += $(SALVADOR_PATH)/matchfinder.o
@@ -33,7 +33,10 @@ dali: dali.o $(DALI_OBJS)
 	$(VR)$(DALI_CC) $^ $(LDFLAGS) -o $@
 	$(VR)strip $@
 
-depack.prg: depack.asm dzx0.asm dzx0_dali.asm ../../benchmark/files/a.lz
+testfile.lz: ../../benchmark/files/a
+	./dali --no-inplace -o $@ $<
+
+example.prg: example.asm dali dzx0_dali.asm testfile.lz
 	$(VR)$(ACME) $(ACME_OPTS) -o $@ $<
 
 sfx_small.h: sfx.asm
@@ -57,7 +60,7 @@ sfx_fast.h: sfx.asm
 	$(VR)rm $(basename $@).lst $(basename $@)
 
 clean:
-	$(VR)-rm dali *.o sfx_small.h sfx_fast.h depack.prg
+	$(VR)-rm dali *.o sfx_small.h sfx_fast.h example.prg testfile.lz
 	$(VR)-rm $(SALVADOR_PATH)/*.o
 	$(VR)-rm $(SALVADOR_LIB_PATH)/*.o
 	$(VR)-make -C salvador clean
