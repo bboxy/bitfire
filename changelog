@@ -129,3 +129,10 @@ v1.1
 - pack ratio: ~5,5% smaller than bitnax
 - add --prefix-from to dali
 - add --prefix-file to dali
+
+v1.2
+- 3.5% faster decompressor
+- dali compiles on more targets now
+- turn disk is a simple loadraw with file# $fx now
+- dali now supports --exit_on_warn
+- added proper depack-example to dali
