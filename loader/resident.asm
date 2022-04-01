@@ -165,14 +165,14 @@ bitfire_loadraw_
 .ld_load_raw
 			jsr .ld_pblock			;fetch all blocks until eof
 			bcc -
-			;rts				;just run into ld_pblock code again that will then jump to .ld_pend and rts
+			;rts				;just run into ld_pblock code again that will then branch to rts upon block poll
 .ld_pblock
 			lda $dd00			;bit 6 is always set if not ready or idle/EOF
 			anc #$c0			;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bne .ld_en_exit + 1		;block ready? if so, a = 0 (block ready + busy) if not -> rts
 .ld_pblock_
 			ldy #$05			;fetch 5 bytes of preamble
-			;lda #$00			;is already zero due to anc #$c0
+			;lda #$00			;is already zero due to anc #$c0, that is why we favout anc #$co over asl, as we save a byte
 			ldx #<preamble			;target for received bytes
 			jsr .ld_set_block_tgt		;load 5 bytes preamble - returns with C = 0 at times
 
@@ -470,7 +470,7 @@ bitfire_loadcomp_
 			;------------------
 .lz_start_over
 		!if OPT_FULL_SET = 0 {
-			lda #$01			;we fall through this check on entry and start with literal
+			lda #$01			;restore initial length val
                 }
 			+get_lz_bit
 			bcs .lz_match			;after each match check for another match or literal?
@@ -487,7 +487,7 @@ bitfire_loadcomp_
 			+get_lz_bit			;fetch payload bit
 			bcc -
 +
-			bne +
+			bne +				;lz_bits ot empty, so was last bit to fetch for #len
 .lz_start_depack
 			jsr .lz_refill_bits
 			beq .lz_cp_page_		;handle special case of length being $xx00
@@ -570,8 +570,8 @@ bitfire_loadcomp_
 		!if OPT_FULL_SET = 0 {
 			bcc .lz_cp_page			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
                 } else {
-			lda #$01			;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
-                }
+			lda #$01
+		}
 .lz_check_poll
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
 .lz_skip_poll		bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
