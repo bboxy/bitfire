@@ -176,13 +176,7 @@ depack
 .lz_set2		lda #$01
 !if INPLACE = 1 {
 			cpx <lz_src + 1			;check for end condition when depacking inplace, lz_dst + 0 still in X
-			bne .lz_start_over		;-> can be changed to .lz_poll, depending on decomp/loadcomp
-
-			ldx <lz_dst + 0
-			cpx <lz_src + 0
-			bne .lz_start_over
-			rts
-} else {
+			beq .lz_inplace_chk		;-> can be changed to .lz_poll, depending on decomp/loadcomp
 }
 			;------------------
 			;ENTRY POINT DEPACKER
@@ -230,6 +224,13 @@ depack
 			jsr .lz_refill_bits		;fetch remaining bits
 			bcs .lz_match_big		;lobyte != 0? If zero, fall through
 
+!if INPLACE = 1 {
+.lz_inplace_chk
+			ldx <lz_dst + 0
+			cpx <lz_src + 0
+			bne .lz_start_over
+			rts
+}
 			;------------------
 			;SELDOM STUFF
 			;------------------
