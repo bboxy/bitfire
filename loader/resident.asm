@@ -144,6 +144,7 @@ bitfire_send_byte_
 			eor #$20
 			jsr .ld_set_dd02		;waste lots of cycles upon write, so bits do not arrive too fast @floppy
 			lsr <filenum
+			nop
 			bne .ld_loop
 			;clc				;force final value to be $3f again (bcc will hit in later on)
 .ld_set_dd02						;moved loop code to here, so that enough cycles pass by until $dd02 is set back to $3f after whole byte is transferred, also saves a byte \o/
