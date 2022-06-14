@@ -285,7 +285,7 @@ ___			= $ff
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
 ;           gg   1                      ccccccccccc   2                   ggg...3ggg                 ccccccc   4           v        5         bbbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 ccccccc   4           v        5         bbbbbbbb
+;              1                      ccccccccccc   2                   ...3                 ccccccc   4             v      5         bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -349,20 +349,23 @@ ___			= $ff
 			tay
 								;can we reuse that trick to decode 7 bits at once somewhere?!
 			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and whole quintuple 8, so overall 7 bits
+			ldx #$07				;mask for .....222
 !if .GCR_125 = 1 {
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
 } else {
 .sevens			adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
 }
 			pha					;$0101
-			ldx #$07				;mask for .....222
 			lda $1c01				;11111222	fifth read
 			sax <.twos + 1
+			ldx #$3e
 			and #$f8				;XXX TODO could shift with asr and compress ones table, or use ora #$07 to wipe out bits 0..2?
 			tay
-			ldx #$3e
 								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 .gcr_slow2		bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
@@ -1154,22 +1157,24 @@ ___			= $ff
 			ldy #$55				;type (sector)
 			lda #$4c
 .read_gcr
+			txs
 -
-			bit $1c00				;wait for start of sync
+			ldx $1c00				;wait for start of sync
 			bpl -
 -
-			bit $1c00				;wait for end of sync
+			ldx $1c00				;wait for end of sync
 			bmi -
 
-			bit $1c01				;sync mark -> $ff
+			ldx $1c01				;sync mark -> $ff
 			clv
 			bvc *
+!warn *
 			clv
 			cpy $1c01				;11111222
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			sta <.gcr_end				;setup return jump
 			bvc *
-.gcr_slow3		bvs +					;XXX TODO can also be moved to ZP and jmp .gcr_entry can be adopted
+.gcr_slow3		beq +					;XXX TODO can also be moved to ZP and jmp .gcr_entry can be adopted
 			nop
 			nop
 			nop
@@ -1177,18 +1182,19 @@ ___			= $ff
 !if >* != >.gcr_slow3 {
 	!error "gcr_slow3 branch crosses page"
 }
+			ldx $1c01				;22333334
 			eor #$2c
 			sta .header_t2 + 1			;$20 or $60 depending if header or sector, just the right values we need there
-			lda $1c01				;22333334
-			txs
-			ldx #$3e
+			lda #$3e
 			sax <.threes + 1
+			txa
 			asr #$c1				;lookup? -> 4 cycles
 .header_t2		eor #$c0
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 
-			sta <.chksum + 1 - $3e,x
+			sta <.chksum + 1
 			lda #.EOR_VAL
+			nop
 			jmp .gcr_entry				;32 cycles until entry
 .retry_count
 			jmp .read_sector			;will be sbc (xx),y if disabled
@@ -1197,15 +1203,13 @@ ___			= $ff
 .read_sector_back
 			;7 cycles need to pass
 
-			clv
-			bit $ea
-			nop
+			ldx $01
 								;checksum
+			clv
 			lax $1c01				;44445555
 			bvc *
-			clv
+			;clv
 			arr #$f0
-			clv					;after arr, as it influences v-flag
 			tay					;44444---
 
 !if .SANCHECK_TRAILING_ZERO = 1 {
@@ -1215,6 +1219,7 @@ ___			= $ff
 }
 !if .SANCHECK_TRAILING_ZERO = 1 {
 			ldx $1c01
+			clv					;after arr, as it influences v-flag
 			bvc *
 			cpx #.CHECKSUM_CONST2			;0 01010 01 - more traiing zeroes
 			bne .retry_no_count
