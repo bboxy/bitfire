@@ -279,11 +279,11 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;           gggggg   1                      ccccccccccc   2                   ggggggggg...3ggggggggg                 ccccccc   4           v        5         bbbbbbbbbbbbbb
+;           gggggg   1                      ccccccccccc   2                   ggggggggg...3gggggggggggg                 ccccccc   4           v        5         bbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;           gggg   1                      ccccccccccc   2                   gggggg...3gggggg                 ccccccc   4           v        5         bbbbbbbbbbbb
+;           gggg   1                      ccccccccccc   2                   gggggg...3gggggggg                 ccccccc   4           v        5         bbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;           gg   1                      ccccccccccc   2                   ggg...3ggg                 ccccccc   4           v        5         bbbbbbbbbb
+;           gg   1                      ccccccccccc   2                   gggg...3ggg                 ccccccc   4           v        5         bbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
 ;              1                      ccccccccccc   2                   ...3                 ccccccc   4             v      5         bbbbbbbb
 ;b = bvc *
@@ -396,30 +396,36 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.gcr_00
-			ldy $01
-			bne +					;9 cycles (jmp .gcr_00, ldy $01, bne +)
+
+			nop
+			nop
+			nop
+			nop
 			nop
 !if .GCR_125 = 1 {
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 }
-
-+
-			;$01 ora ($xx,x)
-			;$1c top
-			lda $1c01
-			jmp +					;9 cycles (jmp +, jmp +, jmp .gcr_slow1 + 3)
-.gcr_20
-			ldy $01					;6 cycles (jmp .gcr_20, ldy $01)
-			lda $1c01
-+
-			jmp +					;6 cycles (jmp +, jmp .gcr_slow1 + 3)
-.gcr_40
-								;3 ccles (jmp .gcr_40)
-			lda $1c01
-+
-			jmp .gcr_slow1 + 3			;3 cycles (jmp .gcr_slow1 + 3)
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
 			nop
 
 !if .GCR_125 = 1 {
@@ -430,6 +436,23 @@ ___			= $ff
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
+.gcr_40							;4 cycles
+			lda $1c01-$0f,x
+-
+			jmp .gcr_slow1 + 3		;+3
+.gcr_20							;6 cycles
+			nop
+			lda $1c01-$0f,x
+			nop				;+8
+--
+			bne -
+.gcr_00							;9 cycles
+			nop
+			nop
+			nop
+			lda $1c01
+			ldy $01				;+12
+			bne --
 
 .send_sector_data_setup
 			lda #.sendloop - .branch - 2		;redirect branch to sendloop
@@ -968,9 +991,9 @@ ___			= $ff
 .bitrate_1
 			lda #<.gcr_40				;06	XXX TODO 0,3,6 -> derivate from bitrate? -> asl + self?
 .bitrate_2
-			;top
+			top
 .bitrate_3
-			;lda #<.gcr_00
+			lda #<.gcr_00
 			sty <.gcr_slow1 + 0			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
 			sta <.gcr_slow1 + 1
 			stx <.gcr_slow1 + 2
