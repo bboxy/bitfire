@@ -188,7 +188,7 @@
 !pseudopc .drivecode {
 .zp_start
 
-;.free			= .zp_start + $00
+.speedzone		= .zp_start + $00
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
@@ -279,13 +279,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;                  1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg             v      5     bbbbbbbbbbbbbb
+;                1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg             v      5       bbbbbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;                  1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg             v      5     bbbbbbbbbbbb
+;                1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg             v      5       bbbbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;                  1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg             v      5     bbbbbbbbbb
+;                1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg             v      5       bbbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;                  1                      ccccccccccc   2                   ...3                 ccccccc   4             v      5     bbbbbbbb
+;                1                      ccccccccccc   2                   ...3                 ccccccc   4             v      5       bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -393,19 +393,14 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 
-			nop
-			nop
-			nop
-			nop
-			nop
+.gcr_slow1_00
+			ldy $01
+			jmp +
 !if .GCR_125 = 1 {
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 }
-.gcr_slow1_00
-			nop
-			nop
-			nop
++
 			nop
 .gcr_slow1_20
 			nop
@@ -419,20 +414,23 @@ ___			= $ff
 			nop
 			nop
 			nop
+			nop
+			nop
+			nop
 
 !if .GCR_125 = 1 {
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 }
 .slow_tab1
-			!byte $ad,$01,$1c
-			!byte $ad,$01,$1c
-			!byte $4c,<.gcr_slow1_20, >.gcr_slow1_20
 			!byte $4c,<.gcr_slow1_00, >.gcr_slow1_00
+			!byte $4c,<.gcr_slow1_20, >.gcr_slow1_20
+			!byte $ad,$01,$1c
+			!byte $ad,$01,$1c
 .slow_tab2
+			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
+			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
+			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
 			!byte $af,$01,$1c
-			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
-			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
-			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -933,6 +931,7 @@ ___			= $ff
 +
 
 			;sta .gcr_slow3 + 1
+			sta <.speedzone
 			rol					;00000xx1
 !if .SANCHECK_BVS_LOOP = 1 {
 			sax .br0 + 1				;$00,$02,$04,$06
@@ -957,37 +956,25 @@ ___			= $ff
 			sty <.bvs_01
 			bmi -					;first round? then LDA was set 3 times, now set right amount of BVS on a second round, after that, we fall through this check
 }
-			txa
 
-			and #$60
-			beq .bitrate_3				;a = $00		;a bit pity that this needs another bunch of branches :-( TODO
-			cmp #$40
-			beq .bitrate_1				;a = $40
-			bcc .bitrate_2				;a = $20
-.bitrate_0							;a = $60
-			ldx #0
+			lda <.speedzone
+			asl
+			adc <.speedzone
+			tax
+			ldy #$00
 			top
-.bitrate_1
-			ldx #3
-			top
-.bitrate_2
-			ldx #6
-			top
-.bitrate_3
-			ldx #9
+-
+			ldy #.gcr_slow2 - .gcr_slow1
 			lda .slow_tab1 + 0,x
-			sta <.gcr_slow1 + 0			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
+			sta <.gcr_slow1 + 0,y			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
 			lda .slow_tab1 + 1,x
-			sta <.gcr_slow1 + 1
+			sta <.gcr_slow1 + 1,y
 			lda .slow_tab1 + 2,x
-			sta <.gcr_slow1 + 2
-
-			lda .slow_tab2 + 0,x
-			sta <.gcr_slow2 + 0			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
-			lda .slow_tab2 + 1,x
-			sta <.gcr_slow2 + 1
-			lda .slow_tab2 + 2,x
-			sta <.gcr_slow2 + 2
+			sta <.gcr_slow1 + 2,y
+			txa
+			sbx #-12
+			tya
+			beq -
 
 			;----------------------------------------------------------------------------------------------------
 			;
