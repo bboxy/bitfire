@@ -422,15 +422,31 @@ ___			= $ff
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 }
 .slow_tab1
-			!byte $4c,<.gcr_slow1_00, >.gcr_slow1_00
-			!byte $4c,<.gcr_slow1_20, >.gcr_slow1_20
-			!byte $ad,$01,$1c
-			!byte $ad,$01,$1c
+			!byte $4c
+			!byte $4c
+			!byte $ad
+			!byte $ad
+			!byte <.gcr_slow1_00
+			!byte <.gcr_slow1_20
+			!byte $01
+			!byte $01
+			!byte >.gcr_slow1_00
+			!byte >.gcr_slow1_20
+			!byte $1c
+			!byte $1c
 .slow_tab2
-			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
-			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
-			!byte $4c,<.gcr_slow2_xx, >.gcr_slow2_xx
-			!byte $af,$01,$1c
+			!byte $4c
+			!byte $4c
+			!byte $4c
+			!byte $af
+			!byte <.gcr_slow2_xx
+			!byte <.gcr_slow2_xx
+			!byte <.gcr_slow2_xx
+			!byte $01
+			!byte >.gcr_slow2_xx
+			!byte >.gcr_slow2_xx
+			!byte >.gcr_slow2_xx
+			!byte $1c
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -931,7 +947,11 @@ ___			= $ff
 +
 
 			;sta .gcr_slow3 + 1
+!if .SANCHECK_BVS_LOOP = 0 {
+			tay
+} else {
 			sta <.speedzone
+}
 			rol					;00000xx1
 !if .SANCHECK_BVS_LOOP = 1 {
 			sax .br0 + 1				;$00,$02,$04,$06
@@ -955,25 +975,24 @@ ___			= $ff
 			sty <.bvs_02
 			sty <.bvs_01
 			bmi -					;first round? then LDA was set 3 times, now set right amount of BVS on a second round, after that, we fall through this check
+			ldy <.speedzone				;.speedzone
 }
 
-			lda <.speedzone
-			asl
-			adc <.speedzone
-			tax
-			ldy #$00
+			ldx #$00
 			top
 -
-			ldy #.gcr_slow2 - .gcr_slow1
-			lda .slow_tab1 + 0,x
-			sta <.gcr_slow1 + 0,y			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
-			lda .slow_tab1 + 1,x
-			sta <.gcr_slow1 + 1,y
-			lda .slow_tab1 + 2,x
-			sta <.gcr_slow1 + 2,y
-			txa
-			sbx #-12
+			ldx #.gcr_slow2 - .gcr_slow1
+			lda .slow_tab1 + 0,y
+			sta <.gcr_slow1 + 0,x			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
+			lda .slow_tab1 + 4,y
+			sta <.gcr_slow1 + 1,x
+			lda .slow_tab1 + 8,y
+			sta <.gcr_slow1 + 2,x
 			tya
+			;sec
+			adc #11
+			tay
+			txa
 			beq -
 
 			;----------------------------------------------------------------------------------------------------
