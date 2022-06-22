@@ -31,8 +31,8 @@ REQDISC = 1
 BUSLOCK = 0
 WAIT_SPIN_DOWN = 0
 
-TIME_RAW = 0
-TIME_LOADCOMP = 1
+TIME_RAW = 1
+TIME_LOADCOMP = 0
 TIME_RAW_DECOMP = 0
 TIME_DECOMP = 0
 
@@ -796,28 +796,28 @@ sizes
 
 chksums
 !if TIME_RAW == 1 {
-!byte $30
-!byte $b5
-!byte $cc
-!byte $61
-!byte $40
-!byte $8f
-!byte $dd
-!byte $09
-!byte $6f
+!byte $2d
+!byte $26
+!byte $fc
+!byte $ff
+!byte $39
+!byte $65
 !byte $45
-!byte $52
-!byte $85
-!byte $17
-!byte $58
-!byte $61
-!byte $31
-!byte $cd
-!byte $ba
-!byte $b5
-!byte $b5
-!byte $b5
-!byte $40
+!byte $1e
+!byte $a3
+!byte $0d
+!byte $e8
+!byte $b3
+!byte $91
+!byte $80
+!byte $c1
+!byte $d3
+!byte $00
+!byte $7a
+!byte $26
+!byte $26
+!byte $26
+!byte $39
 } else {
 !byte $ea
 !byte $fd
