@@ -279,17 +279,18 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;           gggggg   1                      ccccccccccc   2                   ggggggggg...3gggggggggggg                 ccccccc   4           v        5         bbbbbbbbbbb
+;           gggggg       1                      ccccccccccc   2                   ggggggggg...3ggggggggg                 ccccccc   4             v      5     bbbbbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;           gggg   1                      ccccccccccc   2                   gggggg...3gggggggg                 ccccccc   4           v        5         bbbbbbbbbb
+;           gggg       1                      ccccccccccc   2                   gggggg...3gggggg                 ccccccc   4             v      5     bbbbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;           gg   1                      ccccccccccc   2                   gggg...3ggg                 ccccccc   4           v        5         bbbbbbbbb
+;           gg       1                      ccccccccccc   2                   ggg...3ggg                 ccccccc   4             v      5     bbbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 ccccccc   4             v      5         bbbbbbbb
+;                  1                      ccccccccccc   2                   ...3                 ccccccc   4             v      5     bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
 ;g = gcr slowdown
+
 
 			nop
 			nop
@@ -298,7 +299,9 @@ ___			= $ff
 			;XXX TODO if we would swap nibbles on certain places, we could reuse tables easier (11111000_hi -> 44444000_lo), but this would break the eor checksum scheme
 			;XXX TODO if there's tables with the same bit ordern and pattern, we could save hi and low nibbles in there, but need to and #$xx before adding second nibble
 .read_loop
+			tay
 			lda $1c01				;22333334
+			ldx #$3e				;move to front!
 			sax <.threes + 1
 			;arr #$c1				;22200000
 			asr #$c1				;lookup? -> 4 cycles
@@ -358,9 +361,7 @@ ___			= $ff
 			pha					;$0101
 			lda $1c01				;11111222	fifth read
 			sax <.twos + 1
-			ldx #$3e
 			and #$f8				;XXX TODO could shift with asr and compress ones table, or use ora #$07 to wipe out bits 0..2?
-			tay
 								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 .gcr_slow2		bvs .read_loop
 			bvs .read_loop
@@ -397,36 +398,30 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 
-			nop
-			nop
-			nop
+.gcr_00
+			jmp +
 			nop
 			nop
 !if .GCR_125 = 1 {
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 }
+;3+3
+;6+6
+;8+9
+.gcr_40
+			lda $1c01
+--
+			jmp .gcr_slow1 + 3
+.gcr_20
+			ldy $01
+			lda $1c01
+-
+			jmp --
++
 			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
-			nop
+			lda $1c01
+			jmp -
 
 !if .GCR_125 = 1 {
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
@@ -436,23 +431,6 @@ ___			= $ff
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
-.gcr_40							;4 cycles
-			lda $1c01-$0f,x
--
-			jmp .gcr_slow1 + 3		;+3
-.gcr_20							;6 cycles
-			nop
-			lda $1c01-$0f,x
-			nop				;+8
---
-			bne -
-.gcr_00							;9 cycles
-			nop
-			nop
-			nop
-			lda $1c01
-			ldy $01				;+12
-			bne --
 
 .send_sector_data_setup
 			lda #.sendloop - .branch - 2		;redirect branch to sendloop
@@ -991,9 +969,9 @@ ___			= $ff
 .bitrate_1
 			lda #<.gcr_40				;06	XXX TODO 0,3,6 -> derivate from bitrate? -> asl + self?
 .bitrate_2
-			top
+		;	top
 .bitrate_3
-			lda #<.gcr_00
+		;	lda #<.gcr_00
 			sty <.gcr_slow1 + 0			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
 			sta <.gcr_slow1 + 1
 			stx <.gcr_slow1 + 2
@@ -1217,6 +1195,8 @@ ___			= $ff
 
 			sta <.chksum + 1
 			lda #.EOR_VAL
+			nop
+			nop
 			nop
 			jmp .gcr_entry				;32 cycles until entry
 .retry_count

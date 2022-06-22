@@ -32,7 +32,7 @@
 LZ_BITS_LEFT		= 1				;shift lz_bits left or right, might make a difference on testing and init, left is the original way
 
 ;if you do not make use of the nmi-gaps, these optimizations will be enabled, with gaps, they don't fit :-(
-OPT_FULL_SET		= CONFIG_NMI_GAPS xor 1		;adds 1,4% more performance, needs 10 bytes extra
+OPT_FULL_SET		= (CONFIG_NMI_GAPS | CONFIG_NEXT_DOUBLE) xor 1		;adds 1,4% more performance, needs 10 bytes extra
 OPT_PRIO_LEN2		= CONFIG_NMI_GAPS xor 1		;adds 0,1% more performance, needs 4 bytes extra
 OPT_LZ_INC_SRC		= 1				;give non equal case priority on lz_src checks
 
@@ -110,24 +110,27 @@ link_cia2_type		;%00000100
 			nop
 }
 
-			;those calls could be a macro, but they are handy to be jumped to so loading happens while having all mem free, and code is entered afterwards
-;	!if CONFIG_DECOMP = 1 {
-;;			;expect $01 to be $35
-;		!if CONFIG_LOADER = 1 {
-;
-;			;XXX TODO not used much, throw out
-;link_load_next_double
-;			;loads a splitted file, first part up to $d000 second part under IO
-;			jsr link_load_next_comp
-;link_load_next_raw_decomp
-;			jsr link_load_next_raw
-;		}
-;link_decomp_under_io
-;			dec $01				;bank out IO
-;			jsr link_decomp			;depack
-;			inc $01				;bank in again
-;			rts
-;	}
+!if CONFIG_NEXT_DOUBLE = 1 {
+			!warn "disabling some optimizations to make load_next_double fit"
+                        ;those calls could be a macro, but they are handy to be jumped to so loading happens while having all mem free, and code is entered afterwards
+        !if CONFIG_DECOMP = 1 {
+;                       ;expect $01 to be $35
+                !if CONFIG_LOADER = 1 {
+
+                        ;XXX TODO not used much, throw out
+link_load_next_double
+                        ;loads a splitted file, first part up to $d000 second part under IO
+                        jsr link_load_next_comp
+link_load_next_raw_decomp
+                        jsr link_load_next_raw
+                }
+link_decomp_under_io
+                        dec $01                         ;bank out IO
+                        jsr link_decomp                 ;depack
+                        inc $01                         ;bank in again
+                        rts
+        }
+}
 
 ;---------------------------------------------------------------------------------
 ;LOADER STUFF
