@@ -279,13 +279,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;                1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg             v      5       bbbbbbbbbbbbbb
+;              1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;                1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg             v      5       bbbbbbbbbbbb
+;              1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;                1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg             v      5       bbbbbbbbbb
+;              1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg           v      5           bbbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;                1                      ccccccccccc   2                   ...3                 ccccccc   4             v      5       bbbbbbbb
+;              1                      ccccccccccc   2                   ...3                 ccccccc   4           v      5           bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -296,7 +296,6 @@ ___			= $ff
 			;XXX TODO if there's tables with the same bit ordern and pattern, we could save hi and low nibbles in there, but need to and #$xx before adding second nibble
 .read_loop
 			lda $1c01				;22333334
-			ldx #$3e				;move to front!
 			sax <.threes + 1
 			;arr #$c1				;22200000
 			asr #$c1				;lookup? -> 4 cycles
@@ -347,7 +346,6 @@ ___			= $ff
 			tay
 								;can we reuse that trick to decode 7 bits at once somewhere?!
 			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and whole quintuple 8, so overall 7 bits
-			ldx #$07				;mask for .....222
 !if .GCR_125 = 1 {
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
 } else {
@@ -355,9 +353,11 @@ ___			= $ff
 }
 			pha					;$0101
 			lda $1c01				;11111222	fifth read
+			ldx #$07				;mask for .....222
 			sax <.twos + 1
 			and #$f8				;XXX TODO could shift with asr and compress ones table, or use ora #$07 to wipe out bits 0..2?
 			tay
+			ldx #$3e				;move to front!
 								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
 			bvs .read_loop
 			bvs .read_loop
@@ -1182,8 +1182,22 @@ ___			= $ff
 			cpy $1c01				;11111222
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			sta <.gcr_end				;setup return jump
-			bvc *
-
+.bvs_start
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			bvs +
+			jmp .retry_no_count
++
+.bvs_end
 			ldx $1c01				;22333334
 			eor #$2c
 			sta .header_t2 + 1			;$20 or $60 depending if header or sector, just the right values we need there
@@ -1195,9 +1209,12 @@ ___			= $ff
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 
 			sta <.chksum + 1
-			lda $01
-			lda #.EOR_VAL
+!if >* != >.bvs_start {
 			nop
+} else {
+			lda $01
+}
+			lda #.EOR_VAL
 			jmp .gcr_entry				;32 cycles until entry
 ;.gcr_slow3		beq *					;XXX TODO can also be moved to ZP and jmp .gcr_entry can be adopted
 .retry_count
