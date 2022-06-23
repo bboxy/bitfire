@@ -393,6 +393,16 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 
+;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
+;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
+;              1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbbbb
+;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
+;              1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbb
+;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
+;              1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg           v      5           bbbbbbbbbb
+;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
+;              1                      ccccccccccc   2                   ...3                 ccccccc   4           v      5           bbbbbbbb
+
 .gcr_slow1_00
 			ldy $01
 			jmp +
@@ -1225,8 +1235,9 @@ ___			= $ff
 			;7 cycles need to pass
 
 			ldx $01
-								;checksum
+			nop
 			clv
+								;checksum
 			lax $1c01				;44445555
 			bvc *
 			;clv
@@ -1237,15 +1248,11 @@ ___			= $ff
 			lda #$0f
 			sbx #.CHECKSUM_CONST1			;4 bits of a trailing zero after checksum
 			bne .retry_no_count			;check remaining nibble if it is $05
-}
-!if .SANCHECK_TRAILING_ZERO = 1 {
 			ldx $1c01
 			clv					;after arr, as it influences v-flag
 			bvc *
 			cpx #.CHECKSUM_CONST2			;0 01010 01 - more traiing zeroes
 			bne .retry_no_count
-}
-!if .SANCHECK_TRAILING_ZERO = 1 {				;disabled this nibble, as it makes floppy hang sometimes on upper tracks :-(
 			lda $1c01
 			and #$e0
 			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
