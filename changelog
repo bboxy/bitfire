@@ -132,7 +132,9 @@ v1.1
 
 v1.2
 - 3.5% faster decompressor
-- dali compiles on more targets now
+- dali compiles on more targets now (ARM64)
 - turn disk is a simple loadraw with file# $fx now
 - dali now supports --exit_on_warn
 - added proper depack-example to dali
+- fixed nasty bitrate bug in drivecode that would sometimes choose wrong bitrate on slowest speed zone and bring timing to its edge
+- saved bytes

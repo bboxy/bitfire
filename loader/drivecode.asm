@@ -291,18 +291,6 @@ ___			= $ff
 ;v = v-flag clear
 ;g = gcr slowdown
 
-
-;			lda $1c00
-;			and #$9f
-;			asl					;shift to right position
-;			asl
-;			asl
-;			asl					;0xx10000 -> $10, $30, $50, $70
-;			sbx #$01				;preserve led, motor and stepper-bits -> $0f, $2f, $4f, $6f -> 0xx01111
-;			lda $1c00
-;			ora #$60				;x11xxxxx new bitrate bits to be set
-;			sax $1c00				;merge
-
 .read_loop
 			ldx #$3e
 			lda $1c01				;22333334
@@ -1228,10 +1216,10 @@ ___			= $ff
 			bvc *
 			cpx #.CHECKSUM_CONST2			;0 01010 01 - more traiing zeroes
 			bne .retry_no_count
-			lda $1c01
-			and #$e0
-			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
-			bne .retry_no_count
+;			lda $1c01
+;			and #$e0
+;			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
+;			bne .retry_no_count
 }
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
