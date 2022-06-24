@@ -304,7 +304,6 @@ ___			= $ff
 ;			sax $1c00				;merge
 
 .read_loop
-			tay
 			ldx #$3e
 			lda $1c01				;22333334
 			sax <.threes + 1
@@ -360,6 +359,7 @@ ___			= $ff
 			lda $1c01				;11111222	first read
 			sax <.twos + 1
 			and #$f8
+			tay
 
 			bvs .read_loop
 			bvs .read_loop
@@ -397,13 +397,13 @@ ___			= $ff
 
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;                  1                      ccccccccccc   2                   ggggggggggggg...3ggggggggggg                 ccccccc   4             v    5       bbbbbbbbbbbbbb
+;                1                      ccccccccccc   2                   ggggggggggggg...3ggggggggggg                 ccccccc   4             v    5         bbbbbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;                  1                      ccccccccccc   2                   ggggggg...3ggggggggg                 ccccccc   4             v    5       bbbbbbbbbbbb
+;                1                      ccccccccccc   2                   ggggggg...3ggggggggg                 ccccccc   4             v    5         bbbbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;                  1                      ccccccccccc   2                   ggg...3ggggg                 ccccccc   4             v    5       bbbbbbbbbb
+;                1                      ccccccccccc   2                   ggg...3ggggg                 ccccccc   4             v    5         bbbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;                  1                      ccccccccccc   2                   ...3                 ccccccc   4             v    5       bbbbbbbb
+;                1                      ccccccccccc   2                   ...3                 ccccccc   4             v    5         bbbbbbbb
 
 .gcr_slow1_00
 			lsr $00
@@ -1193,7 +1193,6 @@ ___			= $ff
 			lda $01
 ;}
 			lda #.EOR_VAL
-			nop
 			nop
 			jmp .gcr_entry				;32 cycles until entry
 ;.gcr_slow3		beq *					;XXX TODO can also be moved to ZP and jmp .gcr_entry can be adopted
