@@ -278,30 +278,40 @@ ___			= $ff
 
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
-;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;              1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbbbb
-;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;              1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbb
-;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg           v      5           bbbbbbbbbb
-;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 ccccccc   4           v      5           bbbbbbbb
+;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
+;              2                      ccccccccccc   3                   ggggggggggggg   4ggg                 cccccccggg   5ggggg           v      1           bbbbbbbbbbbbbb
+;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
+;              2                      ccccccccccc   3                   ggggg   4ggg                 cccccccggg   5ggggg           v      1           bbbbbbbbbbbb
+;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
+;              2                      ccccccccccc   3                      4                 cccccccggg   5ggggg           v      1           bbbbbbbbbb
+;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
+;              2                      ccccccccccc   3                      4                 ccccccc   5           v      1           bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
 ;g = gcr slowdown
 
 
-			;XXX TODO if we would swap nibbles on certain places, we could reuse tables easier (11111000_hi -> 44444000_lo), but this would break the eor checksum scheme
-			;XXX TODO if there's tables with the same bit ordern and pattern, we could save hi and low nibbles in there, but need to and #$xx before adding second nibble
+;			lda $1c00
+;			and #$9f
+;			asl					;shift to right position
+;			asl
+;			asl
+;			asl					;0xx10000 -> $10, $30, $50, $70
+;			sbx #$01				;preserve led, motor and stepper-bits -> $0f, $2f, $4f, $6f -> 0xx01111
+;			lda $1c00
+;			ora #$60				;x11xxxxx new bitrate bits to be set
+;			sax $1c00				;merge
+
 .read_loop
+			tay
+			ldx #$3e
 			lda $1c01				;22333334
 			sax <.threes + 1
-			;arr #$c1				;22200000
-			asr #$c1				;lookup? -> 4 cycles
+			asr #$c1
 			tax
-			lda .tab11111000_hi,y			;8 cycles to mask and lookup
-.twos			ora .tab02200222_lo,x			;13 cycles to mask ad lookup
+			lda .tab11111000_hi,y
+.twos			ora .tab02200222_lo,x
 			tsx
 			pha					;$0100
 			beq .gcr_end
@@ -310,55 +320,47 @@ ___			= $ff
 			eor $0103,x
 .gcr_entry
 			sta <.chksum2 + 1
-			lda $1c01				;44445555	second read
+			lda $1c01				;44445555		hird read
 			ldx #$0f
-			sax <.fives + 1				;XXX TODO 44444555 -> put bit  to position 6? -> 02200222_lo can be reused? but need highbits?
-								;XXX TODO ldx #$f8 ror sax 4th arr #$07 tay -> 5xxxxx55_hi + bit 2 in carry
+			sax <.fives + 1
+
 			arr #$f0
-								;sta <.fours + 1 to save tay and keep y free? if all tays are saved +0 3 cycles for 3 sta .num + 1
-			tay					;44444---		;how's about having 4444---4?
+			tay					;44444---
 !if .GCR_125 = 0 {
 			ldx #$03
 }
 .threes			lda <.tab00333330_hi			;ZP!
-			ora .tab44444000_lo,y			;XXX TODO can we reuse 566666 low?
-								;XXX TODO have tabls with low and highbyte set to be used with _lo and _hi and an and operation?
-								;XXX TODO add hi gcr code to low gcr code and by that compensate the and?
+			ora .tab44444000_lo,y
 			pha					;$0103
-			;maybe do another eor #$00 and sta chksum here?
 
-.gcr_slow1		lda $1c01				;56666677		third read
-			sax <.sevens + 1			;----6677		;encode first 7 with sixes and by that shrink 6table? and add it with sevens?
-			asr #$fc				;-566666-		;can be shifted, but and would suffice?
-								;XXX TODO we shift out bit 3 of 7th table here, coudl shift it in later on asr #$40 as arr #$40
-			tax					;XXX TODO sta .sixths would also suffice and use same amount of cycles, but no offset possible then :-(
+.gcr_slow1		lda $1c01				;56666677		fourth read
+			sax <.sevens + 1			;----6677
+			asr #$fc				;-566666-
+			tax
 
 .fives			lda <.tab00005555_hi			;ZP!
-			ora <.tab05666660_lo,x			;XXX TODO can't make use of advatage that this is zp access :-( has an offset of 1 shifted by 1 this would be same as 7d788888 table? needs one more lsr and ora #$c0 to make that work
+			ora <.tab05666660_lo,x
 			pha					;$0102
 .chksum			eor #$00				;103,101,100
 .chksum2		eor #$00
 			sta <.chksum + 1
 
-.gcr_slow2		lax $1c01				;77788888	forth read
-			asr #$40				;ora #$10111111 would also work, and create an offset of $1f? Unfortunatedly the tab then wraps but okay when in ZP :-(
-								;XXX TODO also and #$40 is okay, as it is just a single bit and shifting the second half of that tab?
+.gcr_slow2		lax $1c01				;77788888	fifth read
+			asr #$40
 			tay
-								;can we reuse that trick to decode 7 bits at once somewhere?!
-			lda .tab7d788888_lo,x			;this table decodes bit 0 and bit 2 of quintuple 7 and whole quintuple 8, so overall 7 bits
+
+			lda .tab7d788888_lo,x
+			ldx #$07
 !if .GCR_125 = 1 {
 .sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
 } else {
 .sevens			adc .tab00700077_hi,y			;ZP! clears v-flag, decodes the remaining bits of quintuple 7
 }
 			pha					;$0101
-			lda $1c01				;11111222	fifth read
-			ldx #$07				;mask for .....222
+			lda $1c01				;11111222	first read
 			sax <.twos + 1
-			and #$f8				;XXX TODO could shift with asr and compress ones table, or use ora #$07 to wipe out bits 0..2?
-			tay
-			ldx #$3e				;move to front!
-								;XXX TODO with shift, bit 2 of twos is in carry and could be added as +0 +4?
+			and #$f8
+
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
@@ -431,6 +433,20 @@ ___			= $ff
 !if .GCR_125 = 1 {
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 }
+
+.gcr_slow2_00
+			lax $1c01
+			nop
+			jmp .gcr_slow2 + 3
+.gcr_slow2_20
+			lax $1c01
+			nop
+			jmp .gcr_slow2 + 3
+.gcr_slow2_40
+			lax $1c01
+			nop
+			jmp .gcr_slow2 + 3
+
 .slow_tab1
 			!byte $4c
 			!byte $4c
@@ -449,13 +465,13 @@ ___			= $ff
 			!byte $4c
 			!byte $4c
 			!byte $af
-			!byte <.gcr_slow2_xx
-			!byte <.gcr_slow2_xx
-			!byte <.gcr_slow2_xx
+			!byte <.gcr_slow2_00
+			!byte <.gcr_slow2_20
+			!byte <.gcr_slow2_40
 			!byte $01
-			!byte >.gcr_slow2_xx
-			!byte >.gcr_slow2_xx
-			!byte >.gcr_slow2_xx
+			!byte >.gcr_slow2_00
+			!byte >.gcr_slow2_20
+			!byte >.gcr_slow2_40
 			!byte $1c
 
 			;----------------------------------------------------------------------------------------------------
@@ -954,26 +970,15 @@ ___			= $ff
 			cpx #$fe
 			beq +
 			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
+.bitrate		!byte $00,$20,$40,$60
 +
 
 			;sta .gcr_slow3 + 1
-!if .SANCHECK_BVS_LOOP = 0 {
 			tay
-} else {
-			sta <.speedzone
-}
-			rol					;00000xx1
-!if .SANCHECK_BVS_LOOP = 1 {
-			sax .br0 + 1				;$00,$02,$04,$06
-}
-			asl					;shift to right position
-			asl
-			asl
-			asl					;0xx10000 -> $10, $30, $50, $70
-			sbx #$01				;preserve led, motor and stepper-bits -> $0f, $2f, $4f, $6f -> 0xx01111
 			lda $1c00
-			ora #$60				;x11xxxxx new bitrate bits to be set
-			sax $1c00				;merge
+			and #$9f
+			ora .bitrate,y
+			sta $1c00
 
 !if .SANCHECK_BVS_LOOP = 1 {
 			ldy #$a9				;restore 3 LDAs
@@ -1186,45 +1191,39 @@ ___			= $ff
 
 			ldx $1c01				;sync mark -> $ff
 			clv
+!if <* == $ff {
+			!error "bvc * crosses page!"
+}
 			bvc *
 
 			clv
 			cpy $1c01				;11111222
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			sta <.gcr_end				;setup return jump
-.bvs_start
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			bvs +
-			jmp .retry_no_count
-+
-.bvs_end
+!if <* == $ff {
+			!error "bvc * crosses page!"
+}
+			bvc *
+
 			ldx $1c01				;22333334
 			eor #$2c
 			sta .header_t2 + 1			;$20 or $60 depending if header or sector, just the right values we need there
 			lda #$3e
 			sax <.threes + 1
 			txa
-			asr #$c1				;lookup? -> 4 cycles
+			asr #$c1
 .header_t2		eor #$c0
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 
 			sta <.chksum + 1
-!if >* != >.bvs_start {
-			nop
-} else {
+;!if >* != >.bvs_start {
+;			nop
+;} else {
 			lda $01
-}
+;}
 			lda #.EOR_VAL
+			nop
+			nop
 			jmp .gcr_entry				;32 cycles until entry
 ;.gcr_slow3		beq *					;XXX TODO can also be moved to ZP and jmp .gcr_entry can be adopted
 .retry_count
@@ -1239,6 +1238,9 @@ ___			= $ff
 			clv
 								;checksum
 			lax $1c01				;44445555
+!if <* == $ff {
+			!error "bvc * crosses page!"
+}
 			bvc *
 			;clv
 			arr #$f0
@@ -1250,6 +1252,9 @@ ___			= $ff
 			bne .retry_no_count			;check remaining nibble if it is $05
 			ldx $1c01
 			clv					;after arr, as it influences v-flag
+!if <* == $ff {
+			!error "bvc * crosses page!"
+}
 			bvc *
 			cpx #.CHECKSUM_CONST2			;0 01010 01 - more traiing zeroes
 			bne .retry_no_count
