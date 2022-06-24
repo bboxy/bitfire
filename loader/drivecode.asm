@@ -188,7 +188,7 @@
 !pseudopc .drivecode {
 .zp_start
 
-.speedzone		= .zp_start + $00
+;.free			= .zp_start + $00
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
@@ -397,34 +397,35 @@ ___			= $ff
 
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;              1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbbbb
+;                  1                      ccccccccccc   2                   ggggggggggggg...3ggggggggggg                 ccccccc   4             v    5       bbbbbbbbbbbbbb
 ;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;              1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg           v      5           bbbbbbbbbbbb
+;                  1                      ccccccccccc   2                   ggggggg...3ggggggggg                 ccccccc   4             v    5       bbbbbbbbbbbb
 ;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg           v      5           bbbbbbbbbb
+;                  1                      ccccccccccc   2                   ggg...3ggggg                 ccccccc   4             v    5       bbbbbbbbbb
 ;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 ccccccc   4           v      5           bbbbbbbb
+;                  1                      ccccccccccc   2                   ...3                 ccccccc   4             v    5       bbbbbbbb
 
 .gcr_slow1_00
-			ldy $01
+			lsr $00
 			jmp +
 !if .GCR_125 = 1 {
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 }
-+
+
+.gcr_slow1_40
+			lda $1c01
 			nop
+--
+			jmp .gcr_slow1 + 3
 .gcr_slow1_20
 			nop
+			nop
 			lda $1c01
-			jmp .gcr_slow1 + 3
-.gcr_slow2_xx
-			lax $1c01
-			nop
-			jmp .gcr_slow2 + 3
+			ldy $01
+-
+			jmp --
 
-			nop
-			nop
 			nop
 			nop
 			nop
@@ -434,44 +435,24 @@ ___			= $ff
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 }
 
-.gcr_slow2_00
-			lax $1c01
++
 			nop
-			jmp .gcr_slow2 + 3
-.gcr_slow2_20
-			lax $1c01
+			lda $1c01
 			nop
-			jmp .gcr_slow2 + 3
-.gcr_slow2_40
-			lax $1c01
-			nop
-			jmp .gcr_slow2 + 3
+			jmp -
 
 .slow_tab1
 			!byte $4c
 			!byte $4c
-			!byte $ad
+			!byte $4c
 			!byte $ad
 			!byte <.gcr_slow1_00
 			!byte <.gcr_slow1_20
-			!byte $01
+			!byte <.gcr_slow1_40
 			!byte $01
 			!byte >.gcr_slow1_00
 			!byte >.gcr_slow1_20
-			!byte $1c
-			!byte $1c
-.slow_tab2
-			!byte $4c
-			!byte $4c
-			!byte $4c
-			!byte $af
-			!byte <.gcr_slow2_00
-			!byte <.gcr_slow2_20
-			!byte <.gcr_slow2_40
-			!byte $01
-			!byte >.gcr_slow2_00
-			!byte >.gcr_slow2_20
-			!byte >.gcr_slow2_40
+			!byte >.gcr_slow1_40
 			!byte $1c
 
 			;----------------------------------------------------------------------------------------------------
@@ -993,22 +974,12 @@ ___			= $ff
 			ldy <.speedzone				;.speedzone
 }
 
-			ldx #$00
-			top
--
-			ldx #.gcr_slow2 - .gcr_slow1
 			lda .slow_tab1 + 0,y
-			sta <.gcr_slow1 + 0,x			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
+			sta <.gcr_slow1 + 0			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
 			lda .slow_tab1 + 4,y
-			sta <.gcr_slow1 + 1,x
+			sta <.gcr_slow1 + 1
 			lda .slow_tab1 + 8,y
-			sta <.gcr_slow1 + 2,x
-			tya
-			;sec
-			adc #11
-			tay
-			txa
-			beq -
+			sta <.gcr_slow1 + 2
 
 			;----------------------------------------------------------------------------------------------------
 			;
