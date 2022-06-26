@@ -23,7 +23,7 @@
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;
 
-!src "../config.inc"
+!src "config.inc"
 !convtab pet
 !cpu 6510
 
