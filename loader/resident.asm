@@ -35,7 +35,7 @@ LZ_BITS_LEFT		= 1				;shift lz_bits left or right, might make a difference on te
 OPT_FULL_SET		= (CONFIG_NMI_GAPS | CONFIG_NEXT_DOUBLE) xor 1		;adds 1,4% more performance, needs 10 bytes extra
 OPT_PRIO_LEN2		= CONFIG_NMI_GAPS xor 1		;adds 0,1% more performance, needs 4 bytes extra
 OPT_LZ_INC_SRC1		= 1				;give non equal case priority on lz_src checks
-OPT_LZ_INC_SRC2		= CONFIG_NMI_GAPS xor 1				;give non equal case priority on lz_src checks
+OPT_LZ_INC_SRC2		= 1				;give non equal case priority on lz_src checks
 OPT_LZ_INC_SRC3		= 1				;give non equal case priority on lz_src checks
 
 !if CONFIG_DECOMP = 0 {
