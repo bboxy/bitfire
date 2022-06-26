@@ -34,7 +34,9 @@ LZ_BITS_LEFT		= 1				;shift lz_bits left or right, might make a difference on te
 ;if you do not make use of the nmi-gaps, these optimizations will be enabled, with gaps, they don't fit :-(
 OPT_FULL_SET		= (CONFIG_NMI_GAPS | CONFIG_NEXT_DOUBLE) xor 1		;adds 1,4% more performance, needs 10 bytes extra
 OPT_PRIO_LEN2		= CONFIG_NMI_GAPS xor 1		;adds 0,1% more performance, needs 4 bytes extra
-OPT_LZ_INC_SRC		= 1				;give non equal case priority on lz_src checks
+OPT_LZ_INC_SRC1		= 1				;give non equal case priority on lz_src checks
+OPT_LZ_INC_SRC2		= CONFIG_NMI_GAPS xor 1				;give non equal case priority on lz_src checks
+OPT_LZ_INC_SRC3		= 1				;give non equal case priority on lz_src checks
 
 !if CONFIG_DECOMP = 0 {
 bitfire_load_addr_lo	= CONFIG_ZP_ADDR + 0		;in case of no loadcompd, store the hi- and lobyte of loadaddress separatedly
@@ -251,7 +253,7 @@ bitfire_ntsc4		bpl .ld_gloop			;BRA, a is anything between 0e and 3e
 			+set_lz_bit_marker
 			sta <lz_bits
 			inc <lz_src + 0 		;postponed pointer increment, so no need to save A on next_page call
-!if OPT_LZ_INC_SRC = 1 {
+!if OPT_LZ_INC_SRC1 = 1 {
 			beq .lz_inc_src_refill
 .lz_inc_src_refill_
 } else {
@@ -352,13 +354,17 @@ bitfire_loadcomp_
 			;------------------
 			;SELDOM STUFF
 			;------------------
-!if OPT_LZ_INC_SRC = 1 {
+!if OPT_LZ_INC_SRC1 = 1 {
 .lz_inc_src_refill
 			+inc_src_ptr
 			bne .lz_inc_src_refill_
+}
+!if OPT_LZ_INC_SRC2 = 1 {
 .lz_inc_src_match
 			+inc_src_ptr
 			bne .lz_inc_src_match_
+}
+!if OPT_LZ_INC_SRC3 = 1 {
 .lz_inc_src_lit
 			+inc_src_ptr
 			bcs .lz_inc_src_lit_
@@ -408,7 +414,7 @@ bitfire_loadcomp_
 			sta .lz_offset_lo + 1		;lobyte of offset
 
 			inc <lz_src + 0			;postponed, so no need to save A on next_page call
-!if OPT_LZ_INC_SRC = 1 {
+!if OPT_LZ_INC_SRC2 = 1 {
 			beq .lz_inc_src_match
 .lz_inc_src_match_
 } else {
@@ -503,7 +509,7 @@ bitfire_loadcomp_
 			sta (lz_dst),y
 
 			inc <lz_src + 0
-!if OPT_LZ_INC_SRC = 1 {
+!if OPT_LZ_INC_SRC3 = 1 {
 			beq .lz_inc_src_lit
 .lz_inc_src_lit_
 } else {
@@ -585,7 +591,7 @@ bitfire_loadcomp_
 			bne .lz_start_over
 
 							;XXX TODO, save one byte above and the beq lz_next_page can be omitted and lz_next_page copied here again
-			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
+			jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
 							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
 	!if CONFIG_LOADER = 1 {
