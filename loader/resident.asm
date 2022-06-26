@@ -591,8 +591,10 @@ bitfire_loadcomp_
 			bne .lz_start_over
 
 							;XXX TODO, save one byte above and the beq lz_next_page can be omitted and lz_next_page copied here again
-			jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
+			;jmp .ld_load_raw		;but should be able to skip fetch, so does not work this way
 			;top				;if lz_src + 1 gets incremented, the barrier check hits in even later, so at least one block is loaded, if it was $ff, we at least load the last block @ $ffxx, it must be the last block being loaded anyway
+			lda #$fe
+			sta <lz_src + 1
 							;as last block is forced, we would always wait for last block to be loaded if we enter this loop, no matter how :-)
 	!if CONFIG_LOADER = 1 {
 			;------------------
