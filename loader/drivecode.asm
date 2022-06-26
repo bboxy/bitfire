@@ -52,7 +52,6 @@
 .FORCE_LAST_BLOCK	= 1
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
 .DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
-.SANCHECK_BVS_LOOP	= 0 ;not needed, as gcr loop reads sane within that spin up ranges the loop covers by nature
 .SANCHECK_HEADER_0F	= 0 ;does never trigger
 .SANCHECK_HEADER_ID	= 0 ;does never trigger
 .SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
@@ -893,8 +892,8 @@ ___			= $ff
 			rol
 			and #3
 			eor $1c00
-
 			sta $1c00
+
 			dex
 			beq +
 			bit $1c0d
@@ -956,28 +955,13 @@ ___			= $ff
 			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .bitrate		!byte $00,$20,$40,$60
 +
-
-			;sta .gcr_slow3 + 1
 			tay
 			lda $1c00
 			and #$9f
 			ora .bitrate,y
 			sta $1c00
 
-!if .SANCHECK_BVS_LOOP = 1 {
-			ldy #$a9				;restore 3 LDAs
-			top
--
-			ldy #$70
-.br0			bpl *					;now create up to 3 BVSs, depending on speedzone
-			sty <.bvs_03
-			sty <.bvs_02
-			sty <.bvs_01
-			bmi -					;first round? then LDA was set 3 times, now set right amount of BVS on a second round, after that, we fall through this check
-			ldy <.speedzone				;.speedzone
-}
-
-			ldx #$00
+			ldx #0
 			top
 -
 			ldx #.gcr_slow2 - .gcr_slow1
@@ -1175,18 +1159,18 @@ ___			= $ff
 
 			ldx $1c01				;sync mark -> $ff
 			clv
-!if <* == $ff {
-			!error "bvc * crosses page!"
-}
+;!if <* == $ff {
+;			!error "bvc * crosses page!"
+;}
 			bvc *
 
 			clv
 			cpy $1c01				;11111222
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			sta <.gcr_end				;setup return jump
-!if <* == $ff {
-			!error "bvc * crosses page!"
-}
+;!if <* == $ff {
+;			!error "bvc * crosses page!"
+;}
 			bvc *
 
 			ldx $1c01				;22333334
@@ -1221,9 +1205,9 @@ ___			= $ff
 			clv
 								;checksum
 			lax $1c01				;44445555
-!if <* == $ff {
-			!error "bvc * crosses page!"
-}
+;!if <* == $ff {
+;			!error "bvc * crosses page!"
+;}
 			bvc *
 			;clv
 			arr #$f0
