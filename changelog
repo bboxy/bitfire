@@ -138,3 +138,4 @@ v1.2
 - added proper depack-example to dali
 - fixed nasty bitrate bug in drivecode that would sometimes choose wrong bitrate on slowest speed zone and bring timing to its edge
 - saved bytes
+- fixed bug, inplace decompression would miss loading sectors if final literal is > than 1 sector/crosses 2 sectors or more
