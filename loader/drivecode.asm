@@ -403,10 +403,6 @@ ___			= $ff
 			nop
 			lda $1c01
 			jmp .gcr_slow1 + 3
-.gcr_slow2_xx
-			lax $1c01
-			nop
-			jmp .gcr_slow2 + 3
 .gcr_slow2_00
 .gcr_slow2_20
 .gcr_slow2_40
@@ -414,36 +410,44 @@ ___			= $ff
 			nop
 			jmp .gcr_slow2 + 3
 
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+
 !if .GCR_125 = 1 {
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 }
 
 .slow_tab1
-			!byte $4c
-			!byte $4c
-			!byte $ad
-			!byte $ad
-			!byte <.gcr_slow1_00
-			!byte <.gcr_slow1_20
-			!byte $01
-			!byte $01
 			!byte >.gcr_slow1_00
 			!byte >.gcr_slow1_20
 			!byte $1c
 			!byte $1c
-.slow_tab2
-			!byte $4c
-			!byte $4c
-			!byte $4c
-			!byte $af
-			!byte <.gcr_slow2_00
-			!byte <.gcr_slow2_20
-			!byte <.gcr_slow2_40
+			!byte <.gcr_slow1_00
+			!byte <.gcr_slow1_20
 			!byte $01
+			!byte $01
+			!byte $4c
+			!byte $4c
+			!byte $ad
+			!byte $ad
+.slow_tab2
 			!byte >.gcr_slow2_00
 			!byte >.gcr_slow2_20
 			!byte >.gcr_slow2_40
 			!byte $1c
+			!byte <.gcr_slow2_00
+			!byte <.gcr_slow2_20
+			!byte <.gcr_slow2_40
+			!byte $01
+			!byte $4c
+			!byte $4c
+			!byte $4c
+			!byte $af
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -943,28 +947,22 @@ ___			= $ff
 			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .bitrate		!byte $00,$20,$40,$60
 +
-			tay
+			tax
 			lda $1c00
 			and #$9f
-			ora .bitrate,y
+			ora .bitrate,x
 			sta $1c00
 
-			ldx #0
-			top
+			ldy #2
 -
-			ldx #.gcr_slow2 - .gcr_slow1
-			lda .slow_tab1 + 0,y
-			sta <.gcr_slow1 + 0,x			;modify single point in gcr_loop for speed adaptioon, lda $1c01 or branch out with a jmp to slow down things
-			lda .slow_tab1 + 4,y
-			sta <.gcr_slow1 + 1,x
-			lda .slow_tab1 + 8,y
-			sta <.gcr_slow1 + 2,x
-			tya
-			;sec
-			adc #11
-			tay
+			lda .slow_tab1,x
+			sta <.gcr_slow1,y			;3 byte opcode, sad :-(
+			lda .slow_tab2,x
+			sta <.gcr_slow2,y			;3 byte opcode, sad :-(
 			txa
-			beq -
+			sbx #-4					;but easy x+=4
+			dey
+			bpl -
 
 			;----------------------------------------------------------------------------------------------------
 			;
