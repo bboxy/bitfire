@@ -325,7 +325,7 @@ ___			= $ff
 			tax
 
 .fives			lda <.tab00005555_hi			;ZP!
-			ora <.tab05666660_lo,x
+			ora <.tab05666660_lo,x			;ZP but index
 			pha					;$0102
 .chksum			eor #$00				;103,101,100
 .chksum2		eor #$00
