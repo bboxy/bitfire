@@ -30,6 +30,7 @@ BITS_LEFT		= 1
 .depacker_dst		= $01
 .smc_offsetd 		= .depacker_dst - (.dali_code_end - .dali_code_start)
 !ifdef SFX_FAST {
+DALI_FAST_SFX_SRC	= sfx_src		- .dali_code_start + 2
 DALI_FAST_SRC		= lz_src 		- .smc_offsetd + 2
 DALI_FAST_DST		= lz_dst		- .smc_offsetd + 2
 DALI_FAST_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
@@ -38,6 +39,7 @@ DALI_FAST_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 DALI_FAST_01		= lz_01			- .smc_offsetd + 2
 DALI_FAST_CLI		= lz_cli		- .smc_offsetd + 2
 } else {
+DALI_SMALL_SFX_SRC	= sfx_src		- .dali_code_start + 2
 DALI_SMALL_SRC		= lz_src		- .smc_offsetd + 2
 DALI_SMALL_DST		= lz_dst		- .smc_offsetd + 2
 DALI_SMALL_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
@@ -106,6 +108,7 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 		pha				;saved zp to stack down to $02
 		lax <.depacker_dst - 1,y	;saves a byte, 2 byte compared to lda $0000,y
 }
+sfx_src = * + 1
 		ldx .depacker_code - 1,y
 		stx <.depacker_dst - 1,y
 		dey
