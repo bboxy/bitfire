@@ -310,8 +310,6 @@ void reencode_packed_stream(ctx* ctx) {
 
 void write_reencoded_stream(ctx* ctx) {
     FILE *fp = NULL;
-    int start_addr = 0x0801;
-    if (ctx->cbm_relocate_sfx_addr >= 0) start_addr = ctx->cbm_relocate_sfx_addr;
     /* write reencoded output file */
     fp = fopen(ctx->output_name, "wb");
     if (!fp) {
@@ -341,8 +339,8 @@ void write_reencoded_stream(ctx* ctx) {
             ctx->sfx_code[DALI_SMALL_SRC + 1] = ((0x10000 - ctx->reencoded_index) >> 8) & 0xff;
 
             /* setup compressed data end */
-            ctx->sfx_code[DALI_SMALL_DATA_END + 0] = (start_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
-            ctx->sfx_code[DALI_SMALL_DATA_END + 1] = ((start_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
+            ctx->sfx_code[DALI_SMALL_DATA_END + 0] = (0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
+            ctx->sfx_code[DALI_SMALL_DATA_END + 1] = ((0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
 
             ctx->sfx_code[DALI_SMALL_DATA_SIZE_HI] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
         } else {
@@ -366,8 +364,8 @@ void write_reencoded_stream(ctx* ctx) {
             ctx->sfx_code[DALI_FAST_SRC + 1] = ((0x10000 - ctx->reencoded_index) >> 8) & 0xff;
 
             /* setup compressed data end */
-            ctx->sfx_code[DALI_FAST_DATA_END + 0] = (start_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
-            ctx->sfx_code[DALI_FAST_DATA_END + 1] = ((start_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
+            ctx->sfx_code[DALI_FAST_DATA_END + 0] = (0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
+            ctx->sfx_code[DALI_FAST_DATA_END + 1] = ((0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
 
             ctx->sfx_code[DALI_FAST_DATA_SIZE_HI] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
 
@@ -375,8 +373,8 @@ void write_reencoded_stream(ctx* ctx) {
             if (ctx->sfx_cli) ctx->sfx_code[DALI_FAST_CLI] = 0x58;
         }
         printf("original: $%04x-$%04x ($%04x) 100%%\n", (int)ctx->cbm_orig_addr, (int)ctx->cbm_orig_addr + (int)ctx->unpacked_size, (int)ctx->unpacked_size);
-        printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", start_addr, start_addr + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
         if (ctx->cbm_relocate_sfx_addr >= 0) {
+            printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", ctx->cbm_relocate_sfx_addr, ctx->cbm_relocate_sfx_addr + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
             if (ctx->sfx_small) {
                 ctx->sfx_code[DALI_SMALL_SFX_SRC + 0] = (ctx->cbm_relocate_sfx_addr + 0x13) & 255;
                 ctx->sfx_code[DALI_SMALL_SFX_SRC + 1] = (ctx->cbm_relocate_sfx_addr + 0x13) >> 8;
@@ -395,6 +393,7 @@ void write_reencoded_stream(ctx* ctx) {
                 exit(1);
             }
         } else {
+            printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", 0x801, 0x801 + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
             if (fwrite(ctx->sfx_code, sizeof(char), ctx->sfx_size, fp) != ctx->sfx_size) {
                 fprintf(stderr, "Error: Cannot write output file %s\n", ctx->output_name);
                 exit(1);
