@@ -1,4 +1,4 @@
-d64write_CFLAGS = $(CFLAGS) -Ofast -Wall
+D64WRITE_CFLAGS = $(CFLAGS) -Ofast -Wall
 ifdef win
 CC = x86_64-w64-mingw32-gcc
 STRIP = x86_64-w64-mingw32-strip
@@ -21,7 +21,7 @@ all: d64write
 
 d64write: $(SOURCE) $(HEADER)
 	@echo "Building d64write..."
-	$(VR)$(CC) $(d64write_CFLAGS) -o $@ $(SOURCE)
+	$(VR)$(CC) $(D64WRITE_CFLAGS) -o $@ $(SOURCE)
 ifdef win
 	$(VR)$(STRIP) $@.exe
 else

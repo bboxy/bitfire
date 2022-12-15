@@ -3,21 +3,29 @@ ACME_OPTS ?= -f cbm
 SALVADOR_PATH = salvador/src
 SALVADOR_LIB_PATH = $(SALVADOR_PATH)/libdivsufsort/lib
 DALI_INCLUDES = $(SALVADOR_PATH)/libdivsufsort/include
-DALI_CFLAGS ?= $(CFLAGS) -O3 -g -Wall -fomit-frame-pointer -I$(DALI_INCLUDES)
+DALI_CFLAGS = $(CFLAGS) -O3 -g -Wall -fomit-frame-pointer -I$(DALI_INCLUDES)
 ifdef win
-DALI_CC = x86_64-w64-mingw32-gcc
-DALI_STRIP = x86_64-w64-mingw32-strip
+CC = x86_64-w64-mingw32-gcc
+STRIP = x86_64-w64-mingw32-strip
 else
-DALI_CC = gcc
-DALI_STRIP = strip
+CC ?= gcc
+STRIP ?= strip
 endif
-DALI_OBJS += $(SALVADOR_PATH)/expand.o
-DALI_OBJS += $(SALVADOR_PATH)/matchfinder.o
-DALI_OBJS += $(SALVADOR_PATH)/shrink.o
-DALI_OBJS += $(SALVADOR_LIB_PATH)/divsufsort.o
-DALI_OBJS += $(SALVADOR_LIB_PATH)/divsufsort_utils.o
-DALI_OBJS += $(SALVADOR_LIB_PATH)/sssort.o
-DALI_OBJS += $(SALVADOR_LIB_PATH)/trsort.o
+#DALI_OBJS += $(SALVADOR_PATH)/expand.o
+#DALI_OBJS += $(SALVADOR_PATH)/matchfinder.o
+#DALI_OBJS += $(SALVADOR_PATH)/shrink.o
+#DALI_OBJS += $(SALVADOR_LIB_PATH)/divsufsort.o
+#DALI_OBJS += $(SALVADOR_LIB_PATH)/divsufsort_utils.o
+#DALI_OBJS += $(SALVADOR_LIB_PATH)/sssort.o
+#DALI_OBJS += $(SALVADOR_LIB_PATH)/trsort.o
+
+SALVADOR_SRC += $(SALVADOR_PATH)/expand.c
+SALVADOR_SRC += $(SALVADOR_PATH)/matchfinder.c
+SALVADOR_SRC += $(SALVADOR_PATH)/shrink.c
+SALVADOR_SRC += $(SALVADOR_LIB_PATH)/divsufsort.c
+SALVADOR_SRC += $(SALVADOR_LIB_PATH)/divsufsort_utils.c
+SALVADOR_SRC += $(SALVADOR_LIB_PATH)/sssort.c
+SALVADOR_SRC += $(SALVADOR_LIB_PATH)/trsort.c
 
 V ?= 0
 ifeq ($(V),1)
@@ -28,19 +36,22 @@ endif
 
 all: dali
 
-%.o: %.c
-	$(VR)$(DALI_CC) $(DALI_CFLAGS) -c $< -o $@
+#%.o: %.c
+#	$(VR)$(CC) $(DALI_CFLAGS) -c $< -o $@
+#
+#dali.o: dali.c sfx_small.h sfx_fast.h
+#	@echo "Building dali..."
+#	$(VR)$(CC) $(DALI_CFLAGS) -c $< -o $@
+#
+#dali: dali.o $(DALI_OBJS)
 
-dali.o: dali.c sfx_small.h sfx_fast.h
+dali: dali.c $(SALVADOR_SRC) sfx_small.h sfx_fast.h
 	@echo "Building dali..."
-	$(VR)$(DALI_CC) $(DALI_CFLAGS) -c $< -o $@
-
-dali: dali.o $(DALI_OBJS)
-	$(VR)$(DALI_CC) $^ $(LDFLAGS) -o $@
+	$(VR)$(CC) $^ $(DALI_CFLAGS) -o $@
 ifdef win
-	$(VR)$(DALI_STRIP) $@.exe
+	$(VR)$(STRIP) $@.exe
 else
-	$(VR)$(DALI_STRIP) $@
+	$(VR)$(STRIP) $@
 endif
 
 testfile.lz: ../../benchmark/files/a
