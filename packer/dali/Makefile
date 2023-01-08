@@ -47,7 +47,7 @@ all: dali
 
 dali: dali.c $(SALVADOR_SRC) sfx_small.h sfx_fast.h
 	@echo "Building dali..."
-	$(VR)$(CC) $^ $(DALI_CFLAGS) -o $@
+	$(VR)$(CC) dali.c $(SALVADOR_SRC) $(DALI_CFLAGS) -o $@
 ifdef win
 	$(VR)$(STRIP) $@.exe
 else
