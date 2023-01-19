@@ -1301,6 +1301,8 @@ ___			= $ff
 			iny					;set up num of bytes to be transferred
 			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
 
+			ldy <.dir_entry_num
+
 !if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
 			ldx #$14				;walk through list of sectors to be loaded
 			lda <.index
@@ -1308,63 +1310,39 @@ ___			= $ff
 			cmp <.wanted,x				;compare
 			bcc .is_bigger				;bigger index, next please
 			lda <.wanted,x				;smaller (or same, but can't happen, as index is unique) remember new minimum
+			beq .barr_zero
 .is_bigger
 			dex					;next entry
 			bpl .min_loop
 
-			ldx <.dir_entry_num
-
-			tay
-			beq .barr_zero
-			dey
-			tya
+			;tay
+			;dey
+			;tya
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
 			clc
-			adc .dir_load_addr + 1,x		;add load address highbyte to lowest blockindex
+			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
-
-			;loadaddr	blocksize	data till		;lz-readpos okay
-			;65c0		c0		-> 6680			addr not yet set
-			;6680		100		-> 6780			65c0-66c0
-			;6780		100		-> 6880			66c0-67c0
-			;6880		100		-> 6980			67c0-68c0
-
-
-			;loadaddr	blocksize	data till		;lz-readpos okay
-			;6510		20		-> 6530			addr not yet set
-			;6530		100		-> 6630			6510-6610
-			;6630		100		-> 6730			6610-6710
-			;6730		100		-> 6830			6710-6810
-
-;			      first block ends in new page
-;			                  |-barrier
-;			       000|1111111 2222222|3333333
-;depackpos/barrier	| $1000 | $1100 | $1200 | $1300 |
-;                        000|1111111 2222222|3333333
-;			            |-barrier
-;			first block ends in same page
-
-			lda .dir_load_addr + 0,x		;fetch load address lowbyte
+			lda .dir_load_addr + 0,y		;fetch load address lowbyte
 			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
 
-			ldy <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
+			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
 			beq +
-			ldy #$80
+			ldx #$80
 			adc <.first_block_size			;else add first block size as offset, might change carry
 +
 			sta <.preamble_data + 1			;block address low
 
-			lda .dir_load_addr + 1,x		;add load address highbyte
-			sbc #$00				;subtract one in case of overflow
-			clc
+			lda .dir_load_addr + 1,y		;add load address highbyte
+			;sbc #$00				;subtract one in case of overflow
+			;clc
 			adc <.block_num				;add block num
 
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sta <.preamble_data + 2			;block address high
 !if CONFIG_DEBUG = 1 {
-			tya
+			txa
 .errors			ora #$00
 			;reset per block xfer
 			;add 4 per error, lda #$00 if negative
@@ -1372,7 +1350,7 @@ ___			= $ff
 			lda #$00
 			sta .errors + 1
 } else {
-			sty <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
+			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
 }
 
 !if .POSTPONED_XFER = 1 {
