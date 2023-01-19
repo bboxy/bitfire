@@ -364,8 +364,8 @@ ___			= $ff
 			jmp .next_sector
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
-			jmp .read_sector_back
-			jmp .read_header_back
+			jmp .back_read_sector
+			jmp .back_read_header
 
 !ifdef .second_pass {
 	!warn $0100 - *, " bytes remaining in zeropage."
@@ -1038,13 +1038,7 @@ ___			= $ff
 			stx .errors + 1
 +
 }
-.next_sector
-.read_gcr_header						;read_header and do checksum, if not okay, do again
-			ldx #$07				;bytes to fetch
-			ldy #$52				;type (header)
-			lda #$0c
-			jmp .read_gcr
-.read_header_back
+.back_read_header
 !if .SANCHECK_HEADER_0F = 0 {
 			ldx #$02
 }
@@ -1134,6 +1128,12 @@ ___			= $ff
 			ldx #$ff				;bytes to fetch
 			ldy #$55				;type (sector)
 			lda #$4c
+			bne .read_gcr
+.next_sector
+.read_gcr_header						;read_header and do checksum, if not okay, do again
+			ldx #$07				;bytes to fetch
+			ldy #$52				;type (header)
+			lda #$0c
 .read_gcr
 			txs
 -
@@ -1183,7 +1183,7 @@ ___			= $ff
 			jmp .read_sector			;will be sbc (xx),y if disabled
 .retry_no_count
 			jmp .next_sector			;will be sbc (xx),y if disabled
-.read_sector_back
+.back_read_sector
 			;7 cycles need to pass
 
 			ldx $01
