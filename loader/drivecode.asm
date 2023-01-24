@@ -40,7 +40,7 @@
 ;config params
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport
+.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport
 .CACHED_SECTOR		= 1   ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
 ;ldy <.last_block_num
@@ -51,7 +51,7 @@
 
 .FORCE_LAST_BLOCK	= 1
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
-.DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
+.DELAY_SPIN_DOWN	= 0 ;wait for app. 4s until spin down in idle mode
 .SANCHECK_HEADER_0F	= 0 ;does never trigger
 .SANCHECK_HEADER_ID	= 0 ;does never trigger
 .SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
@@ -201,7 +201,7 @@
 .track			= .zp_start + $56			;DT ;current track
 .to_track		= .zp_start + $58			;DT
 .sector			= .zp_start + $59			;DS
-.temp			= .zp_start + $5a
+.filename		= .zp_start + $5a
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
 .block_size		= .zp_start + $68
@@ -545,9 +545,12 @@ ___			= $ff
 .en_dis_seek_
 }
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
-			bmi .track_finished
-			jmp .next_sector			;nope, continue loading
+			bpl +
 .track_finished
+			;XXX TODO make this check easier? only done hre?
+			lda <.end_of_file			;EOF
+			bmi .idle
+
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #18
@@ -556,10 +559,9 @@ ___			= $ff
 			isc <.to_track
 			beq -					;skip dirtrack however
 
-			;XXX TODO make this check easier? only done hre?
-			lda <.end_of_file			;EOF
-			bmi .idle
 			jmp .load_track
++
+			jmp .next_sector			;nope, continue loading
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -577,6 +579,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 .idle
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
+.skip_load
 			lda $1c00				;turn off LED
 !if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
 			and #.MOTOR_OFF & .LED_OFF
@@ -586,7 +589,7 @@ ___			= $ff
 			sta $1c00
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 			and #.MOTOR_OFF
-			sta .spinval + 1
+			tax
 }
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -595,50 +598,73 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .get_byte
-
-			ldy #$80				;expect a whole new byte and start with a free bus
-			sty $1800				;clear lines -> ready
-
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-			;ldy #$01
-}
-
+			;use ATN as toggle to trigger bits?
+			;bits fly in with data? clk?
+			;if only clock toggles: .lock, leave .lock if all zero again?
+.rcv_filename
 .lock
--
-			lda $1800				;wait until bit 0 2 and 7 drop, bit 2 will drop last
-			ora $1800
-			ora $1800
-			bne -
-
-			tax
-
 			lda #$80
-.wait_bit
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-			;have a free running counter so that we only check on 1c0d?
-			;check for underrun of timer here? bit $1c0d, but use 1c05 as timer?
-			bit $1c0d
-			bpl +
-			sty $1c05
-			cpx $1800				;check $1800 to keep track with changes
-			bne .rcv_bit
-			dey
-			bne +
-.spinval		ldy #$00
-			sty $1c00
+			sta <.filename
+			sta $1800
 
-+
-}
-			cpx $1800
-			beq .wait_bit
-.rcv_bit
-			ldx $1800
+;.C:17cc  A0 02       LDY #$02
+;.C:17ce  A9 80       LDA #$80
+;.C:17d0  85 5A       STA $5A
+;.C:17d2  8D 00 18    STA $1800
+;.C:17d5  A9 04       LDA #$04
+;.C:17d7  2C 00 18    BIT $1800
+;.C:17da  30 F2       BMI $17CE
+;.C:17dc  F0 F9       BEQ $17D7
+;.C:17de  AD 00 18    LDA $1800
+;.C:17e1  30 EB       BMI $17CE
+;.C:17e3  4A          LSR A
+;.C:17e4  66 5A       ROR $5A
+;.C:17e6  A9 04       LDA #$04
+;.C:17e8  2C 00 18    BIT $1800
+;.C:17eb  30 E1       BMI $17CE
+;.C:17ed  D0 F9       BNE $17E8
+;.C:17ef  AD 00 18    LDA $1800
+;.C:17f2  30 DA       BMI $17CE
+;.C:17f4  4A          LSR A
+;.C:17f5  66 5A       ROR $5A
+;.C:17f7  90 DC       BCC $17D5
+;.C:17f9  8C 00 18    STY $1800
+;.C:17fc  A5 5A       LDA $5A
+;.C:17fe  49 FF       EOR #$FF
+
+.bitloop
+-
+			lda #$04
+.wait_bit1
+			;16 cycles for spin down check available here
+			bit $1800
+			;check for spindown here only, 14 cycles left until fail
 			bmi .lock
-			cpx #$04
-			ror
-			bcc .wait_bit				;more bits to fetch?
+			beq .wait_bit1				;do we have clk == 1?
+
+			lda $1800				;now read again
+			bmi .lock				;check for lock
+			cmp #$04				;clk raised unexpectedly
+			bcc -					;all sane, we can read bit in data
+			lsr
+			ror <.filename
+-
+			lda #$04
+.wait_bit2
+			bit $1800
+			bmi .lock
+			bne .wait_bit2				;do we have clk == 0?
+			lda $1800
+			bmi .lock
+			cmp #$04				;clk dropped unexpectedly
+			bcs -
+			lsr					;all sane, we can read bit in data
+			ror <.filename
+			bcc .bitloop				;more bits to fetch?
+
 			ldy #.BUSY
 			sty $1800				;set busy bit
+			lda <.filename
 			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
 
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
@@ -784,12 +810,13 @@ ___			= $ff
 			ora .dir_file_size + 1,x		;enough to check for zero filesize?
 			bne +
 			;file not found
+.fucked
 			lda $1c00
 			and #.MOTOR_OFF
 			ora #.LED_ON
 			sta $1c00
 			jam
-			;jmp .idle
+			;jmp .skip_load
 +
 			lda <.blocks + 0
 			;calc first block size
@@ -839,6 +866,7 @@ ___			= $ff
 			dex
 			bne .fs_loop
 .found_sector
+			;jmp .idle_
 .turn_disc_entry
 			sta <.sector
 			stx <.index				;reset block index, x = 0
@@ -1379,6 +1407,18 @@ ___			= $ff
 ;			tsx
 ;			bne -
 
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
+.check_spindown
+			;have a free running counter so that we only check on 1c0d?
+			;check for underrun of timer here? bit $1c0d, but use 1c05 as timer?
+			bit $1c0d
+			bpl ++
+			sty $1c05
+			dey
+			bne ++
+			stx $1800
+++
+}
 
 ;tables with possible offsets
 .tab11111000_hi		= .tables + $00

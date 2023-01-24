@@ -140,16 +140,16 @@ bitfire_send_byte_
 			sta <filenum
 			lda #$3f
 .ld_loop
-			eor #$20
+			eor #$10
 			jsr .ld_set_dd02					;waste lots of cycles upon write, so bits do not arrive too fast @floppy
+			nop							;XXX TODO might be omitted, need to check
 			lsr <filenum
-			nop
 			bne .ld_loop
 			;clc							;force final value to be $3f again (bcc will hit in later on)
 .ld_set_dd02									;moved loop code to here, so that enough cycles pass by until $dd02 is set back to $3f after whole byte is transferred, also saves a byte \o/
 			tax							;x = $1f/$3f / finally x is always $3f after 8 rounds (8 times eor #$20)
 			bcs +
-			sbx #$10						;x = $0f/$2f
+			sbx #$20						;x = $0f/$2f
 +
 			stx $dd02						;restore $dd02
 			rts							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
