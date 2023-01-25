@@ -139,3 +139,5 @@ v1.2
 - fixed nasty bitrate bug in drivecode that would sometimes choose wrong bitrate on slowest speed zone and bring timing to its edge
 - saved bytes
 - fixed bug, inplace decompression would miss loading sectors if final literal is > than 1 sector/crosses 2 sectors or more
+- dali sfx can be relocated to any address (upon feature request by comos)
+- finally fixed and changed buslock-technique so that it also works with THCM's SX64 - broken since introduced in 0.7 /o\

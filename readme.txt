@@ -195,8 +195,8 @@ reset_drive			;resets the drive, so the laoder can be reuploaded later again and
 request_disk .num		;command the floppy to check for given side#, will return as soon as the new diskside is detected
 setup_sync .frames		;setup frame counter to wait for $0000-$7fff frames
 sync				;wait for sync to happen or expire
-bus_lock			;lock the bus, after hat arbitrary writes to $dd00 are possible, for e.g. with a complex FPP, no loading or interaction with the drive is possible in that time
-bus_unlock .bank		;unlock the bus again and and reenable the drive, an actual bank needs to be given, as $dd00 is set up again
+bus_lock			;lock the bus, after that arbitrary writes to $dd00 are possible, for e.g. with a complex FPP, no loading or interaction with the drive is possible in that time
+bus_unlock			;unlock the bus again and and reenable the drive communication
 set_depack_pointers .addr	;change the decompression target-address of a loaded file, so it can be loaded and decompressed to a different location than given during compression
 start_music_nmi			;start an NMI that will call the music-player once per frame via timer on rasterline $ff
 stop_music_nmi			;stop the NMI (for e.g. to hand over to a raster-irq)
