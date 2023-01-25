@@ -57,3 +57,4 @@ clean:
 #	@$(MAKE) $(MAKE_OPTS) -C link/ clean
 
 FORCE:
+	@true
