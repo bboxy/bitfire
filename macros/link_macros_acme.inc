@@ -104,10 +104,9 @@
 			sta $dd02
 		}
 
-		!macro bus_unlock .arg {
-			;lda $dd00
-			;and #$03
-			lda #(.arg & 3)
+		!macro bus_unlock {
+			lda $dd00
+			and #$03
 			sta $dd00
 			lda #$3f
 			sta $dd02

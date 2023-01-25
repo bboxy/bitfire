@@ -277,9 +277,9 @@ numb		lda #$00		;file number
 		dey
 		bne -
 
-		+bus_unlock 3
 		lda #$03
 		sta $dd00
+		+bus_unlock
 		;jmp next
 }
 

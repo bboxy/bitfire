@@ -100,23 +100,16 @@
 		endm
 
 		mac bus_lock  
-			lda #$37			;set ATN and CLK
+			lda #$37			;set ATN
 			sta $dd02
 		endm
 
-		mac bus_unlock 
-			ldx #({1} & 3) + $c0
-			stx $dd00
-
-			lda #$3f			;release CLK
+		mac bus_unlock  
+			lda $dd00
+			and #$03
+			sta $dd00
+			lda #$3f
 			sta $dd02
-
-			pha
-			pla
-			pha
-			pla
-			pha
-			pla
 		endm
 
 		mac set_depack_pointers 

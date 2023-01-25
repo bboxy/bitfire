@@ -100,23 +100,16 @@ l
 .endm
 
 bus_lock .macro
-			lda #$37			;set ATN and CLK
+			lda #$37			;set ATN
 			sta $dd02
 .endm
 
 bus_unlock .macro
-			ldx #(\1 & 3) + $c0
-			stx $dd00
-
-			lda #$3f			;release CLK
+			lda $dd00
+			and #$03
+			sta $dd00
+			lda #$3f
 			sta $dd02
-
-			pha
-			pla
-			pha
-			pla
-			pha
-			pla
 .endm
 
 set_depack_pointers .macro
