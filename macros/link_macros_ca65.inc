@@ -1,11 +1,11 @@
-		.macro link_decomp_under_io 
+				.macro link_decomp_under_io 
 		.local l
 			dec $01                         ;bank out IO
 			jsr link_decomp                 ;depack
 			inc $01
 		.endmacro
 
-		.macro link_load_next_raw_decomp 
+				.macro link_load_next_raw_decomp 
 		.local l
 			jsr link_load_next_raw
 			dec $01                         ;bank out IO
@@ -14,7 +14,7 @@
 		.endmacro
 
 		;load next file as a raw file (do not decomp on the fly) and jump to .addr
-		.macro link_load_next_raw_jmp  arg
+				.macro link_load_next_raw_jmp  arg
 		.local l
 			lda #>(arg-1)
 			pha
@@ -24,7 +24,7 @@
 		.endmacro
 
 		;load next file and decomp on the fly, then jump to arg
-		.macro link_load_next_comp_jmp  arg
+				.macro link_load_next_comp_jmp  arg
 		.local l
 			lda #>(arg-1)
 			pha
@@ -34,7 +34,7 @@
 		.endmacro
 
 		;decomp previously loaded file and jump to arg
-		.macro link_decomp_jmp  arg
+				.macro link_decomp_jmp  arg
 		.local l
 			lda #>(arg-1)
 			pha
@@ -43,7 +43,7 @@
 			jmp link_decomp
 		.endmacro
 
-		.macro link_load_next_double 
+				.macro link_load_next_double 
 		.local l
 			jsr link_load_next_comp
 			jsr link_load_next_raw
@@ -53,7 +53,7 @@
 		.endmacro
 
 		;link irq hook back to base irq
-		.macro link_player_irq 
+				.macro link_player_irq 
 		.local l
 			sei
 			lda #<link_player
@@ -65,14 +65,14 @@
 			cli
 		.endmacro
 
-		.macro reset_drive 
+				.macro reset_drive 
 		.local l
 			lda #BITFIRE_RESET
 			jsr bitfire_send_byte_
 		.endmacro
 
 		;request next disk side and reset filenum_counter
-		.macro request_disk  arg
+				.macro request_disk  arg
 		.local l
 			lda #arg + $f0
 			;simply do a bogus loadraw, this will call ld_pblock until eof is raised, nothing is loaded as block_ready never happens :-)
@@ -86,7 +86,7 @@
 		.endmacro
 
 		;wait for given frame counter value
-		.macro link_wait_syncpoint  arg
+				.macro link_wait_syncpoint  arg
 		.local l
 l
 			lda link_syncpoint
@@ -94,7 +94,7 @@ l
 			bcc l
 		.endmacro
 
-		.macro setup_sync  arg
+				.macro setup_sync  arg
 		.local l
 			lda #$00
 			sta link_frame_count + 0	;avoid that the counter wraps worstcase, as we can't write atomic
@@ -104,20 +104,20 @@ l
 			sta link_frame_count + 0	;now setup counter
 		.endmacro
 
-		.macro sync 
+				.macro sync 
 		.local l
 l
 			lda link_frame_count + 1	;Counter expired when $8000 is reached
 			bpl l
 		.endmacro
 
-		.macro bus_lock 
+				.macro bus_lock 
 		.local l
 			lda #$37			;set ATN
 			sta $dd02
 		.endmacro
 
-		.macro bus_unlock 
+				.macro bus_unlock 
 		.local l
 			lda $dd00
 			and #$03
@@ -126,7 +126,7 @@ l
 			sta $dd02
 		.endmacro
 
-		.macro set_depack_pointers  arg
+				.macro set_depack_pointers  arg
 		.local l
 			lda #<arg
 			sta bitfire_load_addr_lo
@@ -134,7 +134,7 @@ l
 			sta bitfire_load_addr_hi
 		.endmacro
 
-		.macro link_music_update 
+				.macro link_music_update 
 		.local l
 			inc link_frame_count + 0
 			bne l
@@ -143,7 +143,7 @@ l
 			jmp (link_music_addr)
 		.endmacro
 
-		.macro start_music_nmi 
+				.macro start_music_nmi 
 		.local l
 			;lda #$20
 			;sta link_music_play_jmp
@@ -171,41 +171,41 @@ l
 			sta $dd0e
 		.endmacro
 
-		.macro stop_music_nmi 
+				.macro stop_music_nmi 
 		.local l
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
 		.endmacro
 
-		.macro restart_music_nmi 
+				.macro restart_music_nmi 
 		.local l
 			lda $dd0d
 			lda #$81
 			sta $dd0d
 		.endmacro
 
-		.macro gaps_setup 
+;				.macro gaps_setup 
 		.local l
-			ldx #$09
-l
-			lda CONFIG_RESIDENT_ADDR + $000,x
-			pha
-			lda CONFIG_RESIDENT_ADDR + $100,x
-			pha
-			dex
-			bpl l
-		.endmacro
-
-		.macro gaps_restore 
+;			ldx #$09
+;l
+;			lda CONFIG_RESIDENT_ADDR + $000,x
+;			pha
+;			lda CONFIG_RESIDENT_ADDR + $100,x
+;			pha
+;			dex
+;			bpl l
+;		.endmacro
+;
+;				.macro gaps_restore 
 		.local l
-			ldx #$00
-l
-			pla
-			sta CONFIG_RESIDENT_ADDR + $000,x
-			pla
-			sta CONFIG_RESIDENT_ADDR + $100,x
-			inx
-			cpx #$0a
-			bne l
-		.endmacro
+;			ldx #$00
+;l
+;			pla
+;			sta CONFIG_RESIDENT_ADDR + $000,x
+;			pla
+;			sta CONFIG_RESIDENT_ADDR + $100,x
+;			inx
+;			cpx #$0a
+;			bne l
+;		.endmacro

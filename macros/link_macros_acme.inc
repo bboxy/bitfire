@@ -166,25 +166,25 @@
 			sta $dd0d
 		}
 
-		!macro gaps_setup {
-			ldx #$09
-.l
-			lda CONFIG_RESIDENT_ADDR + $000,x
-			pha
-			lda CONFIG_RESIDENT_ADDR + $100,x
-			pha
-			dex
-			bpl .l
-		}
-
-		!macro gaps_restore {
-			ldx #$00
-.l
-			pla
-			sta CONFIG_RESIDENT_ADDR + $000,x
-			pla
-			sta CONFIG_RESIDENT_ADDR + $100,x
-			inx
-			cpx #$0a
-			bne .l
-		}
+;		!macro gaps_setup {
+;			ldx #$09
+;.l
+;			lda CONFIG_RESIDENT_ADDR + $000,x
+;			pha
+;			lda CONFIG_RESIDENT_ADDR + $100,x
+;			pha
+;			dex
+;			bpl .l
+;		}
+;
+;		!macro gaps_restore {
+;			ldx #$00
+;.l
+;			pla
+;			sta CONFIG_RESIDENT_ADDR + $000,x
+;			pla
+;			sta CONFIG_RESIDENT_ADDR + $100,x
+;			inx
+;			cpx #$0a
+;			bne .l
+;		}
