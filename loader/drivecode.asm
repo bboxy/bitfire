@@ -598,6 +598,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .get_byte
+			ldy #.BUSY
 			;use ATN as toggle to trigger bits?
 			;bits fly in with data? clk?
 			;if only clock toggles: .lock, leave .lock if all zero again?
@@ -644,8 +645,6 @@ ___			= $ff
 
 			lda $1800				;now read again
 			bmi .lock				;check for lock
-			cmp #$04				;clk raised unexpectedly
-			bcc -					;all sane, we can read bit in data
 			lsr
 			ror <.filename
 -
@@ -656,13 +655,10 @@ ___			= $ff
 			bne .wait_bit2				;do we have clk == 0?
 			lda $1800
 			bmi .lock
-			cmp #$04				;clk dropped unexpectedly
-			bcs -
 			lsr					;all sane, we can read bit in data
 			ror <.filename
 			bcc .bitloop				;more bits to fetch?
 
-			ldy #.BUSY
 			sty $1800				;set busy bit
 			lda <.filename
 			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
