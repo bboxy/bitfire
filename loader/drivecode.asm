@@ -51,7 +51,7 @@
 
 .FORCE_LAST_BLOCK	= 1
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
-.DELAY_SPIN_DOWN	= 0 ;wait for app. 4s until spin down in idle mode
+.DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
 .SANCHECK_HEADER_0F	= 0 ;does never trigger
 .SANCHECK_HEADER_ID	= 0 ;does never trigger
 .SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
@@ -137,7 +137,7 @@
 			lda #$c0				;enable timer 1 flag
 			sta $1c0e
 
-			;cli					;now it is save to allow interrupts again, as they won't happen anymore
+			;cli					;now it is save to allow interrupts again, as they won't happen anymore, okay, it is a lie, timer irqs would happen, but we keep sei
 
 			ldy #$00
 
@@ -598,56 +598,41 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .get_byte
-			ldy #.BUSY
-			;use ATN as toggle to trigger bits?
-			;bits fly in with data? clk?
-			;if only clock toggles: .lock, leave .lock if all zero again?
-.rcv_filename
+			ldy #$80
 .lock
 			lda #$80
 			sta <.filename
 			sta $1800
 
-;.C:17cc  A0 02       LDY #$02
-;.C:17ce  A9 80       LDA #$80
-;.C:17d0  85 5A       STA $5A
-;.C:17d2  8D 00 18    STA $1800
-;.C:17d5  A9 04       LDA #$04
-;.C:17d7  2C 00 18    BIT $1800
-;.C:17da  30 F2       BMI $17CE
-;.C:17dc  F0 F9       BEQ $17D7
-;.C:17de  AD 00 18    LDA $1800
-;.C:17e1  30 EB       BMI $17CE
-;.C:17e3  4A          LSR A
-;.C:17e4  66 5A       ROR $5A
-;.C:17e6  A9 04       LDA #$04
-;.C:17e8  2C 00 18    BIT $1800
-;.C:17eb  30 E1       BMI $17CE
-;.C:17ed  D0 F9       BNE $17E8
-;.C:17ef  AD 00 18    LDA $1800
-;.C:17f2  30 DA       BMI $17CE
-;.C:17f4  4A          LSR A
-;.C:17f5  66 5A       ROR $5A
-;.C:17f7  90 DC       BCC $17D5
-;.C:17f9  8C 00 18    STY $1800
-;.C:17fc  A5 5A       LDA $5A
-;.C:17fe  49 FF       EOR #$FF
-
 .bitloop
--
 			lda #$04
 .wait_bit1
-			;16 cycles for spin down check available here
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
+.check_spindown
+			;have a free running counter so that we only check on 1c0d?
+			;check for underrun of timer here? bit $1c0d, but use 1c05 as timer?
+			bit $1c0d
+			bpl .end_sd_check
+			sty $1c05				;clears irq flag in $1c0d
+
+			bit $1800				;check for clk toggle
+			bmi +
+			bne .got_bit1
++
+			dey
+			bne .end_sd_check
+			stx $1c00				;turn off motor
+.end_sd_check
+}
 			bit $1800
-			;check for spindown here only, 14 cycles left until fail
 			bmi .lock
 			beq .wait_bit1				;do we have clk == 1?
-
+.got_bit1
 			lda $1800				;now read again
 			bmi .lock				;check for lock
 			lsr
 			ror <.filename
--
+
 			lda #$04
 .wait_bit2
 			bit $1800
@@ -659,15 +644,16 @@ ___			= $ff
 			ror <.filename
 			bcc .bitloop				;more bits to fetch?
 
-			sty $1800				;set busy bit
+			lda #.BUSY
+			sta $1800				;set busy bit
 			lda <.filename
 			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
 
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-			ldy #$00
-			sty $1c05
-			ldy $1c0d
-}
+;!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
+;			ldy #$00
+;			sty $1c05
+;			ldy $1c0d
+;}
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -899,7 +885,7 @@ ___			= $ff
 .step
 			lda #.STEPPING_SPEED
 .step_
-			sta $1c05
+			sta $1c05				;clears irq flag in $1c0d
 			;lda $1c0d
 			tya
 .halftrack
@@ -924,7 +910,7 @@ ___			= $ff
 			bcs .seek_end				;nope, continue
 
 			;lda #$ff				;reduce time to wait here, either by no shift or even lsr
-			sta $1c05
+			sta $1c05				;clears irq flag in $1c0d
 			jmp .start_send				;send data now
 .send_back
 			;lda #$2c
@@ -1403,18 +1389,6 @@ ___			= $ff
 ;			tsx
 ;			bne -
 
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-.check_spindown
-			;have a free running counter so that we only check on 1c0d?
-			;check for underrun of timer here? bit $1c0d, but use 1c05 as timer?
-			bit $1c0d
-			bpl ++
-			sty $1c05
-			dey
-			bne ++
-			stx $1800
-++
-}
 
 ;tables with possible offsets
 .tab11111000_hi		= .tables + $00

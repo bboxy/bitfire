@@ -283,6 +283,17 @@ numb		lda #$00		;file number
 		;jmp next
 }
 
+!if WAIT_SPIN_DOWN == 1 {
+		ldy #$00
+-
+		bit $d011
+		bpl *-3
+		bit $d011
+		bmi *-3
+		dey
+		bne -
+}
+
 !if TIME_RAW == 1 {
 		jsr .start_timer
 		pla
