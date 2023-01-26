@@ -31,8 +31,8 @@ REQDISC = 1
 BUSLOCK = 1
 WAIT_SPIN_DOWN = 0
 
-TIME_RAW = 1
-TIME_LOADCOMP = 0
+TIME_RAW = 0
+TIME_LOADCOMP = 1
 TIME_RAW_DECOMP = 0
 TIME_DECOMP = 0
 
@@ -425,7 +425,7 @@ checksum
 		clc
 		adc loads,y
 		sta srch
-		;sta srcd
+		sta srcd
 
 		txa
 		eor #$ff
@@ -438,7 +438,7 @@ checksum
 		lda loads + 1,y
 		sbc #$00
 		sta srch + 1
-		;sta srcd + 1
+		sta srcd + 1
 
 		lda #$00
 -
@@ -446,11 +446,11 @@ checksum
 srch = * + 1
 		adc $1000,x
 srcd = * + 1
-		;sta $1000,x	;overwrite with junk
+		sta $1000,x	;overwrite with junk
 		inx
 		bne -
 		inc srch + 1
-		;inc srcd + 1
+		inc srcd + 1
 		dec endh
 		bne -
 		ldx numb+1
