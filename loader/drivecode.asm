@@ -41,7 +41,7 @@
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
 .POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport
-.CACHED_SECTOR		= 1   ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read 2 times
+.CACHED_SECTOR		= 1   ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read twice
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
 ;ldy <.last_block_num
 ;inc .wanted,y
@@ -555,7 +555,9 @@ ___			= $ff
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #18
 -
+!if .POSTPONED_XFER = 1 {
 			sec					;set by send_block and also set if beq
+}
 			isc <.to_track
 			beq -					;skip dirtrack however
 
@@ -599,11 +601,10 @@ ___			= $ff
 
 .get_byte
 			ldy #$80
+			sty $1800
 .lock
 			lda #$80
 			sta <.filename
-			sta $1800
-
 .bitloop
 			lda #$04
 .wait_bit1

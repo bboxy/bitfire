@@ -31,8 +31,8 @@ REQDISC = 1
 BUSLOCK = 1
 WAIT_SPIN_DOWN = 0
 
-TIME_RAW = 0
-TIME_LOADCOMP = 1
+TIME_RAW = 1
+TIME_LOADCOMP = 0
 TIME_RAW_DECOMP = 0
 TIME_DECOMP = 0
 
@@ -279,7 +279,7 @@ numb		lda #$00		;file number
 
 		lda #$03
 		sta $dd00
-		+bus_unlock
+		;+bus_unlock
 		;jmp next
 }
 
