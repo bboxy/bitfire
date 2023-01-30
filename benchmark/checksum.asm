@@ -279,7 +279,7 @@ numb		lda #$00		;file number
 
 		lda #$03
 		sta $dd00
-		;+bus_unlock
+		+bus_unlock
 		;jmp next
 }
 
