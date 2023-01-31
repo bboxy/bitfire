@@ -27,8 +27,9 @@
 !cpu 6510
 
 CHECKSUM = 1
+CHECKSUM_CLEAR = 1
 REQDISC = 1
-BUSLOCK = 1
+BUSLOCK = 0
 WAIT_SPIN_DOWN = 0
 
 TIME_RAW = 1
@@ -276,9 +277,10 @@ numb		lda #$00		;file number
 		bit $ea
 		dey
 		bne -
-
+}
 		lda #$03
 		sta $dd00
+!if BUSLOCK == 1 {
 		+bus_unlock
 		;jmp next
 }
@@ -425,8 +427,9 @@ checksum
 		clc
 		adc loads,y
 		sta srch
+!if CHECKSUM_CLEAR == 1 {
 		sta srcd
-
+}
 		txa
 		eor #$ff
 		tax
@@ -438,19 +441,24 @@ checksum
 		lda loads + 1,y
 		sbc #$00
 		sta srch + 1
+!if CHECKSUM_CLEAR == 1 {
 		sta srcd + 1
-
+}
 		lda #$00
 -
 		clc
 srch = * + 1
 		adc $1000,x
+!if CHECKSUM_CLEAR == 1 {
 srcd = * + 1
 		sta $1000,x	;overwrite with junk
+}
 		inx
 		bne -
 		inc srch + 1
+!if CHECKSUM_CLEAR == 1 {
 		inc srcd + 1
+}
 		dec endh
 		bne -
 		ldx numb+1
