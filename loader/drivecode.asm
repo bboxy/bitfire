@@ -40,7 +40,7 @@
 ;config params
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport
+.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .CACHED_SECTOR		= 1   ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read twice
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
 ;ldy <.last_block_num
@@ -49,7 +49,7 @@
 ;reenter read_sector
 ;skip xfer if cached is set? eof + cached = go to idle and finally drop all lines?
 
-.FORCE_LAST_BLOCK	= 1
+.FORCE_LAST_BLOCK	= 1 ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
 .DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
 .SANCHECK_HEADER_0F	= 0 ;does never trigger
@@ -864,7 +864,7 @@ ___			= $ff
 			sec
 			sbc <.track				;how many tracks to go?
 			stx <.track				;save target track as current track
-			beq +					;nothing to step, end
+			beq .seek_done				;nothing to step, end
 
 			ldy #$00				;make stepping positive
 			bcs .seek_up				;up or downwards?
@@ -881,13 +881,10 @@ ___			= $ff
 			cpx #$02
 			beq .step_
 }
-;			lda #.STEPPING_SPEED_
-;			top
 .step
 			lda #.STEPPING_SPEED
 .step_
 			sta $1c05				;clears irq flag in $1c0d
-			;lda $1c0d
 			tya
 .halftrack
 			eor $1c00
@@ -897,30 +894,25 @@ ___			= $ff
 			eor $1c00
 			sta $1c00
 
-			dex
-			beq +
-			bit $1c0d
-			bpl *-3
-			bmi .step
-+
 !if .POSTPONED_XFER = 1 {
-			;lda #$4c				;postponed xfer?
-			;cmp .en_dis_seek
 			lda .en_dis_seek			;$4c/$4d
 			lsr
 			bcs .seek_end				;nope, continue
 
-			;lda #$ff				;reduce time to wait here, either by no shift or even lsr
-			sta $1c05				;clears irq flag in $1c0d
+			stx .sb_save_x + 1
+			sty .sb_save_y + 1
 			jmp .start_send				;send data now
 .send_back
-			;lda #$2c
+.sb_save_x		ldx #$00
+.sb_save_y		ldy #$00
 			inc .en_dis_seek			;disable_jmp
 .seek_end
-			bit $1c0d				;wait for timer to elapse, just in case xfer does ot take enough cycles
-			bpl *-3
 }
-
+			bit $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
+			bpl *-3
+			dex
+			bne .step
+.seek_done
 			ldy <.track				;already part of set_bitrate -> load track
 
 			;----------------------------------------------------------------------------------------------------
@@ -1370,7 +1362,6 @@ ___			= $ff
 			ldx <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
 			bne +
 
-			;lda #$4c
 			dec .en_dis_seek			;enable jmp, skip send of data for now
 			jmp .en_dis_seek_
 +
