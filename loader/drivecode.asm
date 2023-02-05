@@ -1435,50 +1435,53 @@ ___			= $ff
 ;                        !byte $30, ___, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, ___
 
 .td_code_
-			bcc ++
-			eor .dir_diskside			;compare side info
-			beq +
+			beq .td_idle
 			jmp .turn_disc				;still wrong diskside
-+
+.td_idle
 			jmp .idle_				;right diskside, go idle
-++
+.td_lf
 			jmp .load_file_				;dir sector changed, try to load file now
+
+			nop
+			nop
+			nop
+			nop
+			nop
 
 			!byte $50
 .turn_disc_back
-			ldy #$ff
-			dop
-			!byte $0d
 			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
+			ldx #$0d				;tab value $0d
+			dex
+			iny
 			dop
 			!byte $40
-			lda #$0c				;XXX TODO could use $byte $0d with ldx #$0d and do a dex and stx
-			dop
-			!byte $05
-			sta .en_dis_td
-			iny
+			stx .en_dis_td
+			!byte $05				;ora $xx
+			nop
 -
 			pla
 			ldx #$09
 			sbx #$00
+			eor <.ser2bin,x				;swap bits 3 and 0
+			dey
 			bcs +
 
                         !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
                         !byte $10, $47, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
 +
-			eor <.ser2bin,x				;swap bits 3 and 0
-			dey
 			sta .directory,y
+			bne -
+			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			bcs +
-			nop
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 +
-			bne -
-			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			cmp #BITFIRE_REQ_DISC
-			jmp .td_code_
+			eor .dir_diskside			;compare side info
+			bcc .td_lf
+			bcs .td_code_
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
                         !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
