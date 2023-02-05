@@ -541,15 +541,14 @@ ___			= $ff
 
 !if .POSTPONED_XFER = 1 {
 .en_dis_seek		eor .send_back
-.en_dis_seek_
 }
-			dec <.blocks_on_list			;decrease block count, last block on wishlist?
+			lda <.blocks_on_list			;decrease block count, last block on wishlist?
 			bpl +
 .track_finished
 			;XXX TODO make this check easier? only done hre?
 			lda <.end_of_file			;EOF
 			bmi .idle
-
+.en_dis_seek_
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #18
@@ -1299,23 +1298,13 @@ ___			= $ff
 
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sta <.preamble_data + 2			;block address high
-!if CONFIG_DEBUG = 1 {
-			txa
-.errors			ora #$00
-			;reset per block xfer
-			;add 4 per error, lda #$00 if negative
-			sta <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
-			lda #$00
-			sta .errors + 1
-} else {
 			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
-}
 
 !if .POSTPONED_XFER = 1 {
+			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
+			bpl +
 			lda <.end_of_file			;eof?
 			bmi +
-			ldx <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
-			bne +
 
 			dec .en_dis_seek			;enable jmp, skip send of data for now
 			jmp .en_dis_seek_
