@@ -356,15 +356,30 @@ ___			= $ff
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-.bvs_01			bvs .read_loop
-.bvs_02			bvs .read_loop
-.bvs_03			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop
 
 			jmp .next_sector
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .back_read_sector
 			jmp .back_read_header
+
+.slow_tab2
+			!byte $4c
+			!byte $4c
+			!byte $4c
+			!byte $af
+
+			!byte <.gcr_slow2_00
+			!byte <.gcr_slow2_00
+			!byte <.gcr_slow2_00
+			!byte $01
+
+			!byte >.gcr_slow2_00
+			!byte >.gcr_slow2_00
+			!byte >.gcr_slow2_00
+			!byte $1c
 
 !ifdef .second_pass {
 	!warn $0100 - *, " bytes remaining in zeropage."
@@ -402,18 +417,22 @@ ___			= $ff
 			nop
 			lda $1c01
 			jmp .gcr_slow1 + 3
-.gcr_slow2_00
-.gcr_slow2_20
-.gcr_slow2_40
-			lax $1c01
-			nop
-			jmp .gcr_slow2 + 3
+.slow_tab1
+			!byte $4c
+			!byte $4c
+			!byte $ad
+			!byte $ad
 
-			nop
-			nop
-			nop
-			nop
-			nop
+			!byte <.gcr_slow1_00
+			!byte <.gcr_slow1_20
+			!byte $01
+			!byte $01
+
+			!byte >.gcr_slow1_00
+			!byte >.gcr_slow1_20
+			!byte $1c
+			!byte $1c
+
 			nop
 			nop
 
@@ -421,32 +440,12 @@ ___			= $ff
                         !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 }
 
-.slow_tab1
-			!byte >.gcr_slow1_00
-			!byte >.gcr_slow1_20
-			!byte $1c
-			!byte $1c
-			!byte <.gcr_slow1_00
-			!byte <.gcr_slow1_20
-			!byte $01
-			!byte $01
-			!byte $4c
-			!byte $4c
-			!byte $ad
-			!byte $ad
-.slow_tab2
-			!byte >.gcr_slow2_00
-			!byte >.gcr_slow2_20
-			!byte >.gcr_slow2_40
-			!byte $1c
-			!byte <.gcr_slow2_00
-			!byte <.gcr_slow2_20
-			!byte <.gcr_slow2_40
-			!byte $01
-			!byte $4c
-			!byte $4c
-			!byte $4c
-			!byte $af
+.gcr_slow2_00
+.gcr_slow2_20
+.gcr_slow2_40
+			lax $1c01
+			nop
+			jmp .gcr_slow2 + 3
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -946,22 +945,24 @@ ___			= $ff
 			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .bitrate		!byte $00,$20,$40,$60
 +
-			tax
+			tay
 			lda $1c00
 			and #$9f
-			ora .bitrate,x
+			ora .bitrate,y
 			sta $1c00
 
-			ldy #2
+			dex
 -
-			lda .slow_tab1,x
-			sta <.gcr_slow1,y			;3 byte opcode, sad :-(
-			lda .slow_tab2,x
-			sta <.gcr_slow2,y			;3 byte opcode, sad :-(
-			txa
-			sbx #-4					;but easy x+=4
-			dey
-			bpl -
+			lda .slow_tab1,y
+			sta <(.gcr_slow1 - $fd),x			;3 byte opcode, sad :-(
+			lda .slow_tab2,y
+			sta <(.gcr_slow2 - $fd),x			;3 byte opcode, sad :-(
+			iny
+			iny
+			iny
+			iny
+			inx
+			bne -
 
 			;----------------------------------------------------------------------------------------------------
 			;
