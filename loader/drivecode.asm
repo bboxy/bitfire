@@ -41,7 +41,6 @@
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
-.CACHED_SECTOR		= 1   ;cache last sector, only makes sense if combined with force last block, so sectors shared among 2 files (end/start) have not to be read twice
 ;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
 ;ldy <.last_block_num
 ;inc .wanted,y
@@ -191,8 +190,8 @@
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
-.spin_count		= .zp_start + $18
-.spin_up		= .zp_start + $19
+.tempx			= .zp_start + $18
+;.free			= .zp_start + $19
 .desired_sect		= .zp_start + $20
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 .blocks 		= .zp_start + $28			;2 bytes
@@ -206,7 +205,7 @@
 .track_frob		= .zp_start + $66
 .block_size		= .zp_start + $68
 .filenum 		= .zp_start + $69
-.is_loaded_track	= .zp_start + $6a
+;.free			= .zp_start + $6a
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
 .current_id1		= .zp_start + $70
@@ -214,7 +213,7 @@
 .last_block_num		= .zp_start + $72
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
-.bogus_reads		= .zp_start + $78
+.free			= .zp_start + $78
 .block_num		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
@@ -705,9 +704,6 @@ ___			= $ff
 			ldx #.DIR_TRACK				;set target track to 18
 			stx <.to_track
 			ldx #$00
-!if .CACHED_SECTOR = 1 {
-			stx .is_loaded_track			;throw away preloaded sector, to avoid skip of read_sector upon turn disc, as we would repeatedly read the same sector and skip the read, as it is still cached
-}
 			stx <.last_block_num			;end at index 0
 			jmp .turn_disc_entry			;a = sector, x = 0 = index
 +
@@ -866,7 +862,9 @@ ___			= $ff
 			stx <.track				;save target track as current track
 			beq .seek_done				;nothing to step, end
 
-			ldy #$00				;make stepping positive
+			ldy #$ff
+			sty .is_loaded_sector			;invalidate sector cache, as we changed track
+			iny					;make stepping positive
 			bcs .seek_up				;up or downwards?
 .seek_down
 			eor #$ff				;down we go, so invert num tracks as it is negative
@@ -899,12 +897,11 @@ ___			= $ff
 			lsr
 			bcs .seek_end				;nope, continue
 
-			stx .sb_save_x + 1
-			sty .sb_save_y + 1
+			stx .tempx				;save x
 			jmp .start_send				;send data now
 .send_back
-.sb_save_x		ldx #$00
-.sb_save_y		ldy #$00
+			ldx .tempx
+			iny					;continue with seek up (Y = 0)
 			inc .en_dis_seek			;disable_jmp
 .seek_end
 }
@@ -973,6 +970,7 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
+
 			lda <.sector				;now create our wishlist for the current track
 .wanted_loop
 			tax
@@ -1015,32 +1013,8 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-!if .CACHED_SECTOR = 1 {
-			lda <.track
-			cmp <.is_loaded_track			;is the sector we hold in ram the one we need?
-			sta <.is_loaded_track
-			bne .next_sector			;nope
-
-			ldx <.is_loaded_sector			;track is okay, sector too?
-								;XXX TODO, why restricting this to index 0? Could in theory also be any other valid block, but saves code this way and as this block is forced, other cases should not happen
-			lda <.wanted,x				;check with wanted list if it is the first sector in our chain
-			bne .next_sector
-			;ldy <.wanted,x				;check with wanted list if it is the first sector in our chain
-			;iny					;XXX TODO, bne .rs_cont woudl be enough, cached sector can only be first sector of new file
-			;beq .next_sector			;not requested, load new sector
 			jmp .skip_read_sector			;skip loading of any data and directly start sending
-}
-.read_sector
-			;lda $1c00
-			;eor #.LED_ON
-			;sta $1c00
-!if CONFIG_DEBUG = 1 {
-			lax .errors + 1
-			sbx #-4
-			bmi +
-			stx .errors + 1
-+
-}
+
 .back_read_header
 !if .SANCHECK_HEADER_0F = 0 {
 			ldx #$02
@@ -1093,35 +1067,12 @@ ___			= $ff
 			ldx #$09
 			sbx #$00
 			eor <.ser2bin,x
-			tax
-			stx <.is_loaded_sector
 !if .SANCHECK_SECTOR = 1 {
-			cpx <.max_sectors
+			cmp <.max_sectors
 			bcs .retry_no_count
 }
-								;96 cycles
-			ldy <.wanted,x				;sector on list?
-!if .LOAD_IN_ORDER = 1 {
-			lda <.desired_sect
-			cmp #.LOAD_IN_ORDER_LIMIT
-			bcs +
-			cpy <.desired_sect
-			bne .retry_no_count
-+
-}
+			sta <.is_loaded_sector			;gap still not passed by here, so still some code possible here
 
-!if .FORCE_LAST_BLOCK = 1 {
-			cpy <.last_block_num			;current block is last block on list?
-			bne .not_last				;nope continue
-			ldx <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-			beq .last				;yes, so finally load last block
-			bne .retry_no_count			;reread
-}
-.not_last
-			iny
-			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
-								;max 111/112 cycles passed, so still header_gap bytes flying by and we finish in time
-.last
 			;----------------------------------------------------------------------------------------------------
 			;
 			; HEADER DONE, NOW READ SECTOR DATA
@@ -1148,18 +1099,14 @@ ___			= $ff
 
 			ldx $1c01				;sync mark -> $ff
 			clv
-;!if <* == $ff {
-;			!error "bvc * crosses page!"
-;}
+
 			bvc *
 
 			clv
 			cpy $1c01				;11111222
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			sta <.gcr_end				;setup return jump
-;!if <* == $ff {
-;			!error "bvc * crosses page!"
-;}
+
 			bvc *
 
 			ldx $1c01				;22333334
@@ -1173,17 +1120,11 @@ ___			= $ff
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 
 			sta <.chksum + 1
-;!if >* != >.bvs_start {
-;			nop
-;} else {
+
 			lda $01
-;}
 			lda #.EOR_VAL
 			nop
 			jmp .gcr_entry				;32 cycles until entry
-;.gcr_slow3		beq *					;XXX TODO can also be moved to ZP and jmp .gcr_entry can be adopted
-.retry_count
-			jmp .read_sector			;will be sbc (xx),y if disabled
 .retry_no_count
 			jmp .next_sector			;will be sbc (xx),y if disabled
 .back_read_sector
@@ -1194,10 +1135,9 @@ ___			= $ff
 			clv
 								;checksum
 			lax $1c01				;44445555
-;!if <* == $ff {
-;			!error "bvc * crosses page!"
-;}
+
 			bvc *
+
 			;clv
 			arr #$f0
 			tay					;44444---
@@ -1226,14 +1166,29 @@ ___			= $ff
 			eor $0101
 			eor $0103
 			eor <.chksum + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
-			bne .retry_count			;checksum okay? Nope, take two hops to get to the beginning of code again
-								;counter dd db d8 d6
-			;XXX TODO -> set this once anayway per track? but after send?
-			;XXX TODO a lot of wanted reads and decisions made, can they be aggregated?!?!?!?!
-			ldx <.is_loaded_sector			;XXX TODO is check already above, can we remember result?
-			lda <.wanted,x				;grab index from list (A with index reused later on after this call), also a is loaded last this way and we can directly check flags afterwards
+			bne .retry_no_count			;checksum okay? Nope, take two hops to get to the beginning of code again
 .skip_read_sector
-			ldy #$ff				;blocksize full sector ($ff)
+			ldx <.is_loaded_sector
+			bmi .retry_no_count			;invalid, so skip
+			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
+			cmp #$ff
+			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
+!if .FORCE_LAST_BLOCK = 1 {
+			cmp <.last_block_num			;current block is last block on list?
+			bne +					;nope continue
+			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
+			bne .retry_no_count			;reread
++
+}
+!if .LOAD_IN_ORDER = 1 {
+			ldy <.desired_sect
+			cpy #.LOAD_IN_ORDER_LIMIT
+			bcs +
+			cmp <.desired_sect
+			bne .retry_no_count
++
+}
+			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
 .en_dis_td		top .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
 
