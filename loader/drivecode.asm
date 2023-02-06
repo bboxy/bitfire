@@ -277,13 +277,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;              2                      ccccccccccc   3                   ggggggggggggg   4ggg                 cccccccggg   5ggggg           v      1           bbbbbbbbbbbbbb
+;                2                      ccccccccccc   3                   ggggggggggggggggggggg   4ggg                 ccccccc   5           v      1           bbbbbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;              2                      ccccccccccc   3                   ggggg   4ggg                 cccccccggg   5ggggg           v      1           bbbbbbbbbbbb
+;                2                      ccccccccccc   3                   ggggggggggggg   4ggg                 ccccccc   5           v      1           bbbbbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;              2                      ccccccccccc   3                      4                 cccccccggg   5ggggg           v      1           bbbbbbbbbb
+;                2                      ccccccccccc   3                   ggggg   4ggg                 ccccccc   5           v      1           bbbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;              2                      ccccccccccc   3                      4                 ccccccc   5           v      1           bbbbbbbb
+;                2                      ccccccccccc   3                      4                 ccccccc   5           v      1           bbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -358,28 +358,19 @@ ___			= $ff
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
+			bvs .read_loop
 
 			jmp .next_sector
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .back_read_sector
 			jmp .back_read_header
+.slow_table
+			!byte <(.slow0 - .slow6) + 2
+			!byte <(.slow2 - .slow6) + 2
+			!byte <(.slow4 - .slow6) + 2
+			!byte <(.slow6 - .slow6) + 2
 
-.slow_tab2
-			!byte $4c
-			!byte $4c
-			!byte $4c
-			!byte $af
-
-			!byte <.gcr_slow2_00
-			!byte <.gcr_slow2_00
-			!byte <.gcr_slow2_00
-			!byte $01
-
-			!byte >.gcr_slow2_00
-			!byte >.gcr_slow2_00
-			!byte >.gcr_slow2_00
-			!byte $1c
 
 !ifdef .second_pass {
 	!warn $0100 - *, " bytes remaining in zeropage."
@@ -414,38 +405,22 @@ ___			= $ff
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 }
 .gcr_slow1_20
+			lda ($00,x)
 			nop
-			lda $1c01
+.gcr_slow1_40
+			nop
+.slow6			lda $1c01
 			jmp .gcr_slow1 + 3
-.slow_tab1
-			!byte $4c
-			!byte $4c
-			!byte $ad
-			!byte $ad
 
-			!byte <.gcr_slow1_00
-			!byte <.gcr_slow1_20
-			!byte $01
-			!byte $01
-
-			!byte >.gcr_slow1_00
-			!byte >.gcr_slow1_20
-			!byte $1c
-			!byte $1c
-
-			nop
-			nop
+.slow0			jmp .gcr_slow1_00
+.slow2			jmp .gcr_slow1_20
+.slow4			jmp .gcr_slow1_40
 
 !if .GCR_125 = 1 {
-                        !byte                          $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
+.bitrate
+                        !byte                $60, $40, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
+			                     ;|bitrate|bitrate + table combined ->
 }
-
-.gcr_slow2_00
-.gcr_slow2_20
-.gcr_slow2_40
-			lax $1c01
-			nop
-			jmp .gcr_slow2 + 3
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -943,26 +918,21 @@ ___			= $ff
 			cpx #$fe
 			beq +
 			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
-.bitrate		!byte $00,$20,$40,$60
 +
 			tay
 			lda $1c00
-			and #$9f
-			ora .bitrate,y
+			ora #$60
+			eor .bitrate,y
 			sta $1c00
 
-			dex
+			ldx <.slow_table,y
+			ldy #$02
 -
-			lda .slow_tab1,y
-			sta <(.gcr_slow1 - $fd),x			;3 byte opcode, sad :-(
-			lda .slow_tab2,y
-			sta <(.gcr_slow2 - $fd),x			;3 byte opcode, sad :-(
-			iny
-			iny
-			iny
-			iny
-			inx
-			bne -
+			lda .slow6,x
+			sta <.gcr_slow1,y
+			dex
+			dey
+			bpl -
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1312,20 +1282,6 @@ ___			= $ff
 +
 }
 			jmp .start_send
-
-.debug_decode_sector
-			;for debug, decode sector and turn it upside down for easy hexdiff
-;			ldy #$ff
-;-
-;			pla
-;			ldx #$09
-;			sbx #$00
-;			eor <.ser2bin,x
-;			sta $0700,y
-;			dey
-;			tsx
-;			bne -
-
 
 ;tables with possible offsets
 .tab11111000_hi		= .tables + $00
