@@ -48,6 +48,10 @@
 ;reenter read_sector
 ;skip xfer if cached is set? eof + cached = go to idle and finally drop all lines?
 
+;XXX TODO
+;load each sector fully, even if header is not what we want yet, we can then decide after loading and stow sector away if it is last sector? so all decisions are aggregated and not spread all over
+
+.IGNORE_ILLEGAL_FILE	= 1 ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 1 ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
 .DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
@@ -143,7 +147,6 @@
 			ldx #.BUSY				;signal that we are ready for transfer
 			stx $1800
 
-			;wait for atn coming high
 			bit $1800
 			bpl *-3
 
@@ -186,7 +189,7 @@
 !pseudopc .drivecode {
 .zp_start
 
-.speedzone		= .zp_start + $00
+;.free			= .zp_start + $00
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
@@ -265,6 +268,7 @@ ___			= $ff
                         !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08		;70
 
 
+			;XXX TODO, move PA to $68, need to fix table afterwards by setting $00? but could the do lda $68,y? but still not possible with 8 bit addressing, but would make setup easier
 
 
 
@@ -386,17 +390,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-
-;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
-;0          1111111111111111111111111111111122222222222222222222222222222222333333333333333333333333333333334444444444444444444444444444444455555555555555555555555555555555
-;              1                      ccccccccccc   2                   ggggggggggggg...3ggg                 cccccccggg   4ggggg               v      5       bbbbbbbbbbbbbb
-;1          111111111111111111111111111111222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555
-;              1                      ccccccccccc   2                   ggggg...3ggg                 cccccccggg   4ggggg               v      5       bbbbbbbbbbbb
-;2          11111111111111111111111111112222222222222222222222222222333333333333333333333333333344444444444444444444444444445555555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 cccccccggg   4ggggg               v      5       bbbbbbbbbb
-;3          1111111111111111111111111122222222222222222222222222333333333333333333333333334444444444444444444444444455555555555555555555555555
-;              1                      ccccccccccc   2                   ...3                 ccccccc   4               v      5       bbbbbbbb
-
 .gcr_slow1_00
 			lsr $00
 			jmp .gcr_slow1_20
@@ -454,7 +447,7 @@ ___			= $ff
 			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
 .sendloop = * + 2						;send the data block
-			lda .preamble_data,y
+			lda <.preamble_data,y
 								;just pull from stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
 
 								;our possibiloities to send bits:
@@ -539,20 +532,12 @@ ___			= $ff
 
 			;----------------------------------------------------------------------------------------------------
 			;
-			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
-			;
-			;----------------------------------------------------------------------------------------------------
-.idle_
-			sta <.filenum				;reset filenum
-			top
-
-			;----------------------------------------------------------------------------------------------------
-			;
 			; ENTRY POINT OF IDLE LOOP
 			;
 			;----------------------------------------------------------------------------------------------------
 .idle
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
+.idle_
 .skip_load
 			lda $1c00				;turn off LED
 !if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
@@ -686,8 +671,8 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			lax <.filenum				;load filenum
 .load_file_
+			lax <.filenum				;load filenum
 			ldy #.DIR_SECT - 1			;second dir sector
 			sbc #$3e				;carry is cleared
 			bcs +					;no underflow, filenum is >= $3f
@@ -730,8 +715,11 @@ ___			= $ff
 			adc .dir_file_size + 1,x
 			sta <.blocks + 1
 .next_track
-			jmp .set_max_sectors			;setup max_sectors, expects track in Y, returns to .find_file_back
-.find_file_back
+			jmp .set_max_sectors			;setup max_sectors, expects track in Y, returns to .find_file_back, can't jsr here
+.find_file_back							;we return from max_sectors, do second check here, as we can fall through for free
+			cpx <.dir_entry_num			;recheck again, yuck!
+			beq .found_file
+
 			lda <.blocks + 1
 			sec
 			sbc <.max_sectors			;reduce blockcount track by track
@@ -747,9 +735,6 @@ ___			= $ff
 			txa
 			sbx #-4
 			bne .next_dir_entry			;XXX TODO this should always branch
-.find_file_back_						;we return from max_sectors, do second check here, as we can fall through for free
-			cpx <.dir_entry_num			;recheck again, yuck!
-			bne .find_file_back
 .found_file
 			;store track
 			sty <.to_track
@@ -757,40 +742,40 @@ ___			= $ff
 			;remember file index
 			;stx .file_index			;same as dir_entry_num
 
+			lda <.blocks + 0
+			;calc first block size
+			eor #$ff
+			sta <.first_block_size
+
 			lda .dir_file_size + 0,x
-			tay
-			ora .dir_file_size + 1,x		;enough to check for zero filesize?
+			cmp <.first_block_size
+			ldy .dir_file_size + 1,x		;load file_size + 1
+			bne .is_big				;filesize < $100 ? is_big if not
+			bcs .is_big				;it is < $0100 but does not fit in remaining space? -> is_big
+			sta <.first_block_size			;fits in, correct size, this will cause overflow on next subtraction and last_block_num will be zero, last_block_size will be $ff
+			tax
 			bne +
 			;file not found
+!if .IGNORE_ILLEGAL_FILE = 1 {
+			jmp .skip_load
+} else {
 .fucked
 			lda $1c00
 			and #.MOTOR_OFF
 			ora #.LED_ON
 			sta $1c00
 			jam
-			;jmp .skip_load
+}
 +
-			lda <.blocks + 0
-			;calc first block size
-			eor #$ff
-			sta <.first_block_size
-
-			;lda <.first_block_size
-			cmp .dir_file_size + 0,x		;compare with file_size
-
-			tya					;lda .dir_file_size + 0,x
-			ldy .dir_file_size + 1,x		;load file_size + 1
-			bne .is_big				;filesize < $100 ? is_big if not
-			bcc .is_big				;it is < $0100 but does not fit in remaining space? -> is_big
-			sta <.first_block_size			;fits in, correct size, this will cause overflow on next subtraction and last_block_num will be zero
 .is_big
 			clc
 			sbc <.first_block_size
 			sta <.last_block_size
 
-			tya					;file_size + 1
-			adc #$00
-			sta <.last_block_num
+			bcc +					;file_size + 1
+			iny
++
+			sty <.last_block_num
 
 			;remaining blocks on track to find out start sector
 			lax <.blocks + 1
@@ -917,7 +902,7 @@ ___			= $ff
 
 			cpx #$fe
 			beq +
-			jmp .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
+			jmp .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 +
 			tay
 			lda $1c00
@@ -986,22 +971,23 @@ ___			= $ff
 			jmp .skip_read_sector			;skip loading of any data and directly start sending
 
 .back_read_header
+								;XXX TODO could call stuff via jsr here, as stack is only filled with 8 bytes
 !if .SANCHECK_HEADER_0F = 0 {
 			ldx #$02
 }
-			txs					;saves 2 cycles copared to pla
+			txs					;saves 2 cycles compared to pla
+			pla
 !if .SANCHECK_HEADER_0F = 1 {
-			pla					;header_0f_2
-			cmp #.HEADER_0F
+			cmp #.HEADER_0F				;header_0f_2
 			bne .retry_no_count
-}
-!if .SANCHECK_HEADER_0F = 1 {
-			pla					;header_0f_1
-			cmp #.HEADER_0F
+			pla
+			cmp #.HEADER_0F				;header_0f_1
 			bne .retry_no_count
+			pla
 }
-			pla					;header_id2
+!if .SANCHECK_HEADER_ID = 1 {
 			tay					;$0103
+}
 			eor <.chksum + 1
 			eor #.HEADER_0F
 			bne .retry_no_count			;header checksum check failed? reread
@@ -1021,6 +1007,7 @@ ___			= $ff
 +
 }
 			pla					;.header_track
+			;XXX TODO is there any way of decoding 2 bytes in a loop in a smaller way?
 !if .SANCHECK_TRACK = 1 {
 	!if .SANCHECK_HEADER_ID = 1  {
 			eor <.track_frob			;needs to be precalced, else we run out of time
@@ -1075,40 +1062,41 @@ ___			= $ff
 			clv
 			cpy $1c01				;11111222
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
+			;lsr
+			;ror
+			;lsr
+			;eor #$06
 			sta <.gcr_end				;setup return jump
 
 			bvc *
 
-			ldx $1c01				;22333334
 			eor #$2c
-			sta .header_t2 + 1			;$20 or $60 depending if header or sector, just the right values we need there
-			lda #$3e
+			sta <.chksum + 1			;$20 or $60 depending if header or sector, just the right values we need there
+			lda $1c01				;22333334
+			ldx #$3e
 			sax <.threes + 1
-			txa
 			asr #$c1
-.header_t2		eor #$c0
+			eor <.chksum + 1
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
-
 			sta <.chksum + 1
 
-			lda $01
+			pha
+			pla
 			lda #.EOR_VAL
-			nop
 			jmp .gcr_entry				;32 cycles until entry
 .retry_no_count
 			jmp .next_sector			;will be sbc (xx),y if disabled
 .back_read_sector
 			;7 cycles need to pass
 
-			ldx $01
-			nop
-			clv
+			eor <.chksum + 1
+			eor $0101
 								;checksum
-			lax $1c01				;44445555
+			ldx $1c01				;44445555
+			eor $0103
+			sta <.chksum + 1
 
-			bvc *
-
-			;clv
+			txa
 			arr #$f0
 			tay					;44444---
 
@@ -1132,9 +1120,6 @@ ___			= $ff
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
 			ora .tab44444000_lo,y
-			eor $0100
-			eor $0101
-			eor $0103
 			eor <.chksum + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
 			bne .retry_no_count			;checksum okay? Nope, take two hops to get to the beginning of code again
 .skip_read_sector
@@ -1177,17 +1162,12 @@ ___			= $ff
 			bne .is_not_first_block
 .is_first_block
 			ldy <.first_block_size
-			;lda #$00				;a is 0 already
-			;cmp <.last_block_num			;do compare beforehand for both cases
 			bcc .first_block_big			;bcs = last_block, so a small file that starts and ends in same sector, bcc = big_file, all done
 			tya
 			clc
 			adc <.blocks + 0
-			;eor #$ff
 			bcc .first_block_small			;XXX TODO bcc would also suffice? Can this really overflow if we end in same block?
 .is_not_first_block
-			;ldy #$ff				;y is $ff already
-			;cmp <.last_block_num			;done in the beginning
 			bcc .full_block				;a is !0
 .last_block
 			ldy <.last_block_size
@@ -1335,16 +1315,21 @@ ___			= $ff
 ;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
 ;                        !byte $30, ___, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, ___
 
+			;----------------------------------------------------------------------------------------------------
+			;
+			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
+			;
+			;----------------------------------------------------------------------------------------------------
 .td_code_
 			beq .td_idle
 			jmp .turn_disc				;still wrong diskside
 .td_idle
+			sta <.filenum				;reset filenum
 			jmp .idle_				;right diskside, go idle
+
 .td_lf
 			jmp .load_file_				;dir sector changed, try to load file now
 
-			nop
-			nop
 			nop
 			nop
 			nop
@@ -1380,8 +1365,8 @@ ___			= $ff
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 +
 			cmp #BITFIRE_REQ_DISC
-			eor .dir_diskside			;compare side info
 			bcc .td_lf
+			eor .dir_diskside			;compare side info
 			bcs .td_code_
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
