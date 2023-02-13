@@ -139,6 +139,7 @@ bitfire_send_byte_
 			ror
 			sta <filenum
 			lda #$3f
+			;sta $dd02						;unlock bus beforehand
 .ld_loop
 			eor #$10
 			jsr .ld_set_dd02					;waste lots of cycles upon write, so bits do not arrive too fast @floppy
@@ -176,13 +177,6 @@ bitfire_loadraw_
 			ldx #<preamble						;target for received bytes
 			jsr .ld_set_block_tgt					;load 5 bytes preamble - returns with C = 0 at times
 
-			;make preamble 6 bytes big?	(from imm value of ldy on)
-			;ldy #block_len
-			;ldx #block_addr_lo
-			;lda #block_addr_hi
-			;sec				;or clc
-			;bcs .ld_set_block_status
-
 			ldy <block_length					;load blocklength
 			ldx <block_addr_lo					;block_address lo
 			lda <block_addr_hi					;block_address hi
@@ -203,27 +197,29 @@ bitfire_loadraw_
 			stx .ld_gend						;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
 			bpl +							;do bpl first
 bitfire_ntsc5
-			bmi .ld_gentry						;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
+			bcs .ld_gentry						;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
 .ld_gloop
+			lsr							;%xxx1110x
+			lsr							;%xxxx1110
 			ldx #$3f
 bitfire_ntsc0		ora $dd00 - $3f,x
 			stx $dd02
+			dey
+			beq .ld_en_exit						;XXX TODO bail out here and do two bogus flip bits? would need clc + rts then? but set up of rts/adc can be omitted then! also, store forward?
++
 			lsr							;%xxxxx111
 			lsr							;%xxxxxx11 1
-			dey
-			beq .ld_en_exit
-+
 			ldx #$37
-bitfire_ntsc1		ora $dd00
+bitfire_ntsc1		ora $dd00						;XXX TODO could use eor $dd00 if we toggle a bit in data?
 			stx $dd02
 			ror							;c = 1
 			ror							;c = 1 a = %11xxxxxx
 			ldx #$3f
 			sax .ld_nibble + 1
-bitfire_ntsc2		and $dd00
+bitfire_ntsc2		and $dd00						;11xxxxxx might loose some lower bits, but will be repaired later on ora
 			stx $dd02
 
-.ld_nibble		ora #$00
+.ld_nibble		ora #$00						;merge in lower bits again
 .ld_store		sta $b00b,y
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
@@ -231,13 +227,15 @@ bitfire_ntsc3		adc $dd00
 										;%xx1110xx
 .ld_gend
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
-			lsr							;%xxx1110x
-			lsr							;%xxxx1110
-bitfire_ntsc4		bpl .ld_gloop						;BRA, a is anything between 0e and 3e
+bitfire_ntsc4		bcc .ld_gloop						;BRA, a is anything between 0e and 3e
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }			;XXX TODO in fact the branch can also take 4 cycles if needed, ora $dd00 - $3f,x wastes one cycle anyway
 }
 
+			;lda #$3f
+			;ora $dd00
+			;eor nibble
+			;%00111xxx						;$20 -> carry on adc $18 == 2 MSB for and $dd00
 ;---------------------------------------------------------------------------------
 ;DEPACKER STUFF
 ;---------------------------------------------------------------------------------

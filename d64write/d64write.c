@@ -464,7 +464,7 @@ int d64_bitfire_set_side(d64* d64, int side) {
 
     d64_read_sector(d64, D64_DIR_TRACK, dirsect, dir);
     memset(dir, 0, 256);
-    dir[0xff] = (side - 1) | 0xf0;
+    dir[0x03] = (side - 1) | 0xf0;
     d64_set_bam_entry(d64, D64_DIR_TRACK, dirsect, BAM_USED);
     d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
 
@@ -529,16 +529,16 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
         dir_pos = 0;
         while (dir_pos < 63) {
             //empty entries have track set to 0
-            if (dir[dir_pos * 4 + 0] + dir[dir_pos * 4 + 1] + dir[dir_pos * 4 + 2] + dir[dir_pos * 4 + 3] == 0) {
-                dir[dir_pos * 4 + 0] = loadaddr & 0xff;
-                dir[dir_pos * 4 + 1] = ((loadaddr >> 8) & 0xff) - 1;
-                dir[dir_pos * 4 + 2] = (length - 1) & 0xff;
-                dir[dir_pos * 4 + 3] = ((length - 1) >> 8) & 0xff;
+            if (dir[4 + dir_pos * 4 + 0] + dir[4 + dir_pos * 4 + 1] + dir[4 + dir_pos * 4 + 2] + dir[4 + dir_pos * 4 + 3] == 0) {
+                dir[4 + dir_pos * 4 + 0] = loadaddr & 0xff;
+                dir[4 + dir_pos * 4 + 1] = ((loadaddr >> 8) & 0xff) - 1;
+                dir[4 + dir_pos * 4 + 2] = (length - 1) & 0xff;
+                dir[4 + dir_pos * 4 + 3] = ((length - 1) >> 8) & 0xff;
                 //first file in dir sector -> place init values
             	if (dir_pos == 0) {
-                    dir[0xfc] = track;
-                    dir[0xfd] = sectnum;
-                    dir[0xfe] = sectpos;
+                    dir[0x0] = track;
+                    dir[0x1] = sectnum;
+                    dir[0x2] = sectpos;
                     if (verbose) {
                         printf("init-values of dir-sector: track: $%02x, sector-count: $%02x, sector-pos: $%02x\n", track, sectnum, sectpos);
                     }

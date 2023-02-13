@@ -51,6 +51,10 @@
 ;XXX TODO
 ;load each sector fully, even if header is not what we want yet, we can then decide after loading and stow sector away if it is last sector? so all decisions are aggregated and not spread all over
 
+;XXX TODO directory: move sectorinfo and disksideinfo to the beginning of dirsector, then place empty space to the end of dirsector, we can make use of free space of dirsector + free space and find out min cache size by that
+;stow away last sector if coming and if it suits into cache size, no need to force last sector anymore
+
+
 .IGNORE_ILLEGAL_FILE	= 1 ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 1 ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
@@ -84,107 +88,16 @@
 .reset_drive		= $fffc	;eaa0
 .drivecode		= $0000
 .bootstrap		= $0700
-.tables			= $0600
+.tables			= $0200
 
-.directory		= $0700
-.dir_load_addr		= .directory
-.dir_file_size		= .directory + 2
-.dir_diskside		= .directory + $ff
-.dir_first_file_track	= .directory + $fc			;starttrack of first file in dir
-.dir_first_file_sector_index= .directory + $fd			;how many blocks are used on this track up to the file
-.dir_first_block_pos	= .directory + $fe			;startposition within block
+			;XXX TODO allocate this dynamically at end of code and before tables? but bootstrap needs to be in stack then and page needs to be skipped upon upload?
+.dir_load_addr		= .directory + 4
+.dir_file_size		= .directory + 6
+.dir_diskside		= .directory + 3
+.dir_first_file_track	= .directory + 0			;starttrack of first file in dir
+.dir_first_file_index	= .directory + 1			;how many blocks are used on this track up to the file
+.dir_first_block_pos	= .directory + 2			;startposition within block
 								;with those three values, the absolute position on disk is represented
-.bootstrap_start
-!pseudopc .bootstrap {
-.bootstrap_run
-			;this bootstrap will upload code from $0000-$06ff, and the bootstrap @ $0700 will be overwritten when dir-sector is read later on
-			lda #.DIR_TRACK
-			sta $0a
-			lda #.DIR_SECT
-			sta $0b
-
-			;fetch first dir sect and by that position head at track 18 to have a relyable start point for stepping
-			lda #$80
-			sta $02
-			lda $02
-			bmi *-2
-			;ends up at $0500?
-
-			;motor and LED is on after that
-
-			sei
-			lda $05ff
-			sta .fn + 1				;remember diskside#
-
-			lda #%01111010				;DDR set bits for drivenumber to 0, ATN out, CLK out and DATA out are outputs
-			sta $1802
-
-			;ACR
-			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
-			sta $1c0b
-
-			;PCR					 111                            0        111                                  0
-			lda #%11101110				;CB2 manual output high (read), CB1 low, CA2 manual output high (byte ready), CA1 low (NC)
-			sta $1c0c
-
-			lda #$00				;clear lower part of counter
-			sta $1c08
-			sta $1c04
-
-			lda #$7f				;disable all interrupts
-			sta $180e
-			sta $1c0e
-			lda $180d				;clear all IRQ flags to ack possibly pending IRQs
-			lda $1c0d
-
-			lda #$c0				;enable timer 1 flag
-			sta $1c0e
-
-			;cli					;now it is save to allow interrupts again, as they won't happen anymore, okay, it is a lie, timer irqs would happen, but we keep sei
-
-			ldy #$00
-
-			ldx #.BUSY				;signal that we are ready for transfer
-			stx $1800
-
-			bit $1800
-			bpl *-3
-
-			sty $1800				;clear all lines and set bit 7 as bit counter, to allow data in and clk in to be set/cleared by host
-			ldx $1800
-.get_block
-			lda #$80
--
-			cpx $1800				;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
-			beq -
-			ldx $1800				;load register
-			bmi .done
-			cpx #$04				;push bit into carry
-			ror					;shift in
-			bcc -					;do until our counter bit ends up in carry
-.block = * + 1
-			sta .drivecode,y
-
-			iny
-			bne .get_block
-
-			inc .block+1
-			bne .get_block
-.done
-			ldx #.BUSY
-			stx $1800
-
-			;wait for atn coming low
-			bit $1800				;no need to, check is done by get_byte
-			bmi *-3
-
-.fn			lda #$00				;load directory
-			jmp .load_file
-}
-
-.bootstrap_end
-.bootstrap_size = .bootstrap_end - .bootstrap_start
-
 .drivecode_start
 !pseudopc .drivecode {
 .zp_start
@@ -382,7 +295,202 @@ ___			= $ff
 
 !if >*-1 != >.read_loop { !error "read_sector not in one page: ", .read_loop, " - ", * }
 
-			* = $200
+			* = .tables
+.preamble_
+			beq +
+			ldx #$80
+			adc <.first_block_size			;else add first block size as offset, might change carry
++
+			sta <.preamble_data + 1			;block address low
+
+			lda .dir_load_addr + 1,y		;add load address highbyte
+			;sbc #$00				;subtract one in case of overflow
+			;clc
+			adc <.block_num				;add block num
+
+			;clc					;should never overrun, or we would wrap @ $ffff?
+			sta <.preamble_data + 2			;block address high
+			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
+
+!if .POSTPONED_XFER = 1 {
+			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
+			bpl +
+			lda <.end_of_file			;eof?
+			bmi +
+
+			dec .en_dis_seek			;enable jmp, skip send of data for now
+			jmp .en_dis_seek_
++
+}
+			jmp .start_send
+
+;tables with possible offsets
+.tab11111000_hi		= .tables + $00
+.tab44444000_lo 	= .tables + $04
+.tab7d788888_lo		= .tables + $00
+
+;table wth no offset
+.tab02200222_lo		= .tables + $00
+
+	 		* = .tables + $22
+.table_start		;combined tables, gaps filled with junk
+;                        !byte           $0e, $0a, $24, $00, $06, $02, $28, $4e, $4f, $47, $2c, $4a, $4b, $43
+;                        !byte $30, $31, $4d, $45, $34, $40, $49, $41, $38, $46, $4c, $44, $3c, $42, $48, $3f
+;                        !byte $40, $41, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
+;                        !byte $70, $51, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, $5f
+;                        !byte $60, $61, $07, $03, $05, $01, $04, $67, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
+;                        !byte $30, $71, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, $7f
+
+                        !byte           $0e, $0a, $f0, $00, $06, $02, $e1, $4e, $4f, $47, $d2, $4a, $4b, $43
+                        !byte $c3, $b4, $4d, $45, $a5, $40, $49, $41, $96, $46, $4c, $44, $87, $42, $48, $78
+                        !byte $69, $5a, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
+                        !byte $70, $4b, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, $3c
+                        !byte $2d, $1e, $07, $03, $05, $01, $04, $0f, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
+                        !byte $30, $e1, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, $d3
+
+;                        !byte           $0e, $0a, ___, $00, $06, $02, ___, $4e, $4f, $47, ___, $4a, $4b, $43
+;                        !byte ___, ___, $4d, $45, ___, $40, $49, $41, ___, $46, $4c, $44, ___, $42, $48, ___
+;                        !byte ___, ___, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
+;                        !byte $70, ___, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, ___
+;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
+;                        !byte $30, ___, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, ___
+
+			;----------------------------------------------------------------------------------------------------
+			;
+			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
+			;
+			;----------------------------------------------------------------------------------------------------
+.td_code_
+			beq .td_idle
+			jmp .turn_disc				;still wrong diskside
+.td_idle
+			sta <.filenum				;reset filenum
+			jmp .idle_				;right diskside, go idle
+
+.td_lf
+			jmp .load_file_				;dir sector changed, try to load file now
+
+			nop
+			nop
+			nop
+
+			!byte $50
+.turn_disc_back
+			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
+			ldx #$0d				;tab value $0d
+			dex
+			iny
+			dop
+			!byte $40
+			stx .en_dis_td
+			!byte $05				;ora $xx
+			nop
+-
+			pla
+			ldx #$09
+			sbx #$00
+			eor <.ser2bin,x				;swap bits 3 and 0
+			dey
+			bcs +
+
+                        !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
+                        !byte $10, $47, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
++
+			sta .directory,y
+			bne -
+			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
+			bcs +
+
+                        !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
+                        !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
++
+			cmp #BITFIRE_REQ_DISC
+			bcc .td_lf
+			eor .dir_diskside			;compare side info
+			bcs .td_code_
+
+                        !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
+                        !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
+
+;                        !byte $50, ___, ___, ___, $0d, ___, ___, ___, $40, ___, ___, ___, $05, ___, ___, ___		;20 bytes with 3 dops
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, $0e, $0f, $07, $00, $0a, $0b, $03
+;                        !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
+;                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
+;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
+
+;tab000bbbbb
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $4e, $4f, $47, ___, $4a, $4b, $43
+;                        !byte ___, ___, $4d, $45, ___, $40, $49, $41, ___, $46, $4c, $44, ___, $42, $48, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $5e, $5f, $57, ___, $5a, $5b, $53
+;                        !byte ___, ___, $5d, $55, ___, $50, $59, $51, ___, $56, $5c, $54, ___, $52, $58, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $4e, $4f, $47, ___, $4a, $4b, $43
+;                        !byte ___, ___, $4d, $45, ___, $40, $49, $41, ___, $46, $4c, $44, ___, $42, $48, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $0e, $0f, $07, ___, $0a, $0b, $03
+;                        !byte ___, ___, $0d, $05, ___, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $1e, $1f, $17, ___, $1a, $1b, $13
+;                        !byte ___, ___, $1d, $15, ___, $10, $19, $11, ___, $16, $1c, $14, ___, $12, $18, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $0e, $0f, $07, ___, $0a, $0b, $03
+;                        !byte ___, ___, $0d, $05, ___, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
+;tabbbbbb000
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $0e, ___, ___, ___
+;                        !byte ___, ___, ___, ___, $0f, ___, ___, ___, ___, ___, ___, ___, $07, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $0a, ___, ___, ___
+;                        !byte ___, ___, ___, ___, $0b, ___, ___, ___, ___, ___, ___, ___, $03, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, $0d, ___, ___, ___, ___, ___, ___, ___, $05, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $00, ___, ___, ___
+;                        !byte ___, ___, ___, ___, $09, ___, ___, ___, ___, ___, ___, ___, $01, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $06, ___, ___, ___
+;                        !byte ___, ___, ___, ___, $0c, ___, ___, ___, ___, ___, ___, ___, $04, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $02, ___, ___, ___
+;                        !byte ___, ___, ___, ___, $08, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;tab0bb00bbb
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, $0e, $0a, ___, $00, $06, $02, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, $0f, $0b, $0d, $09, $0c, $08, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;tabAAAAA000
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $f0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $70, ___, ___, ___, ___, ___, ___, ___, $60, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $b0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $30, ___, ___, ___, ___, ___, ___, ___, $20, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $50, ___, ___, ___, ___, ___, ___, ___, $40, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $10, ___, ___, ___, ___, ___, ___, ___, $00, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $e0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $d0, ___, ___, ___, ___, ___, ___, ___, $c0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $90, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+
+
+			* = $300
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -409,6 +517,7 @@ ___			= $ff
 .slow2			jmp .gcr_slow1_20
 .slow4			jmp .gcr_slow1_40
 
+			;would also suit at $91, $95, $99
 !if .GCR_125 = 1 {
 .bitrate
                         !byte                $60, $40, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
@@ -693,14 +802,17 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .find_file_in_dir
-			lda .dir_first_file_sector_index	;sectorindex of first file in dir (not sector number, but as if written with interleave = 1)
+			lda .dir_first_file_index		;sectorindex of first file in dir (not sector number, but as if written with interleave = 1)
 			sta <.blocks + 1
 			lda .dir_first_block_pos		;pos in first sector where file starts
 			sta <.blocks + 0
 
 			ldy .dir_first_file_track		;track of first file in dir
-			ldx #$00
+			ldx #$fc
 .next_dir_entry
+.no_next_track
+			txa
+			sbx #-4					;start with x = 0 by this
 			;XXX TODO better do sum up all filesizes with 24 bit and then subtract sectors until block + 1 and block + 2 is reached?
 			cpx <.dir_entry_num
 			beq .next_track				;silly, but need to set max_sectors for later use
@@ -731,10 +843,6 @@ ___			= $ff
 			cpy #.DIR_TRACK
 			beq -
 			bne .next_track
-.no_next_track
-			txa
-			sbx #-4
-			bne .next_dir_entry			;XXX TODO this should always branch
 .found_file
 			;store track
 			sty <.to_track
@@ -777,11 +885,12 @@ ___			= $ff
 +
 			sty <.last_block_num
 
+.index_to_sectornum
+			;XXX TODO block to index -> can be also done via other means? lookup?
 			;remaining blocks on track to find out start sector
-			lax <.blocks + 1
-			beq .found_sector
-
 			lda #$00				;walk through track from pos 0 on
+			ldx <.blocks + 1
+			beq .found_sector
 .fs_loop
 			clc					;XXX could be omitted for interleave = 4?
 			adc #.INTERLEAVE
@@ -818,11 +927,8 @@ ___			= $ff
 			sec
 			sbc <.track				;how many tracks to go?
 			stx <.track				;save target track as current track
-			beq .seek_done				;nothing to step, end
 
-			ldy #$ff
-			sty .is_loaded_sector			;invalidate sector cache, as we changed track
-			iny					;make stepping positive
+			ldy #$00				;make stepping positive
 			bcs .seek_up				;up or downwards?
 .seek_down
 			eor #$ff				;down we go, so invert num tracks as it is negative
@@ -831,6 +937,7 @@ ___			= $ff
 .seek_up
 			asl					;counter is twice the number of tracks (halftracks)
 			tax
+			beq .seek_done				;nothing to step, end
 
 !if .SHRYDAR_STEPPING = 1 {
 			lda #.STEPPING_SPEED_
@@ -855,10 +962,10 @@ ___			= $ff
 			lsr
 			bcs .seek_end				;nope, continue
 
-			stx .tempx				;save x
+			stx <.tempx				;save x
 			jmp .start_send				;send data now
 .send_back
-			ldx .tempx
+			ldx <.tempx
 			iny					;continue with seek up (Y = 0)
 			inc .en_dis_seek			;disable_jmp
 .seek_end
@@ -867,6 +974,8 @@ ___			= $ff
 			bpl *-3
 			dex
 			bne .step
+			dex
+			stx .is_loaded_sector			;invalidate sector cache, as we changed track
 .seek_done
 			ldy <.track				;already part of set_bitrate -> load track
 
@@ -883,8 +992,10 @@ ___			= $ff
 			sbx #$00
 			eor <.ser2bin,x
 			sta <.track_frob			;needs to be precacled here
+			ldx #$ff
+} else {
+			dex
 }
-			ldx #$fe				;continue after max_sectors
 .set_max_sectors
 			lda #16
 			cpy #25
@@ -901,7 +1012,7 @@ ___			= $ff
 			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
 			cpx #$fe
-			beq +
+			bcs +
 			jmp .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 +
 			tay
@@ -968,7 +1079,7 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			jmp .skip_read_sector			;skip loading of any data and directly start sending
+			jmp .new_or_cached_sector
 
 .back_read_header
 								;XXX TODO could call stuff via jsr here, as stack is only filled with 8 bytes
@@ -1089,14 +1200,11 @@ ___			= $ff
 .back_read_sector
 			;7 cycles need to pass
 
-			eor <.chksum + 1
 			eor $0101
-								;checksum
-			ldx $1c01				;44445555
-			eor $0103
-			sta <.chksum + 1
+			sta <.chksum2 + 1			;checksum
 
-			txa
+			lax $1c01				;44445555
+
 			arr #$f0
 			tay					;44444---
 
@@ -1120,9 +1228,11 @@ ___			= $ff
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
 			ora .tab44444000_lo,y
+			eor $0103
+			eor <.chksum2 + 1
 			eor <.chksum + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
 			bne .retry_no_count			;checksum okay? Nope, take two hops to get to the beginning of code again
-.skip_read_sector
+.new_or_cached_sector
 			ldx <.is_loaded_sector
 			bmi .retry_no_count			;invalid, so skip
 			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
@@ -1236,226 +1346,32 @@ ___			= $ff
 			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
 
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			beq +
-			ldx #$80
-			adc <.first_block_size			;else add first block size as offset, might change carry
-+
-			sta <.preamble_data + 1			;block address low
+			jmp .preamble_
 
-			lda .dir_load_addr + 1,y		;add load address highbyte
-			;sbc #$00				;subtract one in case of overflow
-			;clc
-			adc <.block_num				;add block num
-
-			;clc					;should never overrun, or we would wrap @ $ffff?
-			sta <.preamble_data + 2			;block address high
-			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
-
-!if .POSTPONED_XFER = 1 {
-			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
-			bpl +
-			lda <.end_of_file			;eof?
-			bmi +
-
-			dec .en_dis_seek			;enable jmp, skip send of data for now
-			jmp .en_dis_seek_
-+
-}
-			jmp .start_send
-
-;tables with possible offsets
-.tab11111000_hi		= .tables + $00
-.tab44444000_lo 	= .tables + $04
-.tab7d788888_lo		= .tables + $00
-
-;table wth no offset
-.tab02200222_lo		= .tables + $00
+.directory
 
 !ifdef .second_pass {
-	!if * > .table_start { !serious "Upload code is ", * - .table_start, " bytes too big!" }
+	!warn $0800 - *, " bytes remaining for drivecode and directory."
+	!warn "directory @ ", *
 }
-
-!ifdef .second_pass {
-	!warn .table_start - *, " bytes remaining for drivecode."
-}
-
-!if * > .tables {
-	!set .junk_start = *
-} else {
-	!set .junk_start = .tables
-}
-
-
-			* = .junk_start
-			;use remaining space with code or fill up with junk
-			!for .x, 0, $20 - <.junk_start {
-				!byte ((.x & $f) << 4) + (.x & $f xor $f)
-			}
-
-	 		* = .tables + $22
-.table_start		;combined tables, gaps filled with junk
-;                        !byte           $0e, $0a, $24, $00, $06, $02, $28, $4e, $4f, $47, $2c, $4a, $4b, $43
-;                        !byte $30, $31, $4d, $45, $34, $40, $49, $41, $38, $46, $4c, $44, $3c, $42, $48, $3f
-;                        !byte $40, $41, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
-;                        !byte $70, $51, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, $5f
-;                        !byte $60, $61, $07, $03, $05, $01, $04, $67, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
-;                        !byte $30, $71, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, $7f
-
-                        !byte           $0e, $0a, $f0, $00, $06, $02, $e1, $4e, $4f, $47, $d2, $4a, $4b, $43
-                        !byte $c3, $b4, $4d, $45, $a5, $40, $49, $41, $96, $46, $4c, $44, $87, $42, $48, $78
-                        !byte $69, $5a, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
-                        !byte $70, $4b, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, $3c
-                        !byte $2d, $1e, $07, $03, $05, $01, $04, $0f, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
-                        !byte $30, $e1, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, $d3
-
-;                        !byte           $0e, $0a, ___, $00, $06, $02, ___, $4e, $4f, $47, ___, $4a, $4b, $43
-;                        !byte ___, ___, $4d, $45, ___, $40, $49, $41, ___, $46, $4c, $44, ___, $42, $48, ___
-;                        !byte ___, ___, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
-;                        !byte $70, ___, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, ___
-;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
-;                        !byte $30, ___, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, ___
-
-			;----------------------------------------------------------------------------------------------------
-			;
-			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
-			;
-			;----------------------------------------------------------------------------------------------------
-.td_code_
-			beq .td_idle
-			jmp .turn_disc				;still wrong diskside
-.td_idle
-			sta <.filenum				;reset filenum
-			jmp .idle_				;right diskside, go idle
-
-.td_lf
-			jmp .load_file_				;dir sector changed, try to load file now
-
-			nop
-			nop
-			nop
-
-			!byte $50
-.turn_disc_back
-			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
-			ldx #$0d				;tab value $0d
-			dex
-			iny
-			dop
-			!byte $40
-			stx .en_dis_td
-			!byte $05				;ora $xx
-			nop
--
-			pla
-			ldx #$09
-			sbx #$00
-			eor <.ser2bin,x				;swap bits 3 and 0
-			dey
-			bcs +
-
-                        !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
-                        !byte $10, $47, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
-+
-			sta .directory,y
-			bne -
-			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
-			bcs +
-
-                        !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
-                        !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
-+
-			cmp #BITFIRE_REQ_DISC
-			bcc .td_lf
-			eor .dir_diskside			;compare side info
-			bcs .td_code_
-
-                        !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
-                        !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
-
-;                        !byte $50, ___, ___, ___, $0d, ___, ___, ___, $40, ___, ___, ___, $05, ___, ___, ___		;20 bytes with 3 dops
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, $0e, $0f, $07, $00, $0a, $0b, $03
-;                        !byte $10, ___, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
-;                        !byte $d0, ___, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
-;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
-
-;tab000bbbbb
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $4e, $4f, $47, ___, $4a, $4b, $43
-;                        !byte ___, ___, $4d, $45, ___, $40, $49, $41, ___, $46, $4c, $44, ___, $42, $48, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $5e, $5f, $57, ___, $5a, $5b, $53
-;                        !byte ___, ___, $5d, $55, ___, $50, $59, $51, ___, $56, $5c, $54, ___, $52, $58, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $4e, $4f, $47, ___, $4a, $4b, $43
-;                        !byte ___, ___, $4d, $45, ___, $40, $49, $41, ___, $46, $4c, $44, ___, $42, $48, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $0e, $0f, $07, ___, $0a, $0b, $03
-;                        !byte ___, ___, $0d, $05, ___, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $1e, $1f, $17, ___, $1a, $1b, $13
-;                        !byte ___, ___, $1d, $15, ___, $10, $19, $11, ___, $16, $1c, $14, ___, $12, $18, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, $0e, $0f, $07, ___, $0a, $0b, $03
-;                        !byte ___, ___, $0d, $05, ___, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
-;tabbbbbb000
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $0e, ___, ___, ___
-;                        !byte ___, ___, ___, ___, $0f, ___, ___, ___, ___, ___, ___, ___, $07, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $0a, ___, ___, ___
-;                        !byte ___, ___, ___, ___, $0b, ___, ___, ___, ___, ___, ___, ___, $03, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, $0d, ___, ___, ___, ___, ___, ___, ___, $05, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $00, ___, ___, ___
-;                        !byte ___, ___, ___, ___, $09, ___, ___, ___, ___, ___, ___, ___, $01, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $06, ___, ___, ___
-;                        !byte ___, ___, ___, ___, $0c, ___, ___, ___, ___, ___, ___, ___, $04, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, $02, ___, ___, ___
-;                        !byte ___, ___, ___, ___, $08, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;tab0bb00bbb
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, $0e, $0a, ___, $00, $06, $02, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, $0f, $0b, $0d, $09, $0c, $08, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;tabAAAAA000
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $f0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $70, ___, ___, ___, ___, ___, ___, ___, $60, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $b0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $30, ___, ___, ___, ___, ___, ___, ___, $20, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $50, ___, ___, ___, ___, ___, ___, ___, $40, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $10, ___, ___, ___, ___, ___, ___, ___, $00, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $e0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $d0, ___, ___, ___, ___, ___, ___, ___, $c0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $90, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-
+;
+;!if * > .tables {
+;	!set .junk_start = *
+;} else {
+;	!set .junk_start = .tables
+;}
+;
+;
+;			* = .junk_start
+;			;use remaining space with code or fill up with junk
+;			!for .x, 0, $20 - <.junk_start {
+;				!byte ((.x & $f) << 4) + (.x & $f xor $f)
+;			}
 
 }
 
 .drivecode_end
 .drivecode_size = .drivecode_end - .drivecode_start
-
-.second_pass
 
 ;XXX TODO merge high and lownibbles in one table and separate by and #$0f, possible if we save data due to that and also cycles
 
@@ -1481,3 +1397,99 @@ ___			= $ff
 
 ;56666677
 ;77788888
+.bootstrap_start
+!pseudopc .bootstrap {
+.bootstrap_run
+			;this bootstrap will upload code from $0000-$06ff, and the bootstrap @ $0700 will be overwritten when dir-sector is read later on
+			lda #.DIR_TRACK
+			sta $0a
+			lda #.DIR_SECT
+			sta $0b
+
+			;fetch first dir sect and by that position head at track 18 to have a relyable start point for stepping
+			lda #$80
+			sta $02
+			lda $02
+			bmi *-2
+			;ends up at $0500?
+
+			;motor and LED is on after that
+
+			sei
+			lda $0503
+			sta .fn + 1				;remember diskside#
+
+			lda #%01111010				;DDR set bits for drivenumber to 0, ATN out, CLK out and DATA out are outputs
+			sta $1802
+
+			;ACR
+			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
+			sta $1c0b
+
+			;PCR					 111                            0        111                                  0
+			lda #%11101110				;CB2 manual output high (read), CB1 low, CA2 manual output high (byte ready), CA1 low (NC)
+			sta $1c0c
+
+			lda #$00				;clear lower part of counter
+			sta $1c08
+			sta $1c04
+
+			lda #$7f				;disable all interrupts
+			sta $180e
+			sta $1c0e
+			lda $180d				;clear all IRQ flags to ack possibly pending IRQs
+			lda $1c0d
+
+			lda #$c0				;enable timer 1 flag
+			sta $1c0e
+
+			;cli					;now it is save to allow interrupts again, as they won't happen anymore, okay, it is a lie, timer irqs would happen, but we keep sei
+
+			ldy #$00
+
+			ldx #.BUSY				;signal that we are ready for transfer
+			stx $1800
+
+			bit $1800
+			bpl *-3
+
+			sty $1800				;clear all lines and set bit 7 as bit counter, to allow data in and clk in to be set/cleared by host
+			ldx $1800
+.get_block
+			lda #$80
+-
+			cpx $1800				;did a bit arrive? (bit flip in data in, atn is dropped in same go in first bit)
+			beq -
+			ldx $1800				;load register
+			bmi .done
+			cpx #$04				;push bit into carry
+			ror					;shift in
+			bcc -					;do until our counter bit ends up in carry
+.block = * + 1
+			sta .drivecode,y
+
+			iny
+			bne .get_block
+
+			inc .block+1
+			bne .get_block
+.done
+			ldx #.BUSY
+			stx $1800
+
+			;wait for atn coming low
+			bit $1800				;no need to, check is done by get_byte
+			bmi *-3
+
+.fn			lda #$00				;load directory
+			jmp .load_file
+}
+
+.bootstrap_end
+.bootstrap_size = .bootstrap_end - .bootstrap_start
+
+!ifdef .second_pass {
+	!warn "bootstrap size: ", .bootstrap_size
+}
+
+.second_pass
