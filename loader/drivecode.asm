@@ -55,6 +55,7 @@
 ;stow away last sector if coming and if it suits into cache size, no need to force last sector anymore
 
 
+.CACHING		= 1 ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1 ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 1 ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
 .SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
@@ -89,6 +90,7 @@
 .drivecode		= $0000
 .bootstrap		= $0700
 .tables			= $0200
+.max_mem		= $0800
 
 			;XXX TODO allocate this dynamically at end of code and before tables? but bootstrap needs to be in stack then and page needs to be skipped upon upload?
 .dir_load_addr		= .directory + 4
@@ -102,12 +104,12 @@
 !pseudopc .drivecode {
 .zp_start
 
-;.free			= .zp_start + $00
+.is_cached_sector	= .zp_start + $00
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .tempx			= .zp_start + $18
-;.free			= .zp_start + $19
+.filenum		= .zp_start + $19
 .desired_sect		= .zp_start + $20
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 .blocks 		= .zp_start + $28			;2 bytes
@@ -120,8 +122,8 @@
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
 .block_size		= .zp_start + $68
-.filenum 		= .zp_start + $69
-;.free			= .zp_start + $6a
+.cache	 		= .zp_start + $69			;2 byte!
+;			= .zp_start + $6a
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
 .current_id1		= .zp_start + $70
@@ -177,7 +179,7 @@ ___			= $ff
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, .WT, .WT	;30
                         !byte .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT	;40
                         !byte .WT, .WT, .WT, $0e, ___, $0f, .DT, $07, .DT, ___, ___, $0a, ___, $0b, ___, $03	;50
-                        !byte .PA, .PA, .PA, .PA, .PA, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
+                        !byte .PA, .PA, .PA, .PA, .PA, $0d, ___, $05, ___, <.directory, >.directory, $00, ___, $09, ___, $01	;60
                         !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08		;70
 
 
@@ -365,13 +367,18 @@ ___			= $ff
 			jmp .turn_disc				;still wrong diskside
 .td_idle
 			sta <.filenum				;reset filenum
-			jmp .idle_				;right diskside, go idle
+!if .CACHING = 1 {
+			ldx #$ff
+			jmp .check_cache_size			;right diskside, go idle
+} else {
+			jmp .idle_
+			nop
+			nop
+}
 
 .td_lf
 			jmp .load_file_				;dir sector changed, try to load file now
 
-			nop
-			nop
 			nop
 
 			!byte $50
@@ -499,7 +506,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .gcr_slow1_00
-			lsr $00
+			lda ($00),y
 			jmp .gcr_slow1_20
 !if .GCR_125 = 1 {
 .tab0070dd77_hi
@@ -974,8 +981,12 @@ ___			= $ff
 			bpl *-3
 			dex
 			bne .step
-			dex
-			stx .is_loaded_sector			;invalidate sector cache, as we changed track
+
+			ldx #$ff
+			stx <.is_loaded_sector			;invalidate sector cache, as we changed track
+!if .CACHING = 1 {
+			stx <.is_cached_sector
+}
 .seek_done
 			ldy <.track				;already part of set_bitrate -> load track
 
@@ -1191,8 +1202,8 @@ ___			= $ff
 			bne .retry_no_count			;start over with a new header again, do not wait for a sectorheadertype to arrive
 			sta <.chksum + 1
 
-			pha
 			pla
+			pha
 			lda #.EOR_VAL
 			jmp .gcr_entry				;32 cycles until entry
 .retry_no_count
@@ -1232,18 +1243,60 @@ ___			= $ff
 			eor <.chksum2 + 1
 			eor <.chksum + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
 			bne .retry_no_count			;checksum okay? Nope, take two hops to get to the beginning of code again
+
 .new_or_cached_sector
+!if .CACHING = 0 {
 			ldx <.is_loaded_sector
-			bmi .retry_no_count			;invalid, so skip
+			bmi .retry_no_count
 			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
 			cmp #$ff
 			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
-!if .FORCE_LAST_BLOCK = 1 {
+	!if .FORCE_LAST_BLOCK = 1 {
 			cmp <.last_block_num			;current block is last block on list?
 			bne +					;nope continue
 			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
 			bne .retry_no_count			;reread
 +
+	}
+} else {
+			ldx <.is_cached_sector
+			bmi +					;nothing cached yet
+			ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
+			iny
+			beq +					;something went wrong
+.restore
+			ldy #$ff
+-
+			lda (.cache),y
+			pha
+			dey
+			cpy #$ff
+			bne -
+			sty <.is_cached_sector
+			stx <.is_loaded_sector
++
+			ldx <.is_loaded_sector
+			bmi .retry_no_count
+			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
+			eor <.last_block_num			;current block is last block on list?
+			bne ++
+.stow
+			tay
+			lda .cache + 1
+			cmp #(>.max_mem) - 1
+			bcs .skip				;not enough mem available to accomodate part of sector
+			stx <.is_cached_sector
+-
+			pla
+			sta (.cache),y
+			iny
+			bne -
+.skip
+			ldx <.is_loaded_sector
+++
+			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
+			cmp #$ff
+			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
 }
 !if .LOAD_IN_ORDER = 1 {
 			ldy <.desired_sect
@@ -1348,11 +1401,30 @@ ___			= $ff
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
 			jmp .preamble_
 
+!if .CACHING = 1 {
+.check_cache_size
+-
+			lda .directory,x
+			bne +
+			dex
+			bne -
++
+			txa
+			and #$fc
+			clc
+			adc #4
+			clc
+			adc #<.directory
+			sta .cache + 0
+			lda #>.directory
+			adc #0
+			sta .cache + 1
+			jmp .idle_
+}
 .directory
 
 !ifdef .second_pass {
-	!warn $0800 - *, " bytes remaining for drivecode and directory."
-	!warn "directory @ ", *
+	!warn $0800 - *, " bytes remaining for drivecode, cache and directory."
 }
 ;
 ;!if * > .tables {
