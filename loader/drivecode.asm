@@ -362,6 +362,7 @@ ___			= $ff
 			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
 			;
 			;----------------------------------------------------------------------------------------------------
+
 .td_code_
 			beq .td_idle
 			jmp .turn_disc				;still wrong diskside
@@ -369,16 +370,14 @@ ___			= $ff
 			sta <.filenum				;reset filenum
 !if .CACHING = 1 {
 			ldx #$ff
-			jmp .check_cache_size			;right diskside, go idle
+			jmp .check_cache_size
 } else {
 			jmp .idle_
 			nop
 			nop
 }
-
 .td_lf
 			jmp .load_file_				;dir sector changed, try to load file now
-
 			nop
 
 			!byte $50
@@ -530,7 +529,6 @@ ___			= $ff
                         !byte                $60, $40, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 			                     ;|bitrate|bitrate + table combined ->
 }
-
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SEND PREAMBLE AND DATA
@@ -545,6 +543,24 @@ ___			= $ff
 			ldy <.block_size			;blocksize + 1
 			inx					;x = $0b -> indicate second round, does not hurt the sax
 			bne .sendloop				;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
+
+!if .CACHING = 1 {
+.check_cache_size
+-
+			lda .directory,x
+			bne +
+			dex
+			bne -
++
+			lda #$fc
+			sbx #<-(.directory + 4)
+			stx .cache + 0
+			lda #>(.directory + 4)
+			adc #0
+			sta .cache + 1
+			bne .idle_
+}
+
 .start_send							;entered with c = 0
 			ldy #$03 + CONFIG_DECOMP + 1		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 -
@@ -777,8 +793,7 @@ ___			= $ff
 			stx .en_dis_td				;enable jump back
 			ldx #.DIR_TRACK				;set target track to 18
 			stx <.to_track
-			ldx #$00
-			stx <.last_block_num			;end at index 0
+			ldy #$00
 			jmp .turn_disc_entry			;a = sector, x = 0 = index
 +
 			;----------------------------------------------------------------------------------------------------
@@ -891,14 +906,12 @@ ___			= $ff
 			bcc +					;file_size + 1
 			iny
 +
-			sty <.last_block_num
 
 .index_to_sectornum
 			;XXX TODO block to index -> can be also done via other means? lookup?
 			;remaining blocks on track to find out start sector
-			lda #$00				;walk through track from pos 0 on
+			lda #-.INTERLEAVE				;walk through track from pos 0 on
 			ldx <.blocks + 1
-			beq .found_sector
 .fs_loop
 			clc					;XXX could be omitted for interleave = 4?
 			adc #.INTERLEAVE
@@ -918,10 +931,10 @@ ___			= $ff
 }
 +
 			dex
-			bne .fs_loop
-.found_sector
-			;jmp .idle_
+			bpl .fs_loop
 .turn_disc_entry
+			sty <.last_block_num
+			ldx #$00
 			sta <.sector
 			stx <.index				;reset block index, x = 0
 .load_track
@@ -1411,22 +1424,6 @@ ___			= $ff
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
 			jmp .preamble_
 
-!if .CACHING = 1 {
-.check_cache_size
--
-			lda .directory,x
-			bne +
-			dex
-			bne -
-+
-			lda #$fc
-			sbx #<-(.directory + 4)
-			stx .cache + 0
-			lda #>(.directory + 4)
-			adc #0
-			sta .cache + 1
-			jmp .idle_
-}
 .directory
 
 !ifdef .second_pass {
