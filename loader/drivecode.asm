@@ -868,20 +868,21 @@ ___			= $ff
 			bne .is_big				;filesize < $100 ? is_big if not
 			bcs .is_big				;it is < $0100 but does not fit in remaining space? -> is_big
 			sta <.first_block_size			;fits in, correct size, this will cause overflow on next subtraction and last_block_num will be zero, last_block_size will be $ff
+!if .CACHING = 0 {
 			tax
 			bne +
 			;file not found
-!if .IGNORE_ILLEGAL_FILE = 1 {
+	!if .IGNORE_ILLEGAL_FILE = 1 {
 			jmp .skip_load
-} else {
-.fucked
+	} else {
 			lda $1c00
 			and #.MOTOR_OFF
 			ora #.LED_ON
 			sta $1c00
 			jam
-}
+	}
 +
+}
 .is_big
 			clc
 			sbc <.first_block_size
@@ -1272,8 +1273,9 @@ ___			= $ff
 			dey
 			cpy #$ff
 			bne -
-			sty <.is_cached_sector
-			stx <.is_loaded_sector
+			;sty <.is_cached_sector			;drop cache
+			;stx <.is_loaded_sector
+			top
 +
 			ldx <.is_loaded_sector
 			bmi .retry_no_count
@@ -1284,10 +1286,7 @@ ___			= $ff
 			tay
 			lda .cache + 1
 			cmp #(>.max_mem) - 1
-			bcc .stow_				;not enough mem available to accomodate part of sector
-			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-			bne .retry_no_count			;reread
-			beq .skip
+			bcs .skip				;not enough mem available to accomodate part of sector
 .stow_
 			stx <.is_cached_sector
 -
@@ -1295,7 +1294,14 @@ ___			= $ff
 			sta (.cache),y
 			iny
 			bne -
+	!if .FORCE_LAST_BLOCK = 1 {
+			beq ++
 .skip
+			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
+			bne .retry_no_count			;reread
+	} else {
+.skip
+	}
 			ldx <.is_loaded_sector
 ++
 			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
@@ -1413,17 +1419,10 @@ ___			= $ff
 			dex
 			bne -
 +
-			txa
-			and #$fc
-			clc
-			adc #4
-			bne +
-			lda #$ff
-			sec
-+
-			adc #<.directory
-			sta .cache + 0
-			lda #>.directory
+			lda #$fc
+			sbx #<-(.directory + 4)
+			stx .cache + 0
+			lda #>(.directory + 4)
 			adc #0
 			sta .cache + 1
 			jmp .idle_
