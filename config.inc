@@ -1,7 +1,7 @@
 !ifndef CONFIG_LOADED {
 
 ;options for resident part
-CONFIG_RESIDENT_ADDR		= $0200
+CONFIG_RESIDENT_ADDR		= $f000
 CONFIG_ZP_ADDR			= $02		;maximum 11 bytes needed, 5 for loader, 6 for depacker
 CONFIG_LAX_ADDR			= $00		;Usually save to have the value $37 here, but can be also set elsewhere, but must stay persistent during loading
 

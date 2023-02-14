@@ -341,7 +341,7 @@ numb		lda #$00		;file number
 		sta accum,x
 }
 
-!if CHECKSUM == 1 {
+!if CHECKSUM == 1 & TIME_STRICT != 1 {
 		jsr checksum
 }
 +

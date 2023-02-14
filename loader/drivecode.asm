@@ -1284,7 +1284,11 @@ ___			= $ff
 			tay
 			lda .cache + 1
 			cmp #(>.max_mem) - 1
-			bcs .skip				;not enough mem available to accomodate part of sector
+			bcc .stow_				;not enough mem available to accomodate part of sector
+			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
+			bne .retry_no_count			;reread
+			beq .skip
+.stow_
 			stx <.is_cached_sector
 -
 			pla
@@ -1413,7 +1417,10 @@ ___			= $ff
 			and #$fc
 			clc
 			adc #4
-			clc
+			bne +
+			lda #$ff
+			sec
++
 			adc #<.directory
 			sta .cache + 0
 			lda #>.directory
