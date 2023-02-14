@@ -794,6 +794,7 @@ ___			= $ff
 			ldx #.DIR_TRACK				;set target track to 18
 			stx <.to_track
 			ldy #$00
+			sty <.is_loaded_sector			;invalidate cached sector
 			jmp .turn_disc_entry			;a = sector, x = 0 = index
 +
 			;----------------------------------------------------------------------------------------------------
@@ -996,7 +997,7 @@ ___			= $ff
 			dex
 			bne .step
 
-			ldx #$ff
+			dex
 			stx <.is_loaded_sector			;invalidate sector cache, as we changed track
 !if .CACHING = 1 {
 			stx <.is_cached_sector
