@@ -554,8 +554,8 @@ ___			= $ff
 			bne -
 +
 			lda #$fc
-			sbx #-4
-			stx .cache_limit
+			sbx #$00
+			stx <.cache_limit
 			jmp .idle_
 }
 
@@ -1220,7 +1220,7 @@ ___			= $ff
 			lda #.EOR_VAL
 			jmp .gcr_entry				;32 cycles until entry
 .retry_no_count
-			jmp .next_sector			;will be sbc (xx),y if disabled
+			jmp .next_sector
 .back_read_sector
 			;7 cycles need to pass
 
@@ -1275,8 +1275,8 @@ ___			= $ff
 			ldx <.is_cached_sector
 			bmi +					;nothing cached yet
 			ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
-			iny
-			beq +					;something went wrong
+			iny					;is it part of our yet loaded file?
+			beq +					;something went wrong, seems like we loaded another file
 .restore
 			stx <.is_loaded_sector
 -
@@ -1288,33 +1288,31 @@ ___			= $ff
 +
 			ldx <.is_loaded_sector
 			bmi .retry_no_count
-			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
-			eor <.last_block_num			;current block is last block on list?
-			bne ++
+			ldy <.wanted,x				;grab index from list
+			cpy <.last_block_num			;current block is last block on list?
+			bne .no_caching				;do not cache this sector
+			lda <.cache_limit			;is there enough space for caching?
+			cmp #((.cache - .directory) & $fc) - 4
+			bcs .skip				;not enough mem available to accomodate sector
 .stow
-			tay
-			lda .cache_limit
-			cmp #((.cache - .directory) & $fc)
-			bcs .skip				;not enough mem available to accomodate part of sector
-.stow_
 			stx <.is_cached_sector
 -
 			pla
-			sta .cache,y
-			iny
+			tsx
+			sta .cache,x
+			inx
 			bne -
 	!if .FORCE_LAST_BLOCK = 1 {
-			beq ++
+			top					;skips last block check, as bne will fall through after skipping lda (flags are preserved)
 .skip
-			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-			bne .retry_no_count			;reread
+			lda <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
+			bne .retry_no_count			;reread and force last block to be read last
 	} else {
 .skip
 	}
-			ldx <.is_loaded_sector
-++
-			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
-			cmp #$ff
+.no_caching
+			tya					;Y is still wanted,x
+			iny
 			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
 }
 !if .LOAD_IN_ORDER = 1 {
@@ -1325,6 +1323,7 @@ ___			= $ff
 			bne .retry_no_count
 +
 }
+			ldx <.is_loaded_sector
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
 .en_dis_td		top .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
