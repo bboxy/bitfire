@@ -89,6 +89,7 @@
 .reset_drive		= $fffc	;eaa0
 .drivecode		= $0000
 .bootstrap		= $0700
+.cache			= $0700
 .tables			= $0200
 .max_mem		= $0800
 
@@ -122,8 +123,8 @@
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
 .block_size		= .zp_start + $68
-.cache	 		= .zp_start + $69			;2 byte!
-;			= .zp_start + $6a
+.cache_limit		= .zp_start + $69
+;free			= .zp_start + $6a
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
 .current_id1		= .zp_start + $70
@@ -553,12 +554,9 @@ ___			= $ff
 			bne -
 +
 			lda #$fc
-			sbx #<-(.directory + 4)
-			stx .cache + 0
-			lda #>(.directory + 4)
-			adc #0
-			sta .cache + 1
-			bne .idle_
+			sbx #-4
+			stx .cache_limit
+			jmp .idle_
 }
 
 .start_send							;entered with c = 0
@@ -1280,16 +1278,13 @@ ___			= $ff
 			iny
 			beq +					;something went wrong
 .restore
-			ldy #$ff
+			stx <.is_loaded_sector
 -
-			lda (.cache),y
+			tsx
+			lda .cache,x
 			pha
-			dey
-			cpy #$ff
+			txa
 			bne -
-			;sty <.is_cached_sector			;drop cache
-			;stx <.is_loaded_sector
-			top
 +
 			ldx <.is_loaded_sector
 			bmi .retry_no_count
@@ -1298,14 +1293,14 @@ ___			= $ff
 			bne ++
 .stow
 			tay
-			lda .cache + 1
-			cmp #(>.max_mem) - 1
+			lda .cache_limit
+			cmp #((.cache - .directory) & $fc)
 			bcs .skip				;not enough mem available to accomodate part of sector
 .stow_
 			stx <.is_cached_sector
 -
 			pla
-			sta (.cache),y
+			sta .cache,y
 			iny
 			bne -
 	!if .FORCE_LAST_BLOCK = 1 {
