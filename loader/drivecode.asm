@@ -61,7 +61,6 @@
 .CACHING		= 1 ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1 ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 1 ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
-.SHRYDAR_STEPPING	= 0 ;so far no benefit on loadcompd, and causes more checksum retries on 2 of my floppys, also let's one of the 1541-ii choke at times and load forever when stuck on a half track
 .DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
 .SANCHECK_HEADER_0F	= 0 ;does never trigger
 .SANCHECK_HEADER_ID	= 0 ;does never trigger
@@ -969,19 +968,13 @@ ___			= $ff
 .seek_up
 			asl					;counter is twice the number of tracks (halftracks)
 			tax
-			bpl .seek_check
-
-!if .SHRYDAR_STEPPING = 1 {
-			lda #.STEPPING_SPEED_
-			cpx #$02
-			beq .step_
-}
+			bpl .seek_check				;this is a BRA
+.find_file_back_	bcc .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .step
-;			bne +
+			txa
+			beq +
 			lda #.STEPPING_SPEED
-;			top
-;+
-;			lda #.STEPPING_SETTLE
++
 .step_
 			sta $1c05				;clears irq flag in $1c0d
 			tya
@@ -1000,7 +993,6 @@ ___			= $ff
 
 			stx <.tempx				;save x
 			jmp .start_send				;send data now
-.find_file_back_	bcc .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .send_back
 			ldx <.tempx
 			iny					;continue with seek up (Y = 0)
@@ -1101,7 +1093,7 @@ ___			= $ff
 			bne .wanted_loop			;if zero, done
 								;carry is 0
 								;just track is full
-			sta .sector				;start next track with sector = 0
+			sta <.sector				;start next track with sector = 0
 .load_wanted_blocks						;read and transfer all blocks on wishlist
 			;lda #$30
 			;ror
