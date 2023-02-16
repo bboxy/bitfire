@@ -54,6 +54,9 @@
 ;XXX TODO directory: move sectorinfo and disksideinfo to the beginning of dirsector, then place empty space to the end of dirsector, we can make use of free space of dirsector + free space and find out min cache size by that
 ;stow away last sector if coming and if it suits into cache size, no need to force last sector anymore
 
+;XXX TODO
+;store track as track * 2, so we can detect with a simple lsr if we are on a half track? Do check before sending? if so do halfstep? make all this postponed xfer simpler?
+
 
 .CACHING		= 1 ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1 ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
@@ -70,6 +73,7 @@
 
 ;constants
 .STEPPING_SPEED		= $18					;98 is too low for some ALPS and Sankyo-Drives
+.STEPPING_SETTLE	= $08					;98 is too low for some ALPS and Sankyo-Drives
 .STEPPING_SPEED_	= $0c
 .CHECKSUM_CONST1	= $05					;%00000101 -> 4 times 01010
 .CHECKSUM_CONST2	= $29					;%00101001
@@ -290,6 +294,11 @@ ___			= $ff
 			!byte <(.slow2 - .slow6) + 2
 			!byte <(.slow4 - .slow6) + 2
 			!byte <(.slow6 - .slow6) + 2
+.preamble__
+			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
+
+			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
+			jmp .preamble_
 
 
 !ifdef .second_pass {
@@ -364,23 +373,22 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.td_code_
-			beq .td_idle
-			jmp .turn_disc				;still wrong diskside
+.td_cont
+			cmp #BITFIRE_REQ_DISC
+			bcc .td_lf
+			eor .dir_diskside			;compare side info
+			bne .td_td
 .td_idle
 			sta <.filenum				;reset filenum
 !if .CACHING = 1 {
-			ldx #$ff
+			tax					;start with x = 0
 			jmp .check_cache_size
+			nop
 } else {
 			jmp .idle_
 			nop
 			nop
 }
-.td_lf
-			jmp .load_file_				;dir sector changed, try to load file now
-			nop
-
 			!byte $50
 .turn_disc_back
 			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
@@ -406,15 +414,17 @@ ___			= $ff
 			sta .directory,y
 			bne -
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
-			bcs +
+			bcs .td_cont
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
-+
-			cmp #BITFIRE_REQ_DISC
-			bcc .td_lf
-			eor .dir_diskside			;compare side info
-			bcs .td_code_
+.td_lf
+			jmp .load_file_				;dir sector changed, try to load file now
+.td_td
+			jmp .turn_disc				;still wrong diskside
+			nop
+			nop
+			nop
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
                         !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
@@ -546,10 +556,10 @@ ___			= $ff
 			bne .sendloop				;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
 
 !if .CACHING = 1 {
-.check_cache_size
 -
 			lda .directory,x
 			bne +
+.check_cache_size
 			dex
 			bne -
 +
@@ -638,8 +648,10 @@ ___			= $ff
 
 !if .POSTPONED_XFER = 1 {
 .en_dis_seek		eor .send_back
-}
 			lda <.blocks_on_list			;decrease block count, last block on wishlist?
+} else {
+			dec <.blocks_on_list			;decrease block count, last block on wishlist?
+}
 			bpl +
 .track_finished
 			;XXX TODO make this check easier? only done hre?
@@ -957,7 +969,7 @@ ___			= $ff
 .seek_up
 			asl					;counter is twice the number of tracks (halftracks)
 			tax
-			beq .seek_done				;nothing to step, end
+			bpl .seek_check
 
 !if .SHRYDAR_STEPPING = 1 {
 			lda #.STEPPING_SPEED_
@@ -965,7 +977,11 @@ ___			= $ff
 			beq .step_
 }
 .step
+;			bne +
 			lda #.STEPPING_SPEED
+;			top
+;+
+;			lda #.STEPPING_SETTLE
 .step_
 			sta $1c05				;clears irq flag in $1c0d
 			tya
@@ -984,22 +1000,22 @@ ___			= $ff
 
 			stx <.tempx				;save x
 			jmp .start_send				;send data now
+.find_file_back_	bcc .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .send_back
 			ldx <.tempx
 			iny					;continue with seek up (Y = 0)
 			inc .en_dis_seek			;disable_jmp
 .seek_end
 }
-			bit $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
+			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
 			bpl *-3
-			dex
-			bne .step
-
-			dex
-			stx <.is_loaded_sector			;invalidate sector cache, as we changed track
+			sta <.is_loaded_sector			;invalidate sector cache, as we changed track, negative value is okay for that
 !if .CACHING = 1 {
-			stx <.is_cached_sector
+			sta <.is_cached_sector
 }
+.seek_check
+			dex
+			bpl .step
 .seek_done
 			ldy <.track				;already part of set_bitrate -> load track
 
@@ -1017,8 +1033,6 @@ ___			= $ff
 			eor <.ser2bin,x
 			sta <.track_frob			;needs to be precacled here
 			ldx #$ff
-} else {
-			dex
 }
 .set_max_sectors
 			lda #16
@@ -1035,23 +1049,21 @@ ___			= $ff
 			sta <.max_sectors
 			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
-			cpx #$fe
-			bcs +
-			jmp .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
-+
-			tay
+			cpx #$ff
+			bcc .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doing two hops, cheaper than long branch
+			tax
 			lda $1c00
 			ora #$60
-			eor .bitrate,y
+			eor .bitrate,x
 			sta $1c00
 
-			ldx <.slow_table,y
-			ldy #$02
+			ldy <.slow_table,x
+			ldx #$02
 -
-			lda .slow6,x
-			sta <.gcr_slow1,y
-			dex
+			lda .slow6,y
+			sta <.gcr_slow1,x
 			dey
+			dex
 			bpl -
 
 			;----------------------------------------------------------------------------------------------------
@@ -1314,6 +1326,7 @@ ___			= $ff
 			tya					;Y is still wanted,x
 			iny
 			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
+			ldx <.is_loaded_sector
 }
 !if .LOAD_IN_ORDER = 1 {
 			ldy <.desired_sect
@@ -1323,7 +1336,6 @@ ___			= $ff
 			bne .retry_no_count
 +
 }
-			ldx <.is_loaded_sector
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
 .en_dis_td		top .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
@@ -1414,10 +1426,7 @@ ___			= $ff
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
 			lda .dir_load_addr + 0,y		;fetch load address lowbyte
-			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
-
-			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			jmp .preamble_
+			jmp .preamble__
 
 .directory
 
