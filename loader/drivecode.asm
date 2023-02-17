@@ -37,27 +37,13 @@
 !src "config.inc"
 !src "constants.inc"
 
+;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
+;XXX TODO store track as track * 2, so we can detect with a simple lsr if we are on a half track? Do check before sending? if so do halfstep? make all this postponed xfer simpler?
+
 ;config params
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
-;XXX TODO implement readahead, before going to idle but with eof already internally set, force read of last sector again?
-;ldy <.last_block_num
-;inc .wanted,y
-;set cached flag?
-;reenter read_sector
-;skip xfer if cached is set? eof + cached = go to idle and finally drop all lines?
-
-;XXX TODO
-;load each sector fully, even if header is not what we want yet, we can then decide after loading and stow sector away if it is last sector? so all decisions are aggregated and not spread all over
-
-;XXX TODO directory: move sectorinfo and disksideinfo to the beginning of dirsector, then place empty space to the end of dirsector, we can make use of free space of dirsector + free space and find out min cache size by that
-;stow away last sector if coming and if it suits into cache size, no need to force last sector anymore
-
-;XXX TODO
-;store track as track * 2, so we can detect with a simple lsr if we are on a half track? Do check before sending? if so do halfstep? make all this postponed xfer simpler?
-
-
 .CACHING		= 1 ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1 ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 1 ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
@@ -66,14 +52,13 @@
 .SANCHECK_HEADER_ID	= 0 ;does never trigger
 .SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
 .SANCHECK_TRACK		= 1 ;check if on right track after header is read
-.SANCHECK_SECTOR	= 0 ;check if sector # is within range
+.SANCHECK_SECTOR	= 0 ;does never trigger - check if sector # is within range
 .INTERLEAVE		= 4
 .GCR_125		= 1
 
 ;constants
-.STEPPING_SPEED		= $18					;98 is too low for some ALPS and Sankyo-Drives
-.STEPPING_SETTLE	= $08					;98 is too low for some ALPS and Sankyo-Drives
-.STEPPING_SPEED_	= $0c
+.STEPPING_SPEED		= $18
+.STEPPING_SETTLE	= $08
 .CHECKSUM_CONST1	= $05					;%00000101 -> 4 times 01010
 .CHECKSUM_CONST2	= $29					;%00101001
 .CHECKSUM_CONST3	= $4a					;%01001010
@@ -94,27 +79,30 @@
 .bootstrap		= $0700
 .cache			= $0700
 .tables			= $0200
-.max_mem		= $0800
 
 			;XXX TODO allocate this dynamically at end of code and before tables? but bootstrap needs to be in stack then and page needs to be skipped upon upload?
 .dir_load_addr		= .directory + 4
 .dir_file_size		= .directory + 6
-.dir_diskside		= .directory + 3
 .dir_first_file_track	= .directory + 0			;starttrack of first file in dir
 .dir_first_file_index	= .directory + 1			;how many blocks are used on this track up to the file
 .dir_first_block_pos	= .directory + 2			;startposition within block
+.dir_diskside		= .directory + 3
 								;with those three values, the absolute position on disk is represented
 .drivecode_start
 !pseudopc .drivecode {
 .zp_start
 
-.is_cached_sector	= .zp_start + $00
+;free			= .zp_start + $00
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
+!if .POSTPONED_XFER = 1 {
 .tempx			= .zp_start + $18
+}
 .filenum		= .zp_start + $19
+!if .LOAD_IN_ORDER = 1 {
 .desired_sect		= .zp_start + $20
+}
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 .blocks 		= .zp_start + $28			;2 bytes
 .wanted			= .zp_start + $3e			;21 bytes
@@ -126,26 +114,26 @@
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
 .block_size		= .zp_start + $68
+!if .CACHING = 1 {
 .cache_limit		= .zp_start + $69
-;free			= .zp_start + $6a
+.is_cached_sector	= .zp_start + $6a
+}
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
+!if .SANCHECK_HEADER_ID = 1 {
 .current_id1		= .zp_start + $70
 .current_id2		= .zp_start + $71
+}
 .last_block_num		= .zp_start + $72
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
-.free			= .zp_start + $78
+;free			= .zp_start + $78
 .block_num		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
 
-.FS			= 0					;first sector
 .DT			= 18					;dir_track
 .DS			= 18					;dir_sector
-.PA			= $ff					;preamble
-.BL			= $ff					;blocks_on_list
-.WT			= $ff					;wanted list
 ___			= $ff
 .S0			= $00 xor .EOR_VAL			;ser2bin value 0/9
 .S1			= $09 xor .EOR_VAL			;ser2bin value 1/8
@@ -178,18 +166,16 @@ ___			= $ff
 
 			;     0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f
                         !byte ___, $b0, $80, $a0, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
-                        !byte .DS, .BL, $f0, $1e, $70, $1f, $60, $17, ___, ___, $b0, $1a, $30, $1b, $20, $13	;10
-                        !byte .FS, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
-                        !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, .WT, .WT	;30
-                        !byte .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT, .WT	;40
-                        !byte .WT, .WT, .WT, $0e, ___, $0f, .DT, $07, .DT, ___, ___, $0a, ___, $0b, ___, $03	;50
-                        !byte .PA, .PA, .PA, .PA, .PA, $0d, ___, $05, ___, <.directory, >.directory, $00, ___, $09, ___, $01	;60
+                        !byte .DS, ___, $f0, $1e, $70, $1f, $60, $17, ___, ___, $b0, $1a, $30, $1b, $20, $13	;10
+                        !byte ___, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
+                        !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
+                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
+                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, .DT, ___, ___, $0a, ___, $0b, ___, $03	;50
+                        !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
                         !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08		;70
 
 
 			;XXX TODO, move PA to $68, need to fix table afterwards by setting $00? but could the do lda $68,y? but still not possible with 8 bit addressing, but would make setup easier
-
-
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
 			;XXX see if we can use bit 2 from original data, would save space in tables
@@ -288,6 +274,7 @@ ___			= $ff
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .back_read_sector
 			jmp .back_read_header
+
 .slow_table
 			!byte <(.slow0 - .slow6) + 2
 			!byte <(.slow2 - .slow6) + 2
@@ -376,27 +363,25 @@ ___			= $ff
 			cmp #BITFIRE_REQ_DISC
 			bcc .td_lf
 			eor .dir_diskside			;compare side info
-			bne .td_td
-.td_idle
-			sta <.filenum				;reset filenum
-!if .CACHING = 1 {
-			tax					;start with x = 0
-			jmp .check_cache_size
-			nop
-} else {
-			jmp .idle_
+			beq .td_idle
+.td_td
+			jmp .turn_disc				;still wrong diskside
+
 			nop
 			nop
-}
+			nop
+			nop
+
 			!byte $50
 .turn_disc_back
 			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
-			ldx #$0d				;tab value $0d
-			dex
+			dop
+			!byte $0d
+			nop
 			iny
 			dop
 			!byte $40
-			stx .en_dis_td
+			inc .en_dis_td
 			!byte $05				;ora $xx
 			nop
 -
@@ -419,11 +404,15 @@ ___			= $ff
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 .td_lf
 			jmp .load_file_				;dir sector changed, try to load file now
-.td_td
-			jmp .turn_disc				;still wrong diskside
+.td_idle
+			sta <.filenum				;reset filenum
+!if .CACHING = 1 {
+			tax					;start with x = 0
+			jmp .check_cache_size
+} else {
+			jmp .idle_
 			nop
-			nop
-			nop
+}
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
                         !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
@@ -782,7 +771,7 @@ ___			= $ff
 			ora $1c00				;turn on motor (no matter if already on)
 			sta $1c00
 
-			bcc +
+			bcc +					;load file? turn fisc?
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -798,8 +787,7 @@ ___			= $ff
 .load_dir_sect
 			tya
 			sta <.dir_sector
-			ldx #$4c
-			stx .en_dis_td				;enable jump back
+			dec .en_dis_td				;enable jump back
 			ldx #.DIR_TRACK				;set target track to 18
 			stx <.to_track
 			ldy #$00
@@ -1330,7 +1318,8 @@ ___			= $ff
 }
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
-.en_dis_td		top .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
+			tax
+.en_dis_td		eor .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1341,9 +1330,9 @@ ___			= $ff
 !if .LOAD_IN_ORDER = 1 {
 			inc .desired_sect
 }
-			cmp <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
-			sta <.block_num
-			tax					;is needed then however to restore flags, but cheaper
+			cpx <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
+			stx <.block_num
+			txa					;is needed then however to restore flags, but cheaper
 			bne .is_not_first_block
 .is_first_block
 			ldy <.first_block_size
