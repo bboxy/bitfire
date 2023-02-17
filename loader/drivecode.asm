@@ -44,15 +44,15 @@
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
-.CACHING		= 1 ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
-.IGNORE_ILLEGAL_FILE	= 1 ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
-.FORCE_LAST_BLOCK	= 1 ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
-.DELAY_SPIN_DOWN	= 1 ;wait for app. 4s until spin down in idle mode
-.SANCHECK_HEADER_0F	= 0 ;does never trigger
-.SANCHECK_HEADER_ID	= 0 ;does never trigger
-.SANCHECK_TRAILING_ZERO = 1 ;check for trailing zeroes after checksum byte
-.SANCHECK_TRACK		= 1 ;check if on right track after header is read
-.SANCHECK_SECTOR	= 0 ;does never trigger - check if sector # is within range
+.CACHING		= 1   ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
+.IGNORE_ILLEGAL_FILE	= 1   ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
+.FORCE_LAST_BLOCK	= 1   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
+.DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
+.SANCHECK_HEADER_0F	= 0   ;does never trigger
+.SANCHECK_HEADER_ID	= 0   ;does never trigger
+.SANCHECK_TRAILING_ZERO = 1   ;check for trailing zeroes after checksum byte
+.SANCHECK_TRACK		= 1   ;check if on right track after header is read
+.SANCHECK_SECTOR	= 0   ;does never trigger - check if sector # is within range
 .INTERLEAVE		= 4
 .GCR_125		= 1
 
@@ -959,8 +959,8 @@ ___			= $ff
 			bpl .seek_check				;this is a BRA
 .find_file_back_	bcc .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .step
-			txa
-			beq +
+;			txa
+;			beq +
 			lda #.STEPPING_SPEED
 +
 .step_
@@ -1490,9 +1490,9 @@ ___			= $ff
 			lda #%11101110				;CB2 manual output high (read), CB1 low, CA2 manual output high (byte ready), CA1 low (NC)
 			sta $1c0c
 
-			lda #$00				;clear lower part of counter
-			sta $1c08
-			sta $1c04
+			ldy #$00				;clear lower part of counter
+			sty $1c08
+			sty $1c04
 
 			lda #$7f				;disable all interrupts
 			sta $180e
@@ -1505,7 +1505,7 @@ ___			= $ff
 
 			;cli					;now it is save to allow interrupts again, as they won't happen anymore, okay, it is a lie, timer irqs would happen, but we keep sei
 
-			ldy #$00
+			;ldy #$00
 
 			ldx #.BUSY				;signal that we are ready for transfer
 			stx $1800
@@ -1531,7 +1531,7 @@ ___			= $ff
 			iny
 			bne .get_block
 
-			inc .block+1
+			inc .block + 1
 			bne .get_block
 .done
 			ldx #.BUSY
