@@ -269,7 +269,7 @@ ___			= $ff
 			bvs .read_loop
 			bvs .read_loop
 
-			jmp .next_sector
+			;jmp .next_sector
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .back_read_sector
@@ -280,11 +280,13 @@ ___			= $ff
 			!byte <(.slow2 - .slow6) + 2
 			!byte <(.slow4 - .slow6) + 2
 			!byte <(.slow6 - .slow6) + 2
-.preamble__
-			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
-
+.preamble___
+!if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
+			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
+}
+			lda .dir_load_addr + 0,y		;fetch load address lowbyte
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			jmp .preamble_
+			jmp .preamble__
 
 
 !ifdef .second_pass {
@@ -332,13 +334,6 @@ ___			= $ff
 
 	 		* = .tables + $22
 .table_start		;combined tables, gaps filled with junk
-;                        !byte           $0e, $0a, $24, $00, $06, $02, $28, $4e, $4f, $47, $2c, $4a, $4b, $43
-;                        !byte $30, $31, $4d, $45, $34, $40, $49, $41, $38, $46, $4c, $44, $3c, $42, $48, $3f
-;                        !byte $40, $41, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
-;                        !byte $70, $51, $5d, $55, $0f, $50, $59, $51, $60, $56, $5c, $54, $07, $52, $58, $5f
-;                        !byte $60, $61, $07, $03, $05, $01, $04, $67, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
-;                        !byte $30, $71, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, $7f
-
                         !byte           $0e, $0a, $f0, $00, $06, $02, $e1, $4e, $4f, $47, $d2, $4a, $4b, $43
                         !byte $c3, $b4, $4d, $45, $a5, $40, $49, $41, $96, $46, $4c, $44, $87, $42, $48, $78
                         !byte $69, $5a, $0f, $0b, $0d, $09, $0c, $08, $f0, $5e, $5f, $57, $0e, $5a, $5b, $53
@@ -366,11 +361,9 @@ ___			= $ff
 			beq .td_idle
 .td_td
 			jmp .turn_disc				;still wrong diskside
-
-			nop
-			nop
-			nop
-			nop
+.preamble__
+			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
+			jmp .preamble_
 
 			!byte $50
 .turn_disc_back
@@ -1404,10 +1397,8 @@ ___			= $ff
 			clc
 			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
-			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
-			lda .dir_load_addr + 0,y		;fetch load address lowbyte
-			jmp .preamble__
+			jmp .preamble___
 
 .directory
 
