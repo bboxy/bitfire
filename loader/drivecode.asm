@@ -785,6 +785,7 @@ ___			= $ff
 			stx <.to_track
 			ldy #$00
 			sty <.is_loaded_sector			;invalidate cached sector
+			sty <.is_cached_sector			;invalidate cached sector
 			jmp .turn_disc_entry			;a = sector, x = 0 = index
 +
 			;----------------------------------------------------------------------------------------------------
