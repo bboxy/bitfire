@@ -131,13 +131,16 @@ v1.1
 - add --prefix-file to dali
 
 v1.2
-- 3.5% faster decompressor
-- dali compiles on more targets now (ARM64)
-- turn disk is a simple loadraw with file# $fx now
+- dali compiles on more targets now (ARM64), also Windows-executables are possible
 - dali now supports --exit_on_warn
 - added proper depack-example to dali
-- fixed nasty bitrate bug in drivecode that would sometimes choose wrong bitrate on slowest speed zone and bring timing to its edge
-- saved bytes
-- fixed bug, inplace decompression would miss loading sectors if final literal is > than 1 sector/crosses 2 sectors or more
 - dali sfx can be relocated to any address (upon feature request by comos)
+- 3.5% faster decompressor
+- fixed bug, inplace decompression would miss loading sectors if final literal is > than 1 sector/crosses 2 sectors or more
+- turn disk is a simple loadraw with file# $fx now that returns when done
+- fixed nasty bitrate bug in drivecode that would sometimes choose wrong bitrate on slowest speed zone and bring timing to its edge
 - finally fixed and changed buslock-technique so that it also works with THCM's SX64 - broken since introduced in 0.7 /o\
+- saved huge amount of bytes
+- changing layout of dir-sector
+- use free memory and unused dir-sector space for proper caching of first/last sector
+- improve loadraw performance by more than 5%
