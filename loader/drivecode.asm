@@ -635,7 +635,7 @@ ___			= $ff
 .en_dis_seek_
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
-			lda #18
+			lda #.DIR_TRACK
 -
 !if .POSTPONED_XFER = 1 {
 			sec					;set by send_block and also set if beq
@@ -1253,6 +1253,8 @@ ___			= $ff
 			ldy <.wanted,x				;grab index from list
 			cpy <.last_block_num			;current block is last block on list?
 			bne .no_caching				;do not cache this sector
+			lda .last_block_size			;/!\ special case, if whole sector is used by file and new file starts on new sector, we will fail with caching
+			beq .no_caching
 			lda <.cache_limit			;is there enough space for caching?
 			cmp #((.cache - .directory) & $fc) - 4
 			bcs .skip				;not enough mem available to accomodate sector
