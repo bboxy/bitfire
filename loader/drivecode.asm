@@ -350,7 +350,12 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .td_cont
+!if .CACHING = 1 {
 			sax <.cache_limit
+} else {
+			nop
+			nop
+}
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			cmp #BITFIRE_REQ_DISC
 			bcc .td_lf
@@ -360,11 +365,10 @@ ___			= $ff
 
 			!byte $50
 .turn_disc_back
-			sty <.blocks_on_list			;clear, as we didn't reach the dec <.blocks_on_list on this code path
+			dec <.blocks_on_list
 			dop
 			!byte $0d
-			nop
-			iny
+			ldy #$00
 			dop
 			!byte $40
 			inc .en_dis_td
@@ -387,9 +391,15 @@ ___			= $ff
 +
 			sta .directory,y
 			bne -
+!if .CACHING = 1 {
 			;XXX TODO check for dirend here
 			lda #$fc
 			bne .check_cache_size
+} else {
+			beq .td_cont
+			nop
+			nop
+}
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
@@ -401,6 +411,16 @@ ___			= $ff
 			bne .td_cont
 			dex
 			bne -					;this would fail if whole dir is filled with zeroes, but this will not happen, right? /o\
+} else {
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
 }
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
@@ -523,14 +543,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.send_sector_data_setup
-			lda #.sendloop - .branch - 2		;redirect branch to sendloop
-			sta .branch + 1				;meh, sta exists twice, but can't be saved
-			lda #$68				;place mnemonic pla in highbyte
-			sta .sendloop
-			ldy <.block_size			;blocksize + 1
-			inx					;x = $0b -> indicate second round, does not hurt the sax
-			bne .sendloop				;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
 
 .start_send_							;entered with c = 0
 !if .POSTPONED_XFER = 1 {
@@ -555,10 +567,19 @@ ___			= $ff
 			dey
 			bne -
 
+			ldx #$0a				;masking value for later sax $1800 and for preamble encoding
 			lda #.preloop - .branch - 2		;be sure branch points to preloop
+			bne +					;carry is set here
+.send_sector_data_setup
+			ldy #$68				;place mnemonic pla in highbyte
+			lda #.sendloop - .branch - 2		;redirect branch to sendloop
+			inx
++
 			sta .branch + 1
 			sty .sendloop
-			ldx #$0a				;masking value for later sax $1800 and for preamble encoding
+			ldy <.block_size			;blocksize + 1
+			bcc .sendloop
+
 			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
 .sendloop = * + 2						;send the data block
@@ -603,9 +624,9 @@ ___			= $ff
 			sta $1800
 
 .branch			bcc .preloop
-
-			cpx #$0a				;keep code here small to not waste much time until busy flag is set after sending
-			beq .send_sector_data_setup
+								;keep code here small to not waste much time until busy flag is set after sending
+			cpx #$0b				;check on second round, clear carry by that
+			bcc .send_sector_data_setup		;second round, send sector data now
 
 			lda #.BUSY				;8 cycles until poll, busy needs to be set asap
 			bit $1800
@@ -632,7 +653,7 @@ ___			= $ff
 			;XXX TODO make this check easier? only done hre?
 			lda <.end_of_file			;EOF
 			bmi .idle				;30/80 30/10
-.en_dis_seek_
+.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #.DIR_TRACK
@@ -778,7 +799,9 @@ ___			= $ff
 			dec .en_dis_td				;enable jump back
 			ldy #$00
 			sty <.is_loaded_sector			;invalidate cached sector, $00 is sufficient here as we either want sector 17 or 18 solely, wanted-check will fail and lead to load next sector
+!if .CACHING = 1 {
 			sty <.is_cached_sector			;invalidate cached sector
+}
 			jmp .turn_disc_entry			;a = sector, x = 0 = index
 +
 			;----------------------------------------------------------------------------------------------------
@@ -1149,6 +1172,7 @@ ___			= $ff
 
 			ldy #$55				;type (sector)
 			lda #$4c
+								;SP = $ff already, no need to set it
 .read_gcr
 -
 			bit $1c00				;wait for start of sync
@@ -1174,13 +1198,12 @@ ___			= $ff
 			ldx #$3e
 			sta <.gcr_end - $3e,x			;setup return jump and waste a cycle
 			asl
-			eor .val58 - $3e,x			;lda #$58 and waste 2 cycles
 			eor $1c01				;read 22333334 - 2 most significant bits should be zero now
+			eor .val58 - $3e,x			;lda #$58 and waste 2 cycles
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
 			bne .retry_no_count			;start over with a new header again as teh check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x		;waste a cycle
-
 			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
 			jmp .gcr_entry				;36 cycles until entry
 .retry_no_count
@@ -1291,8 +1314,8 @@ ___			= $ff
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
 			tax					;save A in X as A is tainted on upcoming eor
-.en_dis_td		eor .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
 
+.en_dis_td		eor .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SET UP SEND LOOP, AND DECIDE BLOCK SIZES FIRST
