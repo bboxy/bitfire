@@ -305,23 +305,20 @@ ___			= $ff
 .tab02200222_lo		= .tables + $00
 
 .preamble_
+			lda .dir_load_addr + 0,y		;fetch load address lowbyte
+			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
+			beq +
+			ldx #$80
+			adc <.first_block_size			;else add first block size as offset, might change carry
++
+			sta <.preamble_data + 1			;block address low
+			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
 			lda .dir_load_addr + 1,y		;add load address highbyte
 			adc <.block_num				;add block num
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sta <.preamble_data + 2			;block address high
 
-!if .POSTPONED_XFER = 1 {
-			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
-			bpl +
-			lda <.end_of_file			;eof?
-			bmi +
-
-			dec .en_dis_seek			;enable jmp, skip send of data for now
-			jmp .en_dis_seek_
-								;XXX TODO do this check once here and not again after send?
-+
-}
-			jmp .start_send
+			jmp .start_send_
 
 .td_lf
 			jmp .load_file_				;dir sector changed, try to load file now
@@ -329,7 +326,6 @@ ___			= $ff
 			tsx
 			stx <.filenum				;filenum will be $ff and autoinced later to be zero
 			jmp .idle
-			nop
 
 	 		* = .tables + $22
 .table_start		;combined tables, gaps filled with junk
@@ -536,7 +532,19 @@ ___			= $ff
 			inx					;x = $0b -> indicate second round, does not hurt the sax
 			bne .sendloop				;could work with dop here (skip pla), but want to prefer data_entry with less cycles on shift over
 
-.start_send							;entered with c = 0
+.start_send_							;entered with c = 0
+!if .POSTPONED_XFER = 1 {
+			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
+			bpl +
+			lda <.end_of_file			;eof?
+			bmi +
+
+			dec .en_dis_seek			;enable jmp, skip send of data for now
+			bne .en_dis_seek_
+								;XXX TODO do this check once here and not again after send?
++
+}
+.start_send
 			ldy #$03 + CONFIG_DECOMP + 1		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 -
 			lax <.preamble_data - 1,y
@@ -615,7 +623,7 @@ ___			= $ff
 
 !if .POSTPONED_XFER = 1 {
 .en_dis_seek		eor .send_back
-			lda <.blocks_on_list			;decrease block count, last block on wishlist?
+			lda <.blocks_on_list			;just read again, was decreased before
 } else {
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
 }
@@ -635,6 +643,7 @@ ___			= $ff
 			isc <.to_track
 			beq -					;skip dirtrack however
 
+			ldy #$00
 			jmp .load_track
 +
 			;XXX TODO, exists twice :-(
@@ -921,7 +930,7 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .seek
-			ldy #$00				;make stepping positive
+			;ldy #$00				;make stepping positive
 			lax <.to_track
 			sec
 			sbc <.track				;how many tracks to go?
@@ -1279,7 +1288,7 @@ ___			= $ff
 }
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
-			tax
+			tax					;save A in X as A is tainted on upcoming eor
 .en_dis_td		eor .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
 
 			;----------------------------------------------------------------------------------------------------
@@ -1370,14 +1379,6 @@ ___			= $ff
 !if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
-			lda .dir_load_addr + 0,y		;fetch load address lowbyte
-			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			beq +
-			ldx #$80
-			adc <.first_block_size			;else add first block size as offset, might change carry
-+
-			sta <.preamble_data + 1			;block address low
-			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
 			;sbc #$00				;subtract one in case of overflow
 			;clc
 			jmp .preamble_
