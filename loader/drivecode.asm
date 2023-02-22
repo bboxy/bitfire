@@ -569,12 +569,9 @@ ___			= $ff
 
 			ldx #$0a				;masking value for later sax $1800 and for preamble encoding
 			lda #.preloop - .branch - 2		;be sure branch points to preloop
-			bne +					;carry is set here
+			top
 .send_sector_data_setup
 			ldy #$68				;place mnemonic pla in highbyte
-			lda #.sendloop - .branch - 2		;redirect branch to sendloop
-			inx
-+
 			sta .branch + 1
 			sty .sendloop
 			ldy <.block_size			;blocksize + 1
@@ -625,10 +622,13 @@ ___			= $ff
 
 .branch			bcc .preloop
 								;keep code here small to not waste much time until busy flag is set after sending
-			cpx #$0b				;check on second round, clear carry by that
+			lda #.sendloop - .branch - 2		;redirect branch to sendloop (A = $d1)
+			inx
+			cpx #$0c				;check on second round, clear carry by that
 			bcc .send_sector_data_setup		;second round, send sector data now
 
-			lda #.BUSY				;8 cycles until poll, busy needs to be set asap
+			;asl					;a == $d1 -> ATNA out is set as busy flag, same as data out, all other bits are on input bits
+			;lda #.BUSY				;8 cycles until poll, busy needs to be set asap
 			bit $1800
 			bmi *-3
 			sta $1800				;signal busy after atn drops
