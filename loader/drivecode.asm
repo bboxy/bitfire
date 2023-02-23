@@ -305,27 +305,39 @@ ___			= $ff
 .tab02200222_lo		= .tables + $00
 
 .preamble_
+			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
+
+			ldy <.dir_entry_num
+
+!if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
+			ldx #$14				;walk through list of sectors to be loaded
+			lda <.index
+.min_loop
+			cmp <.wanted,x				;compare
+			bcc .is_bigger				;bigger index, next please
+			lda <.wanted,x				;smaller (or same, but can't happen, as index is unique) remember new minimum
+			beq .barr_zero
+.is_bigger
+			dex					;next entry
+			bpl .min_loop
+
+			;tay
+			;dey
+			;tya
+								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
+			clc
+			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
+.barr_zero
+}
+			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
+!if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
+			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
+}
+			;sbc #$00				;subtract one in case of overflow
+			;clc
 			lda .dir_load_addr + 0,y		;fetch load address lowbyte
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			beq +
-			ldx #$80
-			adc <.first_block_size			;else add first block size as offset, might change carry
-+
-			sta <.preamble_data + 1			;block address low
-			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
-			lda .dir_load_addr + 1,y		;add load address highbyte
-			adc <.block_num				;add block num
-			;clc					;should never overrun, or we would wrap @ $ffff?
-			sta <.preamble_data + 2			;block address high
-
-			jmp .start_send_
-
-.td_lf
-			jmp .load_file_				;dir sector changed, try to load file now
-.td_idle
-			tsx
-			stx <.filenum				;filenum will be $ff and autoinced later to be zero
-			jmp .idle
+			jmp .preamble__
 
 	 		* = .tables + $22
 .table_start		;combined tables, gaps filled with junk
@@ -357,11 +369,13 @@ ___			= $ff
 			nop
 }
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
-			cmp #BITFIRE_REQ_DISC
-			bcc .td_lf
-			eor .dir_diskside			;compare side info
-			beq .td_idle
-			jmp .turn_disc				;still wrong diskside
+			jmp .td_or_lf
+.preamble__
+			beq +
+			ldx #$80
+			adc <.first_block_size			;else add first block size as offset, might change carry
++
+			jmp .preamble___
 
 			!byte $50
 .turn_disc_back
@@ -543,7 +557,13 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-
+.preamble___
+			sta <.preamble_data + 1			;block address low
+			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
+			lda .dir_load_addr + 1,y		;add load address highbyte
+			adc <.block_num				;add block num
+			;clc					;should never overrun, or we would wrap @ $ffff?
+			sta <.preamble_data + 2			;block address high
 .start_send_							;entered with c = 0
 !if .POSTPONED_XFER = 1 {
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
@@ -677,6 +697,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 .idle
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
+.idle_
 .skip_load
 			lda $1c00				;turn off LED
 !if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
@@ -770,6 +791,7 @@ ___			= $ff
 .drivecode_entry
 			sta <.filenum				;set new filenum
 +
+.td_or_lf
 			cmp #BITFIRE_REQ_DISC			;sets carry if so, used later on on bcs
 			lda #.MOTOR_ON
 			bcs +					;no LED during turn disc
@@ -778,6 +800,7 @@ ___			= $ff
 			ora $1c00				;turn on motor (no matter if already on)
 			sta $1c00
 
+			lax <.filenum				;load filenum
 			bcc +					;load file? turn fisc?
 
 			;----------------------------------------------------------------------------------------------------
@@ -786,6 +809,12 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .turn_disc
+			;XXX TODO many lda <.filenums here, could aggregate maybe and use tax/txa, but be careful, many entry points and sta filenum is maybe skipped
+			eor .dir_diskside			;compare side info
+			bne .turn_disc_
+			sta <.filenum				;filenum will be $ff and autoinced later to be zero
+			beq .idle_
+.turn_disc_
 			ldy #.DIR_SECT				;first dir sector
 ;!if .SANCHECK_HEADER_ID = 1 {
 ;			lda #$90
@@ -802,7 +831,7 @@ ___			= $ff
 !if .CACHING = 1 {
 			sty <.is_cached_sector			;invalidate cached sector
 }
-			jmp .turn_disc_entry			;a = sector, x = 0 = index
+			beq .turn_disc_entry			;a = sector, x = 0 = index
 +
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -811,7 +840,6 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .load_file_
-			lax <.filenum				;load filenum
 			ldy #.DIR_SECT - 1			;second dir sector
 			sbc #$3e				;carry is cleared
 			bcs +					;no underflow, filenum is >= $3f
@@ -1376,36 +1404,6 @@ ___			= $ff
 .preamble							;y = blocksize
 			sty <.block_size
 			iny					;set up num of bytes to be transferred
-			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
-
-			ldy <.dir_entry_num
-
-!if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
-			ldx #$14				;walk through list of sectors to be loaded
-			lda <.index
-.min_loop
-			cmp <.wanted,x				;compare
-			bcc .is_bigger				;bigger index, next please
-			lda <.wanted,x				;smaller (or same, but can't happen, as index is unique) remember new minimum
-			beq .barr_zero
-.is_bigger
-			dex					;next entry
-			bpl .min_loop
-
-			;tay
-			;dey
-			;tya
-								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
-			clc
-			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
-.barr_zero
-}
-			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
-!if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
-			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
-}
-			;sbc #$00				;subtract one in case of overflow
-			;clc
 			jmp .preamble_
 
 .directory
