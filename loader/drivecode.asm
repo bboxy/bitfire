@@ -199,6 +199,7 @@ ___			= $ff
 ;g = gcr slowdown
 
 .read_loop
+.val3e = * + 1
 			ldx #$3e
 			lda $1c01				;22333334
 			sax <.threes + 1
@@ -369,7 +370,7 @@ ___			= $ff
 			nop
 }
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
-			jmp .td_or_lf
+			jmp .drivecode_entry
 .preamble__
 			beq +
 			ldx #$80
@@ -567,15 +568,27 @@ ___			= $ff
 .start_send_							;entered with c = 0
 !if .POSTPONED_XFER = 1 {
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
-			bpl +
+			bpl .start_send
 			lda <.end_of_file			;eof?
-			bmi +
+			bmi .start_send
 
 			dec .en_dis_seek			;enable jmp, skip send of data for now
-			bne .en_dis_seek_
-								;XXX TODO do this check once here and not again after send?
-+
+.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
 }
+			;set stepping speed to $0c, if we loop once, set it to $18
+			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
+			lda #.DIR_TRACK
+-
+!if .POSTPONED_XFER = 1 {
+			sec					;set by send_block and also set if beq
+}
+			isc <.to_track
+			beq -					;skip dirtrack however
+
+			ldy #$00
+.load_track_
+			jmp .load_track
+								;XXX TODO do this check once here and not again after send?
 .start_send
 			ldy #$03 + CONFIG_DECOMP + 1		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 -
@@ -668,27 +681,13 @@ ___			= $ff
 } else {
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
 }
-			bpl +
+			bmi .track_finished
+			;XXX TODO, exists twice :-(
+			jmp .next_sector			;nope, continue loading
 .track_finished
 			;XXX TODO make this check easier? only done hre?
 			lda <.end_of_file			;EOF
-			bmi .idle				;30/80 30/10
-.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
-			;set stepping speed to $0c, if we loop once, set it to $18
-			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
-			lda #.DIR_TRACK
--
-!if .POSTPONED_XFER = 1 {
-			sec					;set by send_block and also set if beq
-}
-			isc <.to_track
-			beq -					;skip dirtrack however
-
-			ldy #$00
-			jmp .load_track
-+
-			;XXX TODO, exists twice :-(
-			jmp .next_sector			;nope, continue loading
+			bpl .en_dis_seek_
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -697,7 +696,9 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 .idle
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
+			top
 .idle_
+			sta <.filenum				;filenum will be $ff and autoinced later to be zero
 .skip_load
 			lda $1c00				;turn off LED
 !if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
@@ -786,22 +787,21 @@ ___			= $ff
 			jmp (.reset_drive)
 +
 			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
-			cmp #BITFIRE_LOAD_NEXT
-			beq +
 .drivecode_entry
+			cmp #BITFIRE_LOAD_NEXT
+			bne +
+			clc
+			top
++
 			sta <.filenum				;set new filenum
+			lda #.MOTOR_ON				;always turn motor on
+			ora $1c00
+			bcs +
+			ora #.LED_ON				;only turn LED on if file is loaded
 +
-.td_or_lf
-			cmp #BITFIRE_REQ_DISC			;sets carry if so, used later on on bcs
-			lda #.MOTOR_ON
-			bcs +					;no LED during turn disc
-			ora #.LED_ON
-+
-			ora $1c00				;turn on motor (no matter if already on)
 			sta $1c00
-
 			lax <.filenum				;load filenum
-			bcc +					;load file? turn fisc?
+			bcc .load_file
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -809,12 +809,8 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .turn_disc
-			;XXX TODO many lda <.filenums here, could aggregate maybe and use tax/txa, but be careful, many entry points and sta filenum is maybe skipped
 			eor .dir_diskside			;compare side info
-			bne .turn_disc_
-			sta <.filenum				;filenum will be $ff and autoinced later to be zero
 			beq .idle_
-.turn_disc_
 			ldy #.DIR_SECT				;first dir sector
 ;!if .SANCHECK_HEADER_ID = 1 {
 ;			lda #$90
@@ -832,14 +828,14 @@ ___			= $ff
 			sty <.is_cached_sector			;invalidate cached sector
 }
 			beq .turn_disc_entry			;a = sector, x = 0 = index
-+
+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; LOAD A FILE
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.load_file_
+.load_file
 			ldy #.DIR_SECT - 1			;second dir sector
 			sbc #$3e				;carry is cleared
 			bcs +					;no underflow, filenum is >= $3f
@@ -1191,7 +1187,16 @@ ___			= $ff
 			bcs .retry_no_count
 }
 			sta <.is_loaded_sector			;gap still not passed by here, so still some code possible here
-
+;			tax
+;			lda <.wanted,x
+;			cmp #$ff
+;			beq .retry_no_count
+;			inx
+;			cpx <.max_sectors
+;			bcs +
+;			cmp <.wanted,x
+;			bcs .retry_no_count
+;+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; HEADER DONE, NOW READ SECTOR DATA
@@ -1223,11 +1228,11 @@ ___			= $ff
 
 			bvc *
 			bne .retry_no_count			;start over with a new header again as check against first bits of headertype already fails
-			ldx #$3e
-			sta <.gcr_end - $3e,x			;setup return jump and waste a cycle
+			sta <.gcr_end				;setup return jump
 			asl
 			eor $1c01				;read 22333334 - 2 most significant bits should be zero now
-			eor .val58 - $3e,x			;lda #$58 and waste 2 cycles
+			ldx <.val3e				;set x to $3e and waste a cycle
+			eor <.val58 - $3e,x			;lda #$58 and waste 2 cycles
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
 			bne .retry_no_count			;start over with a new header again as teh check for header type failed in all bits
