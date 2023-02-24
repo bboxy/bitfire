@@ -96,10 +96,10 @@
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
+.filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
 !if .POSTPONED_XFER = 1 {
-.tempx			= .zp_start + $18
+.tempx			= .zp_start + $19
 }
-.filenum		= .zp_start + $19
 !if .LOAD_IN_ORDER = 1 {
 .desired_sect		= .zp_start + $20
 }
@@ -569,7 +569,7 @@ ___			= $ff
 !if .POSTPONED_XFER = 1 {
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
 			bpl .start_send
-			lda <.end_of_file			;eof?
+			bit <.end_of_file			;eof?
 			bmi .start_send
 
 			dec .en_dis_seek			;enable jmp, skip send of data for now
@@ -685,18 +685,18 @@ ___			= $ff
 			;XXX TODO, exists twice :-(
 			jmp .next_sector			;nope, continue loading
 .track_finished
-			;XXX TODO make this check easier? only done hre?
-			lda <.end_of_file			;EOF
+			;XXX TODO make this check easier? only done here?
+			bit <.end_of_file			;EOF
 			bpl .en_dis_seek_
+
+			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
+			top
 
 			;----------------------------------------------------------------------------------------------------
 			;
 			; ENTRY POINT OF IDLE LOOP
 			;
 			;----------------------------------------------------------------------------------------------------
-.idle
-			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
-			top
 .idle_
 			sta <.filenum				;filenum will be $ff and autoinced later to be zero
 .skip_load
@@ -716,7 +716,6 @@ ___			= $ff
 			; RECEIVE/WAIT FOR A BYTE FROM HOST
 			;
 			;----------------------------------------------------------------------------------------------------
-
 .get_byte
 			ldy #$80
 			sty $1800
@@ -767,12 +766,6 @@ ___			= $ff
 }
 			lda <.filename
 
-;!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-;			ldy #$00
-;			sty $1c05
-;			ldy $1c0d
-;}
-
 			;----------------------------------------------------------------------------------------------------
 			;
 			; LOAD FILE / EXECUTE COMMAND, $00..$7f, $ef, $f0..$fe, $ff
@@ -780,19 +773,12 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			;load file, file number is in A
-;			cmp #BITFIRE_RESET
-;			bne *+5
-			bne +					;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
-			jmp (.reset_drive)
-+
+			beq .reset				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
 			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
 .drivecode_entry
-			cmp #BITFIRE_LOAD_NEXT
-			bne +
-			clc
-			top
-+
+			cmp #BITFIRE_LOAD_NEXT			;carry clear = load normal file, carry set = request disk
+			beq .clc				;clear carry and skip sta <.filenum by that, filenum = $18 == clc
+.clc = * + 1
 			sta <.filenum				;set new filenum
 			lda #.MOTOR_ON				;always turn motor on
 			ora $1c00
@@ -827,14 +813,14 @@ ___			= $ff
 !if .CACHING = 1 {
 			sty <.is_cached_sector			;invalidate cached sector
 }
-			beq .turn_disc_entry			;a = sector, x = 0 = index
+			beq .turn_disc_entry			;BRA a = sector, x = 0 = index
+.reset			jmp (.reset_drive)
 
 			;----------------------------------------------------------------------------------------------------
 			;
 			; LOAD A FILE
 			;
 			;----------------------------------------------------------------------------------------------------
-
 .load_file
 			ldy #.DIR_SECT - 1			;second dir sector
 			sbc #$3e				;carry is cleared
