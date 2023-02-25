@@ -108,9 +108,10 @@
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
+.val07ff		= .zp_start + $57			;07 or $ff
 .to_track		= .zp_start + $58			;DT
 .sector			= .zp_start + $59			;DS
-.filename		= .zp_start + $5a
+.valff			= .zp_start + $5a
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
 .block_size		= .zp_start + $68
@@ -120,6 +121,8 @@
 }
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
+.val58			= .zp_start + $70
+.filename		= .zp_start + $71
 ;!if .SANCHECK_HEADER_ID = 1 {
 ;.current_id1		= .zp_start + $70
 ;.current_id2		= .zp_start + $71
@@ -127,7 +130,7 @@
 .last_block_num		= .zp_start + $72
 .last_block_size	= .zp_start + $74
 .first_block_pos	= .zp_start + $76
-.val58			= .zp_start + $78
+.val0c4c		= .zp_start + $75			;and $78!
 .block_num		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
@@ -170,9 +173,9 @@ ___			= $ff
                         !byte ___, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
-                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, .DT, ___, ___, $0a, ___, $0b, ___, $03	;50
+                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, .DT, ___, $ff, $0a, ___, $0b, ___, $03	;50
                         !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
-                        !byte ___, ___, ___, $06, ___, $0c, ___, $04, $58, ___, ___, $02, ___, $08		;70
+                        !byte $58, ___, ___, $06, ___, $0c, ___, $04, $4c, ___, ___, $02, ___, $08		;70
 
 
 			;XXX TODO, move PA to $68, need to fix table afterwards by setting $00? but could the do lda $68,y? but still not possible with 8 bit addressing, but would make setup easier
@@ -271,15 +274,14 @@ ___			= $ff
 			bvs .read_loop
 
 .next_sector
-			ldx #$07				;bytes to fetch
-			txs
 			ldy #$52				;type (header)
-			lda #$0c
 			jmp .read_gcr
 
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .back_read_sector
+			eor $0103				;header id2
+			eor <.chksum + 1
 			jmp .back_read_header
 
 .slow_table
@@ -567,6 +569,7 @@ ___			= $ff
 			sta <.preamble_data + 2			;block address high
 .start_send_							;entered with c = 0
 !if .POSTPONED_XFER = 1 {
+			ldy <.blocks_on_list
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
 			bpl .start_send
 			bit <.end_of_file			;eof?
@@ -585,8 +588,6 @@ ___			= $ff
 			isc <.to_track
 			beq -					;skip dirtrack however
 
-			ldy #$00
-.load_track_
 			jmp .load_track
 								;XXX TODO do this check once here and not again after send?
 .start_send
@@ -608,7 +609,7 @@ ___			= $ff
 			sta .branch + 1
 			sty .sendloop
 			ldy <.block_size			;blocksize + 1
-			bcc .sendloop
+			bcc .sendloop				;send data or preamble?
 
 			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
@@ -1104,10 +1105,6 @@ ___			= $ff
 								;just track is full
 			sta <.sector				;start next track with sector = 0
 .load_wanted_blocks						;read and transfer all blocks on wishlist
-			;lda #$30
-			;ror
-			;lsr
-			;sta .eof				;-> $4c / $0c
 			ror <.end_of_file			;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
 
 			;----------------------------------------------------------------------------------------------------
@@ -1125,42 +1122,14 @@ ___			= $ff
 			eor $0101				;second $0f
 			eor $0102				;third $0f
 }
-			eor $0103				;header id2
-;!if .SANCHECK_HEADER_ID = 1 {
-;			tay					;$0103
-;}
-			eor <.chksum + 1
 			bne .retry_no_count			;header checksum check failed? reread
-;!if .SANCHECK_HEADER_ID = 1 {
-;			ldx #$03
-;} else {
-;}
-;!if .SANCHECK_HEADER_ID = 1 {
-;			pla					;header_id1
-;.en_set_id		bcs .no_set_id				;will be changed to bcc/bcs to allow/skip id check, carry is always set due to preceeding cmp
-;			sty <.current_id2
-;			sta <.current_id1			;fall through is no problem, tests will succeed
-;			lda #$b0
-;			sta .en_set_id
-;			bne +
-;.no_set_id
-;			cpy <.current_id2
-;			bne .retry_no_count
-;			cmp <.current_id1
-;			bne .retry_no_count
-;+
-;}
 			lda $0105
 			;XXX TODO is there any way of decoding 2 bytes in a loop in a smaller way?
 !if .SANCHECK_TRACK = 1 {
-;	!if .SANCHECK_HEADER_ID = 1  {
-;			eor <.track_frob			;needs to be precalced, else we run out of time
-;	} else {
 			ldx #$09
 			sbx #$00
 			eor <.ser2bin,x
 			eor <.track
-;	}
 			bne .retry_no_count
 }
 			;XXX TODO, can only be $1x or 0x
@@ -1190,9 +1159,12 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 			ldy #$55				;type (sector)
-			lda #$4c
+			;lda #$4c
 								;SP = $ff already, no need to set it
 .read_gcr
+			lax <.val0c4c - $52,y
+			ldx <.val07ff - $52,y
+			txs
 -
 			bit $1c00				;wait for start of sync
 			bpl -
