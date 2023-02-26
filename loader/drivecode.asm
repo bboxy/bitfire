@@ -49,7 +49,6 @@
 .FORCE_LAST_BLOCK	= 1   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
 .DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
 .SANCHECK_HEADER_0F	= 0   ;does never trigger
-;.SANCHECK_HEADER_ID	= 0   ;does never trigger
 .SANCHECK_TRAILING_ZERO = 1   ;check for trailing zeroes after checksum byte
 .SANCHECK_TRACK		= 1   ;check if on right track after header is read
 .SANCHECK_SECTOR	= 0   ;does never trigger - check if sector # is within range
@@ -113,7 +112,7 @@
 .sector			= .zp_start + $59			;DS
 .valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
-.track_frob		= .zp_start + $66
+;free			= .zp_start + $66
 .block_size		= .zp_start + $68
 !if .CACHING = 1 {
 .cache_limit		= .zp_start + $69
@@ -123,10 +122,6 @@
 .first_block_size	= .zp_start + $6e
 .val58			= .zp_start + $70
 .filename		= .zp_start + $71
-;!if .SANCHECK_HEADER_ID = 1 {
-;.current_id1		= .zp_start + $70
-;.current_id2		= .zp_start + $71
-;}
 .last_block_num		= .zp_start + $72
 .last_block_size	= .zp_start + $74
 .val0c4c		= .zp_start + $75			;and $78!
@@ -279,9 +274,9 @@ ___			= $ff
 
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
-			jmp .back_read_sector
+			eor $0103				;do remaining checksum, yet same for header or sector
 			eor <.chksum + 1
-			eor $0103				;header id2
+.gcr_h_or_s		jmp .back_read_sector			;will either happen or disabled for fall through
 			bne -					;header checksum check failed? reread
 			jmp .back_read_header
 
@@ -568,9 +563,8 @@ ___			= $ff
 			adc <.block_num				;add block num
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sta <.preamble_data + 2			;block address high
-.start_send_							;entered with c = 0
 !if .POSTPONED_XFER = 1 {
-			ldy <.blocks_on_list
+			;ldy <.blocks_on_list
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
 			bpl .start_send
 			bit <.end_of_file			;eof?
@@ -589,6 +583,7 @@ ___			= $ff
 			isc <.to_track
 			beq -					;skip dirtrack however
 
+			ldy #$00
 			jmp .load_track
 								;XXX TODO do this check once here and not again after send?
 .start_send
@@ -800,10 +795,6 @@ ___			= $ff
 			eor .dir_diskside			;compare side info
 			beq .idle_
 			ldy #.DIR_SECT				;first dir sector
-;!if .SANCHECK_HEADER_ID = 1 {
-;			lda #$90
-;			sta .en_set_id				;disable id-check, as new disc side can mean, new id
-;}
 .load_dir_sect
 			ldx #.DIR_TRACK				;set target track to 18
 			stx <.to_track
@@ -1029,14 +1020,6 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .set_bitrate
-;!if .SANCHECK_TRACK = 1  & .SANCHECK_HEADER_ID = 1 {
-;			tya
-;			ldx #$09
-;			sbx #$00
-;			eor <.ser2bin,x
-;			sta <.track_frob			;needs to be precacled here
-;			ldx #$ff
-;}
 .set_max_sectors
 			lda #16
 			cpy #25
@@ -1107,23 +1090,19 @@ ___			= $ff
 			sta <.sector				;start next track with sector = 0
 .load_wanted_blocks						;read and transfer all blocks on wishlist
 			ror <.end_of_file			;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
-
-			;----------------------------------------------------------------------------------------------------
-			;
-			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT
-			;
-			;----------------------------------------------------------------------------------------------------
-
 			jmp .new_or_cached_sector
 
-.back_read_sector
-			;7 cycles need to pass
+			;----------------------------------------------------------------------------------------------------
+			;
+			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT (HEADER ALREADY ON STACK)
+			;
+			;----------------------------------------------------------------------------------------------------
 
-			;lda $0100
+.back_read_sector
+			ldx $1c01				;44445555
 			eor $0101
 			sta <.chksum2 + 1			;checksum 2 bytes from last round
-
-			lax $1c01				;44445555
+			txa
 
 			arr #$f0
 			tay					;44444---
@@ -1144,10 +1123,8 @@ ___			= $ff
 }
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
-			ora .tab44444000_lo,y
-			eor $0103
+			eor .tab44444000_lo,y
 			eor <.chksum2 + 1
-			eor <.chksum + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
 			bne .next_sector_			;checksum okay? Nope, take two hops to get to the beginning of code again
 
 .new_or_cached_sector
@@ -1294,39 +1271,13 @@ ___			= $ff
 			eor $0102				;third $0f
 			beq .next_sector
 }
-;!if .SANCHECK_HEADER_ID = 1 {
-;			tay					;$0103
-;}
-;!if .SANCHECK_HEADER_ID = 1 {
-;			ldx #$03
-;} else {
-;}
-;!if .SANCHECK_HEADER_ID = 1 {
-;			pla					;header_id1
-;.en_set_id		bcs .no_set_id				;will be changed to bcc/bcs to allow/skip id check, carry is always set due to preceeding cmp
-;			sty <.current_id2
-;			sta <.current_id1			;fall through is no problem, tests will succeed
-;			lda #$b0
-;			sta .en_set_id
-;			bne +
-;.no_set_id
-;			cpy <.current_id2
-;			bne .next_sector
-;			cmp <.current_id1
-;			bne .next_sector
-;+
-;}
 			lda $0105
 			;XXX TODO is there any way of decoding 2 bytes in a loop in a smaller way?
 !if .SANCHECK_TRACK = 1 {
-;	!if .SANCHECK_HEADER_ID = 1  {
-;			eor <.track_frob			;needs to be precalced, else we run out of time
-;	} else {
 			ldx #$09
 			sbx #$00
 			eor <.ser2bin,x
 			eor <.track
-;	}
 			bne .next_sector
 }
 			;XXX TODO, can only be $1x or 0x
@@ -1360,8 +1311,8 @@ ___			= $ff
 .next_sector
 			ldy #$52				;type (header)
 .read_gcr
-			lax <.val0c4c - $52,y
-			ldx <.val07ff - $52,y
+			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
+			ldx <.val07ff - $52,y			;setup X ($07/$ff), setting up X with $ff isn ot needed however, but shorter this way
 			txs
 -
 			bit $1c00				;wait for start of sync
@@ -1384,7 +1335,7 @@ ___			= $ff
 
 			bvc *
 			bne .next_sector			;start over with a new header again as check against first bits of headertype already fails
-			sta <.gcr_end				;setup return jump
+			sta <.gcr_h_or_s			;setup return jump
 			asl
 			eor $1c01				;read 22333334 - 2 most significant bits should be zero now
 			ldx <.val3e				;set x to $3e and waste a cycle
