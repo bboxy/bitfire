@@ -108,10 +108,10 @@
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
-.val07ff		= .zp_start + $57			;07 or $ff
+.val07ff		= .zp_start + $57			;and $7a!
 .to_track		= .zp_start + $58			;DT
 .sector			= .zp_start + $59			;DS
-.valff			= .zp_start + $5a
+.valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
 .track_frob		= .zp_start + $66
 .block_size		= .zp_start + $68
@@ -129,8 +129,8 @@
 ;}
 .last_block_num		= .zp_start + $72
 .last_block_size	= .zp_start + $74
-.first_block_pos	= .zp_start + $76
 .val0c4c		= .zp_start + $75			;and $78!
+.first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
 .end_of_file		= .zp_start + $7c
@@ -273,15 +273,16 @@ ___			= $ff
 			bvs .read_loop
 			bvs .read_loop
 
-.next_sector
-			ldy #$52				;type (header)
-			jmp .read_gcr
+			;XXX TODO do load of x also via table val07ff and move all to normal page, move more other stuff here therefore
+-
+			jmp .next_sector
 
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			jmp .back_read_sector
-			eor $0103				;header id2
 			eor <.chksum + 1
+			eor $0103				;header id2
+			bne -					;header checksum check failed? reread
 			jmp .back_read_header
 
 .slow_table
@@ -1115,90 +1116,6 @@ ___			= $ff
 
 			jmp .new_or_cached_sector
 
-.back_read_header
-								;XXX TODO could call stuff via jsr here, as stack is only filled with 8 bytes
-								;first $0f is still in A
-!if .SANCHECK_HEADER_0F = 1 {
-			eor $0101				;second $0f
-			eor $0102				;third $0f
-}
-			bne .retry_no_count			;header checksum check failed? reread
-			lda $0105
-			;XXX TODO is there any way of decoding 2 bytes in a loop in a smaller way?
-!if .SANCHECK_TRACK = 1 {
-			ldx #$09
-			sbx #$00
-			eor <.ser2bin,x
-			eor <.track
-			bne .retry_no_count
-}
-			;XXX TODO, can only be $1x or 0x
-			lda $0106
-			ldx #$09
-			sbx #$00
-			eor <.ser2bin,x
-!if .SANCHECK_SECTOR = 1 {
-			cmp <.max_sectors
-			bcs .retry_no_count
-}
-			sta <.is_loaded_sector			;gap still not passed by here, so still some code possible here
-;			tax
-;			lda <.wanted,x
-;			cmp #$ff
-;			beq .retry_no_count
-;			inx
-;			cpx <.max_sectors
-;			bcs +
-;			cmp <.wanted,x
-;			bcs .retry_no_count
-;+
-			;----------------------------------------------------------------------------------------------------
-			;
-			; HEADER DONE, NOW READ SECTOR DATA
-			;
-			;----------------------------------------------------------------------------------------------------
-
-			ldy #$55				;type (sector)
-			;lda #$4c
-								;SP = $ff already, no need to set it
-.read_gcr
-			lax <.val0c4c - $52,y
-			ldx <.val07ff - $52,y
-			txs
--
-			bit $1c00				;wait for start of sync
-			bpl -
--
-			bit $1c00				;wait for end of sync
-			bmi -
-
-			bit $1c01				;sync mark -> $ff
-			clv
-
-			bvc *
-
-			clv
-			cpy $1c01				;11111222
-			;lsr
-			;ror
-			;lsr
-			;eor #$06
-
-			bvc *
-			bne .retry_no_count			;start over with a new header again as check against first bits of headertype already fails
-			sta <.gcr_end				;setup return jump
-			asl
-			eor $1c01				;read 22333334 - 2 most significant bits should be zero now
-			ldx <.val3e				;set x to $3e and waste a cycle
-			eor <.val58 - $3e,x			;lda #$58 and waste 2 cycles
-			sax <.threes + 1
-			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
-			bne .retry_no_count			;start over with a new header again as teh check for header type failed in all bits
-			sta <.chksum + 1 - $3e,x		;waste a cycle
-			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
-			jmp .gcr_entry				;36 cycles until entry
-.retry_no_count
-			jmp .next_sector
 .back_read_sector
 			;7 cycles need to pass
 
@@ -1214,16 +1131,16 @@ ___			= $ff
 !if .SANCHECK_TRAILING_ZERO = 1 {
 			lda #$0f
 			sbx #.CHECKSUM_CONST1			;4 bits of a trailing zero after checksum
-			bne .retry_no_count			;check remaining nibble if it is $05
+			bne .next_sector_			;check remaining nibble if it is $05
 ;			ldx $1c01
 ;			clv					;after arr, as it influences v-flag
 ;			bvc *
 ;			cpx #.CHECKSUM_CONST2			;0 01010 01 - more traiing zeroes
-;			bne .retry_no_count
+;			bne .next_sector
 ;			lda $1c01
 ;			and #$e0
 ;			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
-;			bne .retry_no_count
+;			bne .next_sector
 }
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
@@ -1231,20 +1148,20 @@ ___			= $ff
 			eor $0103
 			eor <.chksum2 + 1
 			eor <.chksum + 1			;XXX TODO annoying that last bytes nned to be checksummed here :-(
-			bne .retry_no_count			;checksum okay? Nope, take two hops to get to the beginning of code again
+			bne .next_sector_			;checksum okay? Nope, take two hops to get to the beginning of code again
 
 .new_or_cached_sector
 !if .CACHING = 0 {
 			ldx <.is_loaded_sector
-			bmi .retry_no_count
+			bmi .next_sector
 			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
 			cmp #$ff
-			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
+			beq .next_sector			;if block index is $ff, we reread, as block is not wanted then
 	!if .FORCE_LAST_BLOCK = 1 {
 			cmp <.last_block_num			;current block is last block on list?
 			bne +					;nope continue
 			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-			bne .retry_no_count			;reread
+			bne .next_sector			;reread
 +
 	}
 } else {
@@ -1263,7 +1180,7 @@ ___			= $ff
 			bne -
 +
 			ldx <.is_loaded_sector			;initially $ff
-			bmi .retry_no_count			;initial call on a new track? Load content first
+			bmi .next_sector			;initial call on a new track? Load content first
 			ldy <.wanted,x				;grab index from list
 			cpy <.last_block_num			;current block is last block on list?
 			bne .no_caching				;do not cache this sector
@@ -1284,14 +1201,14 @@ ___			= $ff
 			top					;skips last block check, as bne will fall through after skipping lda (flags are preserved)
 .skip
 			lda <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-			bne .retry_no_count			;reread and force last block to be read last
+.next_sector_		bne .next_sector			;reread and force last block to be read last
 	} else {
 .skip
 	}
 .no_caching
 			tya					;Y is still wanted,x
 			iny
-			beq .retry_no_count			;if block index is $ff, we reread, as block is not wanted then
+			beq .next_sector			;if block index is $ff, we reread, as block is not wanted then
 			ldx <.is_loaded_sector
 }
 !if .LOAD_IN_ORDER = 1 {
@@ -1299,7 +1216,7 @@ ___			= $ff
 			cpy #.LOAD_IN_ORDER_LIMIT
 			bcs +
 			cmp <.desired_sect
-			bne .retry_no_count
+			bne .next_sector
 +
 }
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
@@ -1369,6 +1286,115 @@ ___			= $ff
 			iny					;set up num of bytes to be transferred
 			jmp .preamble_
 
+.back_read_header
+								;XXX TODO could call stuff via jsr here, as stack is only filled with 8 bytes
+								;first $0f is still in A
+!if .SANCHECK_HEADER_0F = 1 {
+			eor $0101				;second $0f
+			eor $0102				;third $0f
+			beq .next_sector
+}
+;!if .SANCHECK_HEADER_ID = 1 {
+;			tay					;$0103
+;}
+;!if .SANCHECK_HEADER_ID = 1 {
+;			ldx #$03
+;} else {
+;}
+;!if .SANCHECK_HEADER_ID = 1 {
+;			pla					;header_id1
+;.en_set_id		bcs .no_set_id				;will be changed to bcc/bcs to allow/skip id check, carry is always set due to preceeding cmp
+;			sty <.current_id2
+;			sta <.current_id1			;fall through is no problem, tests will succeed
+;			lda #$b0
+;			sta .en_set_id
+;			bne +
+;.no_set_id
+;			cpy <.current_id2
+;			bne .next_sector
+;			cmp <.current_id1
+;			bne .next_sector
+;+
+;}
+			lda $0105
+			;XXX TODO is there any way of decoding 2 bytes in a loop in a smaller way?
+!if .SANCHECK_TRACK = 1 {
+;	!if .SANCHECK_HEADER_ID = 1  {
+;			eor <.track_frob			;needs to be precalced, else we run out of time
+;	} else {
+			ldx #$09
+			sbx #$00
+			eor <.ser2bin,x
+			eor <.track
+;	}
+			bne .next_sector
+}
+			;XXX TODO, can only be $1x or 0x
+			lda $0106
+			ldx #$09
+			sbx #$00
+			eor <.ser2bin,x
+!if .SANCHECK_SECTOR = 1 {
+			cmp <.max_sectors
+			bcs .next_sector
+}
+			sta <.is_loaded_sector			;gap still not passed by here, so still some code possible here
+;			tax
+;			lda <.wanted,x
+;			cmp #$ff
+;			beq .next_sector
+;			inx
+;			cpx <.max_sectors
+;			bcs +
+;			cmp <.wanted,x
+;			bcs .next_sector
+;+
+			;----------------------------------------------------------------------------------------------------
+			;
+			; HEADER DONE, NOW READ SECTOR DATA
+			;
+			;----------------------------------------------------------------------------------------------------
+
+			ldy #$55				;type (sector)
+			top
+.next_sector
+			ldy #$52				;type (header)
+.read_gcr
+			lax <.val0c4c - $52,y
+			ldx <.val07ff - $52,y
+			txs
+-
+			bit $1c00				;wait for start of sync
+			bpl -
+-
+			bit $1c00				;wait for end of sync
+			bmi -
+
+			bit $1c01				;sync mark -> $ff
+			clv
+
+			bvc *
+
+			clv
+			cpy $1c01				;11111222
+			;lsr
+			;ror
+			;lsr
+			;eor #$06
+
+			bvc *
+			bne .next_sector			;start over with a new header again as check against first bits of headertype already fails
+			sta <.gcr_end				;setup return jump
+			asl
+			eor $1c01				;read 22333334 - 2 most significant bits should be zero now
+			ldx <.val3e				;set x to $3e and waste a cycle
+			eor <.val58 - $3e,x			;lda #$58 and waste 2 cycles
+			sax <.threes + 1
+			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
+			bne .next_sector			;start over with a new header again as teh check for header type failed in all bits
+			sta <.chksum + 1 - $3e,x		;waste a cycle
+			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
+			jmp .gcr_entry				;36 cycles until entry
 .directory
 
 !ifdef .second_pass {
