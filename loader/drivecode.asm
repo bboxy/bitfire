@@ -43,7 +43,7 @@
 ;config params
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .CACHING		= 1   ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1   ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 1   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
@@ -525,22 +525,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-!if .POSTPONED_XFER = 1 {
-.postpone
-			dec .en_dis_seek			;enable jmp, skip send of data for now
-}
-.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
-			;set stepping speed to $0c, if we loop once, set it to $18
-			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
-			lda #.DIR_TRACK
--
-;!if .POSTPONED_XFER = 1 {
-			sec					;set by send_block and also set if beq
-;}
-			isc <.to_track
-			beq -					;skip dirtrack however
-
-			jmp .load_track
 .preamble___
 			adc <.block_num				;add block num
 			;clc					;should never overrun, or we would wrap @ $ffff?
@@ -651,7 +635,22 @@ ___			= $ff
 			bmi .track_finished
 			;XXX TODO, exists twice, and so expensive, as a branch would suffice :-(
 			jmp .next_sector			;nope, continue loading
+!if .POSTPONED_XFER = 1 {
+.postpone
+			dec .en_dis_seek			;enable jmp, skip send of data for now
+}
+.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
+			;set stepping speed to $0c, if we loop once, set it to $18
+			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
+			lda #.DIR_TRACK
+-
+;!if .POSTPONED_XFER = 1 {
+			sec					;set by send_block and also set if beq
+;}
+			isc <.to_track
+			beq -					;skip dirtrack however
 
+			jmp .load_track
 .track_finished
 			;XXX TODO make this check easier? only done here?
 			bit <.end_of_file			;EOF
@@ -957,20 +956,20 @@ ___			= $ff
 			eor $1c00
 			sec
 			rol
-			and #3
+			anc #3					;also clc for free
 			eor $1c00
 			sta $1c00
 
+			;XXX TODO postpone after second halfstep, then while waiting
 !if .POSTPONED_XFER = 1 {
-			lda .en_dis_seek			;$4c/$4d
-			lsr
-			bcs .seek_end				;nope, continue
+			txa
+			adc .en_dis_seek			;$4c/$4d
+			eor #$4c
+			bne .seek_end				;nope, continue
 
-			stx <.tempx				;save x
 			jmp .start_send				;send data now
 .send_back
-			ldx <.tempx
-			iny					;continue with seek up (Y = 0)
+			ldx #$00
 			inc .en_dis_seek			;disable_jmp
 .seek_end
 }
