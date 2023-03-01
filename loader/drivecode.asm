@@ -43,7 +43,7 @@
 ;config params
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .CACHING		= 1   ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1   ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 1   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
@@ -72,7 +72,6 @@
 .drivecode		= $0000
 .bootstrap		= $0700
 .cache			= $0700
-.tables			= $0200
 
 			;XXX TODO allocate this dynamically at end of code and before tables? but bootstrap needs to be in stack then and page needs to be skipped upon upload?
 .dir_load_addr		= .directory + 4
@@ -290,7 +289,10 @@ ___			= $ff
 
 !if >*-1 != >.read_loop { !error "read_sector not in one page: ", .read_loop, " - ", * }
 
-			* = .tables
+!align 255,0
+!fill 256,0
+!align 255,0
+.tables
 
 ;tables with possible offsets
 .tab11111000_hi		= .tables + $00
@@ -301,7 +303,7 @@ ___			= $ff
 .tab02200222_lo		= .tables + $00
 
 .preamble_
-			txs					;set up position in stack, from where we transfer data
+			sty <.block_size
 			iny					;set up num of bytes to be transferred
 			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
 
@@ -313,6 +315,7 @@ ___			= $ff
 .min_loop
 			cmp <.wanted,x				;compare
 			bcc .is_bigger				;bigger index, next please
+			clc
 			lda <.wanted,x				;smaller (or same, but can't happen, as index is unique) remember new minimum
 			beq .barr_zero
 .is_bigger
@@ -323,7 +326,6 @@ ___			= $ff
 			;dey
 			;tya
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
-			clc
 			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
@@ -331,7 +333,6 @@ ___			= $ff
 			;sbc #$00				;subtract one in case of overflow
 			;clc
 			lda .dir_load_addr + 0,y		;fetch load address lowbyte
-			sec
 			jmp .preamble__
 
 	 		* = .tables + $22
@@ -366,51 +367,43 @@ ___			= $ff
 			dey
 			sta .directory,y
 			bne -
-			tsx
-;-
-;			tsx
-;			pla
-;			cmp #.EOR_VAL
-;			bne -
-;			lda #$fc
-;			sax <.cache_limit
-
+			nop
 			dop
 			!byte $50
-			stx <.blocks_on_list
+			dec <.blocks_on_list
 			dop
 			!byte $0d
-			lda #$fc
+			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			dop
 			!byte $40
 			inc .en_dis_td
 			!byte $05				;ora $0b, does not harm, it is a ora $00
 			!byte $0b
 			;XXX TODO would also work with dey, needs tya on and + ldx #$fc, would save tsx and end up the same way
+			jmp .drivecode_entry
 -
-			dex
-			ldy .directory + 1,x
-			beq -					;this would fail if whole dir is filled with zeroes, but this will not happen, right? /o\
-			sax <.cache_limit
-			bne +
+			lda .dir_load_addr + 1,y		;add load address highbyte
+			jmp .preamble___
+			nop
 
                         !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
                         !byte $10, $47, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
-+
-			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
-			jmp .drivecode_entry
+
 .preamble__
+			sec
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			bcs +
+			beq ++
+			ldx #$80
+			bmi +
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 +
-			beq +
-			ldx #$80
 			adc <.first_block_size			;else add first block size as offset, might change carry
-+
-			jmp .preamble___
+++
+			sta <.preamble_data + 1			;block address low
+			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
+			jmp -
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
                         !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
@@ -531,10 +524,24 @@ ___			= $ff
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
+
+!if .POSTPONED_XFER = 1 {
+.postpone
+			dec .en_dis_seek			;enable jmp, skip send of data for now
+}
+.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
+			;set stepping speed to $0c, if we loop once, set it to $18
+			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
+			lda #.DIR_TRACK
+-
+;!if .POSTPONED_XFER = 1 {
+			sec					;set by send_block and also set if beq
+;}
+			isc <.to_track
+			beq -					;skip dirtrack however
+
+			jmp .load_track
 .preamble___
-			sta <.preamble_data + 1			;block address low
-			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
-			lda .dir_load_addr + 1,y		;add load address highbyte
 			adc <.block_num				;add block num
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			sta <.preamble_data + 2			;block address high
@@ -543,23 +550,8 @@ ___			= $ff
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
 			bpl .start_send
 			bit <.end_of_file			;eof?
-			bmi .start_send
-
-			dec .en_dis_seek			;enable jmp, skip send of data for now
-.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
+			bpl .postpone
 }
-			;set stepping speed to $0c, if we loop once, set it to $18
-			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
-			lda #.DIR_TRACK
--
-!if .POSTPONED_XFER = 1 {
-			sec					;set by send_block and also set if beq
-}
-			isc <.to_track
-			beq -					;skip dirtrack however
-
-			ldy #$00
-			jmp .load_track
 .start_send
 			ldy #$03 + CONFIG_DECOMP + 1		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 -
@@ -783,7 +775,7 @@ ___			= $ff
 			sta <.dir_sector
 			dec .en_dis_td				;enable jump back
 			ldy #$00
-			sty <.is_loaded_sector			;invalidate cached sector, $00 is sufficient here as we either want sector 17 or 18 solely, wanted-check will fail and lead to load next sector
+			;sty <.is_loaded_sector			;invalidate cached sector, $00 is sufficient here as we either want sector 17 or 18 solely, wanted-check will fail and lead to load next sector
 !if .CACHING = 1 {
 			sty <.is_cached_sector			;invalidate cached sector
 }
@@ -937,7 +929,7 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .seek
-			;ldy #$00				;make stepping positive
+			ldy #$00				;make stepping positive
 			lax <.to_track
 			sec
 			sbc <.track				;how many tracks to go?
@@ -984,7 +976,7 @@ ___			= $ff
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
 			bpl *-3
-			sta <.is_loaded_sector			;invalidate sector cache, as we changed track, negative value is okay for that
+			;sta <.is_loaded_sector			;invalidate sector cache, as we changed track, negative value is okay for that
 !if .CACHING = 1 {
 			sta <.is_cached_sector
 }
@@ -1087,10 +1079,10 @@ ___			= $ff
 	}
 } else {
 			ldx <.is_cached_sector
-			bmi +					;nothing cached yet
+			bmi .next_sector			;nothing cached yet
 			ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
 			iny					;is it part of our yet loaded file?
-			beq +					;something went wrong, seems like we loaded another file
+			beq .next_sector			;something went wrong, seems like we loaded another file
 .restore
 			stx <.is_loaded_sector
 -
@@ -1099,7 +1091,7 @@ ___			= $ff
 			pha
 			txa
 			bne -
-+
+.new_sector
 			ldx <.is_loaded_sector			;initially $ff
 			bmi .next_sector			;initial call on a new track? Load content first
 			ldy <.wanted,x				;grab index from list
@@ -1107,9 +1099,9 @@ ___			= $ff
 			bne .no_caching				;do not cache this sector
 			lda .last_block_size			;/!\ special case, if whole sector is used by file and new file starts on new sector, we will fail with caching
 			beq .no_caching
-			lda <.cache_limit			;is there enough space for caching?
-			cmp #((.cache - .directory) & $fc) - 4
-			bcs .skip				;not enough mem available to accomodate sector
+;			lda <.cache_limit			;is there enough space for caching?
+;			cmp #((.cache - .directory) & $fc) - 4
+;			bcs .skip				;not enough mem available to accomodate sector
 .stow
 			stx <.is_cached_sector
 -
@@ -1118,14 +1110,14 @@ ___			= $ff
 			sta .cache,x
 			inx
 			bne -
-	!if .FORCE_LAST_BLOCK = 1 {
-			top					;skips last block check, as bne will fall through after skipping lda (flags are preserved)
+;	!if .FORCE_LAST_BLOCK = 1 {
+;			top					;skips last block check, as bne will fall through after skipping lda (flags are preserved)
+;.skip
+;			lda <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
+;			bne .next_sector			;reread and force last block to be read last
+;	} else {
 .skip
-			lda <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-			bne .next_sector			;reread and force last block to be read last
-	} else {
-.skip
-	}
+;	}
 .no_caching
 			tya					;Y is still wanted,x
 			iny
@@ -1177,6 +1169,7 @@ ___			= $ff
 			tax
 .first_block_big
 			dex					;a bit anoying, but SP is SP--/++SP on push/pull
+			txs
 			;sta .send_start
 			;sty <.send_end
 
@@ -1202,7 +1195,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .preamble							;y = blocksize
-			sty <.block_size
 			jmp .preamble_
 
 			;----------------------------------------------------------------------------------------------------
@@ -1239,7 +1231,7 @@ ___			= $ff
 			lda <.tab00333330_hi,x			;sector checksum
 			eor .tab44444000_lo,y
 			eor <.chksum2 + 1
-			beq .new_or_cached_sector
+			beq .new_sector
 
 			;----------------------------------------------------------------------------------------------------
 			;
