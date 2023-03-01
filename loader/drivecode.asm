@@ -102,9 +102,10 @@
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
+.val07ff		= .zp_start + $57			;DT ;current track
 .to_track		= .zp_start + $58			;DT
 .sector			= .zp_start + $59			;DS
-;free			= .zp_start + $5a			;DT
+.valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
 ;free			= .zp_start + $66
 .block_size		= .zp_start + $68
@@ -162,7 +163,7 @@ ___			= $ff
                         !byte ___, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
-                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, .DT, ___, ___, $0a, ___, $0b, ___, $03	;50
+                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, .DT, ___, $ff, $0a, ___, $0b, ___, $03	;50
                         !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
                         !byte $58, ___, ___, $06, ___, $0c, ___, $04, $4c, ___, ___, $02, ___, $08		;70
 
@@ -178,36 +179,24 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;                2                      ccccccccccc   3                   ggggggggggggggggggggg   4ggg                 ccccccc   5           v      1           bbbbbbbbbbbb
+;              2                      ccccccccccc   3                   ggggggggggggggggggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;                2                      ccccccccccc   3                   ggggggggggggg   4ggg                 ccccccc   5           v      1           bbbbbbbbbb
+;              2                      ccccccccccc   3                   ggggggggggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;                2                      ccccccccccc   3                   ggggg   4ggg                 ccccccc   5           v      1           bbbbbbbb
+;              2                      ccccccccccc   3                   ggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;                2                      ccccccccccc   3                      4                 ccccccc   5           v      1           bbbbbb
+;              2                      ccccccccccc   3                      4                 ccccccc   5             v      1         bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
 ;g = gcr slowdown
 
 .read_loop
-.val3e = * + 1
-			ldx #$3e
-			lda $1c01				;22333334
-			sax <.threes + 1
-			asr #$c1
-			tax
-			lda .tab11111000_hi,y
-.twos			ora .tab02200222_lo,x
-			tsx
-			pha					;$0100
-			beq .gcr_end
-
 			eor $0101,x
 			eor $0103,x
 .gcr_entry
 			sta <.chksum2 + 1
-			lda $1c01				;44445555		hird read
+			lda $1c01				;44445555		third read
 			ldx #$0f
 			sax <.fives + 1
 
@@ -217,7 +206,7 @@ ___			= $ff
 			ldx #$03
 }
 .threes			lda <.tab00333330_hi			;ZP!
-			ora .tab44444000_lo,y
+			eor .tab44444000_lo,y
 			pha					;$0103
 
 .gcr_slow1		lda $1c01				;56666677		fourth read
@@ -226,7 +215,7 @@ ___			= $ff
 			tax
 
 .fives			lda <.tab00005555_hi			;ZP!
-			ora <.tab05666660_lo,x			;ZP but index
+			adc <.tab05666660_lo,x			;ZP but index
 			pha					;$0102
 .chksum			eor #$00				;103,101,100
 .chksum2		eor #$00
@@ -248,31 +237,45 @@ ___			= $ff
 			sax <.twos + 1
 			and #$f8
 			tay
+.val3e = * + 1
+			ldx #$3e
 
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
+			bvc *
 
-			;XXX TODO do load of x also via table val07ff and move all to normal page, move more other stuff here therefore
--
-			jmp .next_sector
-
+			lda $1c01				;22333334
+			sax <.threes + 1
+			asr #$c1
+			tax
+			lda .tab11111000_hi,y
+.twos			eor .tab02200222_lo,x
+			tsx
+			pha					;$0100
+			bne .read_loop
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
 			eor $0103				;do remaining checksum, yet same for header or sector
 			eor <.chksum + 1
 .gcr_h_or_s		jmp .back_read_sector			;will either happen or disabled for fall through
-			bne -					;header checksum check failed? reread
-			jmp .back_read_header
+			bne .read_header			;header checksum check failed? reread
+
+			ldy #$01
+-
+			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
+			lda $0105,y				;read in sector and track from header
+			ldx #$09
+			sbx #$00
+			eor <.ser2bin,x
+			dey					;Y = 0 or 1
+			bpl -					;first byte being processed?
+			eor <.track				;second byte is track
+.back_read_header
+			bne .read_header
+.read_sector
+			ldy #$55				;type (sector) (SP = $ff already)
+			top
+.read_header
+			ldy #$52				;type (header)
+			jmp .read_gcr
 
 .slow_table
 			!byte <(.slow0 - .slow6) + 2
@@ -298,6 +301,7 @@ ___			= $ff
 .tab02200222_lo		= .tables + $00
 
 .preamble_
+			txs					;set up position in stack, from where we transfer data
 			iny					;set up num of bytes to be transferred
 			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
 
@@ -322,14 +326,12 @@ ___			= $ff
 			clc
 			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
-}
-!if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
 			;sbc #$00				;subtract one in case of overflow
 			;clc
 			lda .dir_load_addr + 0,y		;fetch load address lowbyte
-			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
+			sec
 			jmp .preamble__
 
 	 		* = .tables + $22
@@ -375,7 +377,7 @@ ___			= $ff
 
 			dop
 			!byte $50
-			dec <.blocks_on_list
+			stx <.blocks_on_list
 			dop
 			!byte $0d
 			lda #$fc
@@ -384,6 +386,7 @@ ___			= $ff
 			inc .en_dis_td
 			!byte $05				;ora $0b, does not harm, it is a ora $00
 			!byte $0b
+			;XXX TODO would also work with dey, needs tya on and + ldx #$fc, would save tsx and end up the same way
 -
 			dex
 			ldy .directory + 1,x
@@ -397,9 +400,8 @@ ___			= $ff
 			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
 			jmp .drivecode_entry
 .preamble__
-			sec					;XXX TODO could be saved then? Nope, crashes on cebit'18 bootloader
+			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
 			bcs +
-			nop
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
@@ -510,8 +512,8 @@ ___			= $ff
 			lda ($00,x)
 			nop
 .gcr_slow1_40
-			nop
 .slow6			lda $1c01
+			nop
 			jmp .gcr_slow1 + 3
 
 .slow0			jmp .gcr_slow1_00
@@ -529,7 +531,6 @@ ___			= $ff
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
-
 .preamble___
 			sta <.preamble_data + 1			;block address low
 			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
@@ -559,7 +560,6 @@ ___			= $ff
 
 			ldy #$00
 			jmp .load_track
-								;XXX TODO do this check once here and not again after send?
 .start_send
 			ldy #$03 + CONFIG_DECOMP + 1		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 -
@@ -571,7 +571,7 @@ ___			= $ff
 			dey
 			bne -
 
-			ldx #$09				;masking value for later sax $1800 and for preamble encoding
+			ldx #$09				;XXX TODO meh, just the value we loaded before :-( masking value for later sax $1800 and for preamble encoding
 			lda #.preloop - .branch - 2		;be sure branch points to preloop
 			top
 .send_sector_data_setup
@@ -629,6 +629,9 @@ ___			= $ff
 
 !if >*-1 != >.sendloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
+}
+!if >*-1 != >.sendloop {
+	!error "sendloop-size changed, .sendloop - .branch - 2 is != $d1: ", .sendloop - .branch - 2
 }
 								;keep code here small to not waste much time until busy flag is set after sending
 			lda #.sendloop - .branch - 2		;redirect branch to sendloop (A = $d1)
@@ -725,13 +728,13 @@ ___			= $ff
 			bit $1800
 			bmi .lock
 			bne .wait_bit2				;do we have clk == 0?
-			lda $1800				;XXX TODO can do lsr $1800 here
+			lsr $1800				;XXX TODO can do lsr $1800 here
 			;bmi .lock
-			lsr					;all sane, we can read bit in data
+			;lsr					;all sane, we can read bit in data
 			ror <.filename
 			bcc .bitloop				;more bits to fetch?
 
-			lda #.BUSY
+			lsr					;lda #.BUSY
 			sta $1800				;set busy bit
 !if .LOAD_IN_ORDER = 1 {
 			ldy #$00
@@ -1098,7 +1101,7 @@ ___			= $ff
 			bne -
 +
 			ldx <.is_loaded_sector			;initially $ff
-			bmi .next_sector_			;initial call on a new track? Load content first
+			bmi .next_sector			;initial call on a new track? Load content first
 			ldy <.wanted,x				;grab index from list
 			cpy <.last_block_num			;current block is last block on list?
 			bne .no_caching				;do not cache this sector
@@ -1119,7 +1122,7 @@ ___			= $ff
 			top					;skips last block check, as bne will fall through after skipping lda (flags are preserved)
 .skip
 			lda <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-.next_sector_		bne .next_sector			;reread and force last block to be read last
+			bne .next_sector			;reread and force last block to be read last
 	} else {
 .skip
 	}
@@ -1174,7 +1177,6 @@ ___			= $ff
 			tax
 .first_block_big
 			dex					;a bit anoying, but SP is SP--/++SP on push/pull
-			txs					;set up position in stack, from where we transfer data
 			;sta .send_start
 			;sty <.send_end
 
@@ -1210,6 +1212,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .back_read_sector
+			;should happen earlier
 			ldx $1c01				;44445555
 			eor $0101
 			sta <.chksum2 + 1			;checksum 2 bytes from last round
@@ -1221,7 +1224,7 @@ ___			= $ff
 ;!if .SANCHECK_TRAILING_ZERO = 1 {
 			lda #$0f
 			sbx #.CHECKSUM_CONST1			;4 bits of a trailing zero after checksum
-			bne .next_sector_			;check remaining nibble if it is $05
+			bne .next_sector			;check remaining nibble if it is $05
 ;			ldx $1c01
 ;			clv					;after arr, as it influences v-flag
 ;			bvc *
@@ -1236,59 +1239,18 @@ ___			= $ff
 			lda <.tab00333330_hi,x			;sector checksum
 			eor .tab44444000_lo,y
 			eor <.chksum2 + 1
-			bne .next_sector_			;checksum okay? Nope, take two hops to get to the beginning of code again
-			jmp .new_or_cached_sector
+			beq .new_or_cached_sector
 
 			;----------------------------------------------------------------------------------------------------
 			;
 			; HEADER DONE, NOW READ SECTOR DATA
 			;
 			;----------------------------------------------------------------------------------------------------
-
-.back_read_header
-								;XXX TODO could call stuff via jsr here, as stack is only filled with 8 bytes
-								;first $0f is still in A
-;!if .SANCHECK_HEADER_0F = 1 {
-;			eor $0101				;second $0f
-;			eor $0102				;third $0f
-;			bne .next_sector
-;}
-			;A = 0, Y = $50 here, else last $0f was wrong, Z = 1
-			ldy #$01
--
-			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
-;!if .SANCHECK_SECTOR = 1 {
-;			cmp <.max_sectors			;we pass check on first round when A = 0
-;			bcs .next_sector
-;}
-			lda $0105,y				;read in sector and track from header
-			ldx #$09
-			sbx #$00
-			eor <.ser2bin,x
-			dey					;Y = 0 or 1
-			bpl -					;first byte being processed?
-+
-			eor <.track				;second byte is track
-			beq .read_gcr				;check if sane
-
-;			sta <.is_loaded_sector			;gap still not passed by here, so still some code possible here
-;			tax
-;			lda <.wanted,x
-;			cmp #$ff
-;			beq .next_sector
-;			inx
-;			cpx <.max_sectors
-;			bcs +
-;			cmp <.wanted,x
-;			bcs .next_sector
-;+
 .next_sector
-			ldx #$07				;read 8 bytes
-			txs
-			ldy #$52				;type (header)
-			top
+			jmp .read_header
 .read_gcr
-			ldy #$55				;type (sector) (SP = $ff already)
+			lax <.val07ff - $52,y
+			txs
 			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
 -
 			bit $1c00				;wait for start of sync
@@ -1315,12 +1277,12 @@ ___			= $ff
 			asl
 			eor $1c01				;read 22333334 - 2 most significant bits should be zero now
 			ldx <.val3e				;set x to $3e and waste a cycle
-			eor <.val58 - $3e,x			;lda #$58 and waste 2 cycles
+			eor <.val58 - $3e,x			;eor #$58 to compensate for the unsued bits of eor #$4c * 2 and waste 2 cycles
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
 			bne .next_sector			;start over with a new header again as teh check for header type failed in all bits
-			sta <.chksum + 1 - $3e,x		;waste a cycle
-			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
+			sta <.chksum + 1; - $3e,x		;waste a cycle
+			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 2 cycles
 			jmp .gcr_entry				;36 cycles until entry
 
 .directory
