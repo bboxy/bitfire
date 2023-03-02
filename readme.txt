@@ -272,7 +272,7 @@ Other interesting options are:
 --prefix-from [addr]
 --prefix-file [filename]
 
-If you split a file and load both parts one after another, you can add this switch to the second part. It will then be packed with using the already loaded data as dictionary from the given address on, what will result in smaller files. Alternatively you can also give a file taht is prepended and used as dictionary.
+If you split a file and load both parts one after another, you can add this switch to the second part. It will then be packed with using the already loaded data as dictionary from the given address on, what will result in smaller files. Alternatively you can also give a file that is prepended and used as dictionary.
 
 Example:
 dali -o demopart1.prg --from 0x2000 --to 0x8000 demopart.prg
@@ -287,7 +287,7 @@ dali -o demopart3.prg --prefix-from 0x4000 --from 0xd000 --to 0xffff demopart.pr
 NMI-gaps
 --------
 
-What is this? If you need a few free bytes at $0200 and $0300 for a ninja-style NMI handler, just add your nops at .lz_gap1 and .lz_gap2 in resident.asm to accomodate your handler, up to 15 bytes per page are still free for that..
+What is this? If you need a few free bytes at $0200 and $0300 for a ninja-style NMI handler, just add your nops at .lz_gap1 and .lz_gap2 in resident.asm to accomodate your handler.
 
 Zero-Overlap
 ------------
@@ -297,8 +297,9 @@ dali creates files that have no overlap at its end and thus can be completely de
 Zeropage usage
 --------------
 
-The loader needs a single byte in zeropage (default $04) the packer needs another 5 bytes ($05 - $09). The values can be changed in the source accordingly, but they have been placed where they are for a good reason:
-$02/$03 can then be used by music and thus all zeropage from $0a upwards can be used, even if there's code inside the zeropage it can easily grow and even reach into the stack without the need to take care of the addresses being used by bitfire.
+The loader needs 6 bytes in zeropage, the packer needs another 5 bytes. The values can be changed in the source accordingly, but they have been placed where they are for a good reason:
+$02/$03 can then be used by music and thus all zeropage from $0e upwards can be used, even if there's code inside the zeropage it can easily grow and even reach into the stack without the need to take care of the addresses being used by bitfire.
+When the loader and depacker is idle, you can use the whole zeropage and leaving any garbage there. However address $00 is used to hide a magic value #$37 there that is read by the loader with teh lax-opcode. Usually we do not make use of $00 as it is the DDR of the processor's port for bank switching. $37 is a totally sabe value there and is of no harm. Better leave it as is, unless you really know better.
 
 Bank switching
 --------------
@@ -329,11 +330,6 @@ Building
 
 The .asm files need ACME 0.94 or newer, i didn't focus much on that, as i always use the current version from SVN. At this time 0.97. So if anyone tries to compile this with the medieval version 0.93, it will fail, sorry :-)
 
-Zeropage-usage
---------------
-
-When the loader and depacker is idle, you can use the whole zeropage and leaving any garbage there, also the addresses reserved for the loader. There's one exception, the loader uses $00 and places the value #$37 there, whenever you use $00, you need to restore this value before loading again, or things break.
-
 Dirart
 ------
 
@@ -360,35 +356,39 @@ Technical Limitations
 It might be a good idea to have a look at the rpm*.prgs at this URL:
 https://sourceforge.net/p/vice-emu/code/HEAD/tree/testprogs/drive/rpm/
 
-Please check your drive so that it is running at 300 rpm. In fact the loader can cope with floppys that are off that range by a few rounds, still it will have retries and possible read errors and hickups. Belt driven drives (which can be found in 1541, 1541C and 1541-ii) show a so called wobble, so the drive's rotation speed is drifting between a minimum and maximum in a sinus like manner. There's also 1541-ii drives out there (jpn, sankyo) that come along with a direct driven spindle. The plot-programs show a quite straight line then. On other drives, one can see how strong the amplitude of the wobble is. I have drives that left the green area by quite a bit, and have drives with alps-mechanics, that jitter more or less randomly. They throw the most read errors in my tests. Things were better, when the disks were written with a drive, that has a direct drive. If the disks are written with the same floppy, on can assure, that the track alignment is the same, but when written with a strong wobble and read back with the same strong wobble, amplitudes can add up to twice the wobble, reading speed can increase and decrease fast and that can trip the gcr-read-loop of the loader. There are many sanity checks implemented, as the eor-checksum of a sector is a bit weak, it can happen that the chcksum is still okay, but the content of a sector is wrong. So the last trailing bytes after the checksum are also checked for being zero. Also the header is double checked, if track, sector and disk-id are correct besides the checksum. A lot of tests on all kind of hardware showed, that there's the possibility of a file being loaded with a corrupt content in very seldom cases due to this physical restrictions. The gcr-loop used in the rom takes only 19 cycles for a byte to read from disk, that might allow for more tolerance regarding that matter.
+Please check your drive so that it is running at 300 rpm. In fact the loader can cope with floppys that are off that range by a few rounds, still it will have retries and possible read errors and hickups. Belt driven drives (which can be found in 1541, 1541C and 1541-ii) show a so called wobble, so the drive's rotation speed is drifting between a minimum and maximum in a sinus like manner. There's also 1541-ii drives out there (jpn, sankyo) that come along with a direct driven spindle. The plot-programs show a quite straight line then. On other drives, one can see how strong the amplitude of the wobble is. I have drives that left the green area by quite a bit, and have drives with alps-mechanics, that jitter more or less randomly. They throw the most read errors in my tests. Things were better, when the disks were written with a drive, that has a direct drive. If the disks are written with the same floppy, on can assure, that the track alignment is the same, but when written with a strong wobble and read back with the same strong wobble, amplitudes can add up to twice the wobble, reading speed can increase and decrease fast and that can trip the gcr-read-loop of the loader. There are many sanity checks implemented, as the eor-checksum of a sector is a bit weak, it can happen that the checksum is still okay, but the content of a sector is wrong. So the last trailing bytes after the checksum are also checked for being zero. Also the header is double checked, if track, sector and disk-id are correct besides the checksum. A lot of tests on all kind of hardware showed, that there's the possibility of a file being loaded with a corrupt content in very seldom cases due to this physical restrictions. The gcr-loop used in the rom takes only 19 cycles for a byte to read from disk, that might allow for more tolerance regarding that matter.
 
 2. Electromagnetic Fields
 
 During the testing, i discovered, that my screen significantly influences the floppy, that was located beneath. With the screen turned off, i had no read erroros happening, but when having the screen turned on, there's suddenly read-errors and checksum-errors. Creating a distance of around 30cm between floppy and screen, ceased all the problems and reading was error-free. Moving the floppy side by side to the screen, made it even fail completely. I first suspected a bad timing in the gcr-loop, but no matter how i shifted the timing, the errors still happened. The errors also occur on a SX64, that has the screen and the floppy built in at a fixed distance, so not much one can change here.
 
-3. Cables
+3. Heat
+
+When stacked with other floppys, heat can't dissipate well from the old floppydrives, what leads to more read and checksum errors as well, and can lead to false positive checksum at some point and make loading fail. Been there, seen that :-(
+
+4. Cables
 
 Thanks to Ikwai i happened to have hands on a setup with a 2m unshielded iec-cable on which the 72-cycle 2bit-ATN transfer failed, as it missed it's timing. A slower timing solved the problems, but also exchanging that cable.
 
-4. Unsettled Head
+5. Unsettled Head
 
 Starting to read from disk directly after stepping can also lead to checksum errors, so waiting a bit is adviseable. To not waste time, data is sent directly after stepping (some even do a halftrack in between, like sparkle. Had done that too in the very early versions of bitfire, but dropped that to save code, it didn't bring much speed gain)
 
-5. Spin Up
+6. Spin Up
 
 During spin up of the drive, the gcr read might fail, as it misses the window where timing is optimal, either by spinning too slow yet, or by overshooting. This also can cause checksum errors. As one file ends on the same sector, where a new one begins, we can force the last sector of a file to be read last. Upon loading of the next file, the sector is already cached and present and the first file chunk can be send during spin up. This covers at least a few errors that else occur on spin up.
 
-6. Buslock
+7. Glitchy hardware
 
-Banging $dd00 hard while the floppy is idle, seems to produce glitches on THCM's SX64. No matter how much i debounced or carefully i dropped line by line, things failed. There's glitchy hardware out there. Not all of those glitches can be handled in a satisfactory manner or by software.
+The buslock issues with THCM's SX64 are history and i found a solution to make this work also on his machine. Ikwai owns a floppy and cable, where the 72 cycles transfer fails. It needs both the combnation form an extra long cable and that certain floppy. The cable works with all other kind of floppys, as well as the floppy works with all other kind of cables. But combined they fail.
 
-7. Jitter
+8. Jitter
 
 The gcr read usually introduced 3 cycles jitter by using bvc * to sync on a byte_ready. Krill showed, that one can also use a bunch of bvs .loop to sync on a byte, what introduces only two cycles of jitter and allows for a better timing within range.
 
-8. Fast Stepping
+9. Fast Stepping
 
-The so called shrydar-stepping that does the second half-step already $0c00 cycles after the first, works on most drives for single steps, but i also bumped in a 1541-ii that would choke and end up on a half track and failing to read any further.
+The so called shrydar-stepping that does the second half-step already $0c00 cycles after the first, works on most drives for single steps, but i also bumped in a 1541-ii and an old longboard that would choke and end up on a half track and failing to read any further.
 
 Testing
 -------
