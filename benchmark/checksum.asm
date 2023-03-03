@@ -27,9 +27,9 @@
 !cpu 6510
 
 CHECKSUM = 1
-CHECKSUM_CLEAR = 1
+CHECKSUM_CLEAR = 0
 REQDISC = 1
-BUSLOCK = 1
+BUSLOCK = 0
 WAIT_SPIN_DOWN = 0
 
 TIME_RAW = 1
@@ -182,11 +182,10 @@ display
 		bpl -
 		rts
 reset
-		lda #$00
-		sta cnt
-		sta cnt+1
-		sta numb+1
-		tax
+		lxa #0
+		stx numb+1
+		stx cnt
+		stx cnt+1
 -
 		sta $1000,x
 		sta $1100,x
@@ -300,6 +299,8 @@ numb		lda #$00		;file number
 		jsr .start_timer
 		pla
 		pha
+		;clc
+		;adc #1
 		jsr bitfire_loadraw_
 }
 !if TIME_DECOMP = 1 or TIME_RAW_DECOMP = 1 {
@@ -308,6 +309,8 @@ numb		lda #$00		;file number
 }
 		pla
 		pha
+		;clc
+		;adc #1
 		jsr bitfire_loadraw_
 !if TIME_RAW_DECOMP = 0 {
 		jsr .start_timer
@@ -318,6 +321,8 @@ numb		lda #$00		;file number
 		jsr .start_timer
 		pla
 		pha
+		;clc
+		;adc #1
 		jsr bitfire_loadcomp_
 }
 		pla
