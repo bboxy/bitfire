@@ -46,7 +46,7 @@
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .CACHING		= 1   ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1   ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
-.FORCE_LAST_BLOCK	= 1   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
+.FORCE_LAST_BLOCK	= 0   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
 .DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
 .GCR_125		= 1
@@ -90,9 +90,7 @@
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
-!if .POSTPONED_XFER = 1 {
-.tempx			= .zp_start + $19
-}
+.en_dis_seek		= .zp_start + $19
 !if .LOAD_IN_ORDER = 1 {
 .desired_sect		= .zp_start + $20
 }
@@ -158,7 +156,7 @@ ___			= $ff
 
 			;     0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f
                         !byte ___, $b0, $80, $a0, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
-                        !byte .DS, ___, $f0, $1e, $70, $1f, $60, $17, ___, ___, $b0, $1a, $30, $1b, $20, $13	;10
+                        !byte .DS, ___, $f0, $1e, $70, $1f, $60, $17, ___, $80, $b0, $1a, $30, $1b, $20, $13	;10
                         !byte ___, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
@@ -178,13 +176,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;              2                      ccccccccccc   3                   ggggggggggggggggggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbbbbbbb
+;              2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                   ccccccc   5             v      1         bbbbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;              2                      ccccccccccc   3                   ggggggggggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbbbbb
+;              2                       ccccccccccc   3                   ggggggggggg   4ggggg                   ccccccc   5             v      1         bbbbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;              2                      ccccccccccc   3                   ggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbbb
+;              2                       ccccccccccc   3                   ggg   4ggggg                   ccccccc   5             v      1         bbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;              2                      ccccccccccc   3                      4                 ccccccc   5             v      1         bbbbbbbb
+;              2                       ccccccccccc   3                      4                   ccccccc   5             v      1         bbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -220,7 +218,7 @@ ___			= $ff
 .chksum2		eor #$00
 			sta <.chksum + 1
 
-.gcr_slow2		lax $1c01				;77788888	fifth read
+			lax $1c01				;77788888	fifth read
 			asr #$40
 			tay
 
@@ -276,12 +274,13 @@ ___			= $ff
 			ldy #$52				;type (header)
 			jmp .read_gcr
 
+!if .GCR_125 = 1 {
 .slow_table
 			!byte <(.slow0 - .slow6) + 2
 			!byte <(.slow2 - .slow6) + 2
 			!byte <(.slow4 - .slow6) + 2
 			!byte <(.slow6 - .slow6) + 2
-
+}
 
 !ifdef .second_pass {
 	!warn $0100 - *, " bytes remaining in zeropage."
@@ -321,10 +320,6 @@ ___			= $ff
 .is_bigger
 			dex					;next entry
 			bpl .min_loop
-
-			;tay
-			;dey
-			;tya
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
 			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
@@ -333,7 +328,8 @@ ___			= $ff
 			;sbc #$00				;subtract one in case of overflow
 			;clc
 			lda .dir_load_addr + 0,y		;fetch load address lowbyte
-			jmp .preamble__
+			sec
+			bcs .preamble__
 
 	 		* = .tables + $22
 .table_start		;combined tables, gaps filled with junk
@@ -381,29 +377,29 @@ ___			= $ff
 			!byte $0b
 			;XXX TODO would also work with dey, needs tya on and + ldx #$fc, would save tsx and end up the same way
 			jmp .drivecode_entry
--
-			lda .dir_load_addr + 1,y		;add load address highbyte
-			jmp .preamble___
+.preamble__
+			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
+			beq ++
+			bne +
 			nop
 
                         !byte                                         $80, $0e, $0f, $07, $00, $0a, $0b, $03
                         !byte $10, $47, $0d, $05, $09, $00, $09, $01, $00, $06, $0c, $04, $01, $02, $08
 
-.preamble__
-			sec
-			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			beq ++
++
+			adc <.first_block_size			;else add first block size as offset, might change carry
 			ldx #$80
-			bmi +
+++
+			sta <.preamble_data + 1			;block address low
+			jmp +
 
                         !byte                                         $e0, $1e, $1f, $17, $06, $1a, $1b, $13		;9 bytes
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 +
-			adc <.first_block_size			;else add first block size as offset, might change carry
-++
-			sta <.preamble_data + 1			;block address low
-			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
-			jmp -
+			lda <.block_num				;add block num
+			adc .dir_load_addr + 1,y		;add load address highbyte
+			sta <.preamble_data + 2			;block address high
+			bcc .preamble___
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
                         !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
@@ -495,14 +491,14 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .gcr_slow1_00
-			lda ($00),y
+			lda ($13),y
 			jmp .gcr_slow1_20
 !if .GCR_125 = 1 {
 .tab0070dd77_hi
                         !byte                          $b0, $80, $a0, ___, $b0, $80, $a0, ___, $b0, $80, $a0
 }
 .gcr_slow1_20
-			lda ($00,x)
+			lda ($04,x)			;lda ($13) = $701f
 			nop
 .gcr_slow1_40
 .slow6			lda $1c01
@@ -518,6 +514,13 @@ ___			= $ff
 .bitrate
                         !byte                $60, $40, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
 			                     ;|bitrate|bitrate + table combined ->
+} else {
+.bitrate		!byte $60, $40, $20, $00
+.slow_table
+			!byte <(.slow0 - .slow6) + 2
+			!byte <(.slow2 - .slow6) + 2
+			!byte <(.slow4 - .slow6) + 2
+			!byte <(.slow6 - .slow6) + 2
 }
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -526,9 +529,8 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .preamble___
-			adc <.block_num				;add block num
+			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
 			;clc					;should never overrun, or we would wrap @ $ffff?
-			sta <.preamble_data + 2			;block address high
 !if .POSTPONED_XFER = 1 {
 			;ldy <.blocks_on_list
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
@@ -627,7 +629,10 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 !if .POSTPONED_XFER = 1 {
-.en_dis_seek		eor .send_back
+			bit <.en_dis_seek
+			bmi +
+			jmp .send_back
++
 			lda <.blocks_on_list			;just read again, was decreased before
 } else {
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
@@ -637,7 +642,7 @@ ___			= $ff
 			jmp .next_sector			;nope, continue loading
 !if .POSTPONED_XFER = 1 {
 .postpone
-			dec .en_dis_seek			;enable jmp, skip send of data for now
+			dec <.en_dis_seek			;enable jmp, skip send of data for now
 }
 .en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
 			;set stepping speed to $0c, if we loop once, set it to $18
@@ -819,10 +824,10 @@ ___			= $ff
 			txa
 			sbx #-4					;start with x = 0 by this
 			;XXX TODO better do sum up all filesizes with 24 bit and then subtract sectors until block + 1 and block + 2 is reached?
-			cpx <.dir_entry_num
-			beq .next_track				;silly, but need to set max_sectors for later use
-
 			lda <.blocks + 0
+			cpx <.dir_entry_num
+			beq .found_file
+
 			sec
 			adc .dir_file_size + 0,x
 			sta <.blocks + 0
@@ -830,18 +835,13 @@ ___			= $ff
 			;XXX TODO on very huge files, this could fail, as we overflow!!! but then again, files are max $d000 in size due to i/o limitation?
 			lda <.blocks + 1
 			adc .dir_file_size + 1,x
-			sta <.blocks + 1
 .next_track
-			jmp .set_max_sectors			;setup max_sectors, expects track in Y, returns to .find_file_back, can't jsr here
-.find_file_back							;we return from max_sectors, do second check here, as we can fall through for free
-			cpx <.dir_entry_num			;recheck again, yuck!
-			beq .found_file
-
+			sta <.blocks + 1
+			jsr .set_max_sectors			;setup max_sectors, expects track in Y, returns with carry set
 			lda <.blocks + 1
-			sec
+
 			sbc <.max_sectors			;reduce blockcount track by track
 			bcc .no_next_track
-			sta <.blocks + 1
 -
 			;skip dir_track				;advance track
 			iny
@@ -852,13 +852,12 @@ ___			= $ff
 			;store track
 			sty <.to_track
 
-			;remember file index
-			;stx .file_index			;same as dir_entry_num
-
-			lda <.blocks + 0
 			;calc first block size
 			eor #$ff
 			sta <.first_block_size
+
+			;set max_sectors for track in Y
+			jsr .set_max_sectors			;setup max_sectors, expects track in Y, max_sectors might be unset for current to_track
 
 			lda .dir_file_size + 0,x
 			cmp <.first_block_size
@@ -918,9 +917,9 @@ ___			= $ff
 .turn_disc_entry
 			sty <.last_block_num
 			sta <.sector
-			ldy #$00
-			sty <.index				;reset block index, x = 0
-								;XXX TODO reuse Y = 0, but load_track is entered from 2 positions
+			inx
+			stx <.index				;reset block index, x = 0 (if done via turn_disc, it doesn't matter, as no block is transferred, it will just be set to 19 (x = 18))
+								;XXX TODO reuse Y = 0 / X = 0, but load_track is entered from 2 positions
 .load_track
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -943,10 +942,7 @@ ___			= $ff
 			asl					;counter is twice the number of tracks (halftracks)
 			tax
 			bpl .seek_check				;this is a BRA
-.find_file_back_	bcc .find_file_back			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doin two hops, cheaper than long branch XXX TODO, returned to long branch, as there is no fitting gap for second bne :-(
 .step
-;			txa
-;			beq +
 			lda #.STEPPING_SPEED
 +
 .step_
@@ -963,14 +959,13 @@ ___			= $ff
 			;XXX TODO postpone after second halfstep, then while waiting
 !if .POSTPONED_XFER = 1 {
 			txa
-			adc .en_dis_seek			;$4c/$4d
-			eor #$4c
-			bne .seek_end				;nope, continue
+			adc <.en_dis_seek			;$4c/$4d
+			bmi .seek_end				;nope, continue
 
 			jmp .start_send				;send data now
 .send_back
 			ldx #$00
-			inc .en_dis_seek			;disable_jmp
+			inc <.en_dis_seek			;disable_jmp
 .seek_end
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
@@ -1007,15 +1002,18 @@ ___			= $ff
 			sta <.max_sectors
 			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
-			cpx #$ff
-			bcc .find_file_back_			;can only happen if we come from .set_bitrate code-path, not via .set_max_sectors, as x is a multiple of 4 there, extend range by doing two hops, cheaper than long branch
+			inx
+			beq +					;check on X == $ff? and preserve carry
+			dex
+			rts
++
 			tax
 			lda $1c00
 			ora #$60
 			eor .bitrate,x
 			sta $1c00
 
-			ldy <.slow_table,x
+			ldy .slow_table,x
 			ldx #$02
 -
 			lda .slow6,y
@@ -1091,6 +1089,20 @@ ___			= $ff
 			txa
 			bne -
 .new_sector
+;			ldx <.is_loaded_sector			;initially $ff
+;			bmi .next_sector			;initial call on a new track? Load content first
+;			ldy <.wanted,x				;grab index from list
+;			cpy #$ff
+;			beq .next_sector
+;			inx
+;			inx
+;			cpx <.max_sectors
+;			bcs .skip
+;			tya
+;			cmp <.wanted,x
+;			bcc .skip
+;			ldx <.is_loaded_sector			;initially $ff
+
 			ldx <.is_loaded_sector			;initially $ff
 			bmi .next_sector			;initial call on a new track? Load content first
 			ldy <.wanted,x				;grab index from list
@@ -1098,9 +1110,6 @@ ___			= $ff
 			bne .no_caching				;do not cache this sector
 			lda .last_block_size			;/!\ special case, if whole sector is used by file and new file starts on new sector, we will fail with caching
 			beq .no_caching
-;			lda <.cache_limit			;is there enough space for caching?
-;			cmp #((.cache - .directory) & $fc) - 4
-;			bcs .skip				;not enough mem available to accomodate sector
 .stow
 			stx <.is_cached_sector
 -
@@ -1109,14 +1118,6 @@ ___			= $ff
 			sta .cache,x
 			inx
 			bne -
-;	!if .FORCE_LAST_BLOCK = 1 {
-;			top					;skips last block check, as bne will fall through after skipping lda (flags are preserved)
-;.skip
-;			lda <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-;			bne .next_sector			;reread and force last block to be read last
-;	} else {
-.skip
-;	}
 .no_caching
 			tya					;Y is still wanted,x
 			iny
