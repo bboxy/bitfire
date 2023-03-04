@@ -120,7 +120,7 @@
 .first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
-.end_of_file		= .zp_start + $7c
+.last_track_of_file	= .zp_start + $7c
 
 .DT			= 18					;dir_track
 .DS			= 18					;dir_sector
@@ -176,13 +176,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;              2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                   ccccccc   5             v      1         bbbbbbbbbbb
+;                2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                   ccccccc   5             v      1       bbbbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;              2                       ccccccccccc   3                   ggggggggggg   4ggggg                   ccccccc   5             v      1         bbbbbbbbb
+;                2                       ccccccccccc   3                   ggggggggggg   4ggggg                   ccccccc   5             v      1       bbbbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;              2                       ccccccccccc   3                   ggg   4ggggg                   ccccccc   5             v      1         bbbbbbb
+;                2                       ccccccccccc   3                   ggg   4ggggg                   ccccccc   5             v      1       bbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;              2                       ccccccccccc   3                      4                   ccccccc   5             v      1         bbbbb
+;                2                       ccccccccccc   3                      4                   ccccccc   5             v      1       bbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -234,10 +234,10 @@ ___			= $ff
 			sax <.twos + 1
 			and #$f8
 			tay
-.val3e = * + 1
-			ldx #$3e
 
 			bvc *
+.val3e = * + 1
+			ldx #$3e
 
 			lda $1c01				;22333334
 			sax <.threes + 1
@@ -535,7 +535,7 @@ ___			= $ff
 			;ldy <.blocks_on_list
 			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
 			bpl .start_send
-			bit <.end_of_file			;eof?
+			bit <.last_track_of_file		;eof?
 			bpl .postpone
 }
 .start_send
@@ -622,6 +622,8 @@ ___			= $ff
 			bmi *-3
 			sta $1800				;signal busy after atn drops
 
+			ldx #$ff
+			txs
 			;----------------------------------------------------------------------------------------------------
 			;
 			; BLOCK OF TRACK LOADED AND SENT
@@ -658,7 +660,7 @@ ___			= $ff
 			jmp .load_track
 .track_finished
 			;XXX TODO make this check easier? only done here?
-			bit <.end_of_file			;EOF
+			bit <.last_track_of_file		;EOF
 			bpl .en_dis_seek_
 
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
@@ -1059,7 +1061,7 @@ ___			= $ff
 								;just track is full
 			sta <.sector				;start next track with sector = 0
 .load_wanted_blocks						;read and transfer all blocks on wishlist
-			ror <.end_of_file			;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
+			ror <.last_track_of_file		;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
 .new_or_cached_sector
 !if .CACHING = 0 {
 			ldx <.is_loaded_sector
@@ -1089,27 +1091,14 @@ ___			= $ff
 			txa
 			bne -
 .new_sector
-;			ldx <.is_loaded_sector			;initially $ff
-;			bmi .next_sector			;initial call on a new track? Load content first
-;			ldy <.wanted,x				;grab index from list
-;			cpy #$ff
-;			beq .next_sector
-;			inx
-;			inx
-;			cpx <.max_sectors
-;			bcs .skip
-;			tya
-;			cmp <.wanted,x
-;			bcc .skip
-;			ldx <.is_loaded_sector			;initially $ff
-
 			ldx <.is_loaded_sector			;initially $ff
-			bmi .next_sector			;initial call on a new track? Load content first
+			;bmi .next_sector			;initial call on a new track? Load content first
 			ldy <.wanted,x				;grab index from list
 			cpy <.last_block_num			;current block is last block on list?
 			bne .no_caching				;do not cache this sector
-			lda .last_block_size			;/!\ special case, if whole sector is used by file and new file starts on new sector, we will fail with caching
-			beq .no_caching
+			;lda .last_block_size			;/!\ special case, if whole sector is used by file and new file starts on new sector, we will fail with caching
+			;bne +
+			;nop
 .stow
 			stx <.is_cached_sector
 -
@@ -1273,8 +1262,8 @@ ___			= $ff
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
 			bne .next_sector			;start over with a new header again as teh check for header type failed in all bits
-			sta <.chksum + 1; - $3e,x		;waste a cycle
-			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 2 cycles
+			sta <.chksum + 1 - $3e,x		;waste a cycle
+			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
 			jmp .gcr_entry				;36 cycles until entry
 
 .directory
