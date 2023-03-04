@@ -176,13 +176,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;                2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                   ccccccc   5             v      1       bbbbbbbbbbb
+;              2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                   ccccccc   5             v      1         bbbbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;                2                       ccccccccccc   3                   ggggggggggg   4ggggg                   ccccccc   5             v      1       bbbbbbbbb
+;              2                       ccccccccccc   3                   ggggggggggg   4ggggg                   ccccccc   5             v      1         bbbbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;                2                       ccccccccccc   3                   ggg   4ggggg                   ccccccc   5             v      1       bbbbbbb
+;              2                       ccccccccccc   3                   ggg   4ggggg                   ccccccc   5             v      1         bbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;                2                       ccccccccccc   3                      4                   ccccccc   5             v      1       bbbbb
+;              2                       ccccccccccc   3                      4                   ccccccc   5             v      1         bbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -234,10 +234,10 @@ ___			= $ff
 			sax <.twos + 1
 			and #$f8
 			tay
-
-			bvc *
 .val3e = * + 1
 			ldx #$3e
+
+			bvc *
 
 			lda $1c01				;22333334
 			sax <.threes + 1
@@ -354,7 +354,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .turn_disc_back
-			iny
+			ldy #$00
 -
 			pla
 			ldx #$09
@@ -363,7 +363,6 @@ ___			= $ff
 			dey
 			sta .directory,y
 			bne -
-			nop
 			dop
 			!byte $50
 			dec <.blocks_on_list
@@ -892,12 +891,11 @@ ___			= $ff
 			bcc +					;file_size + 1
 			iny
 +
-.index_to_sectornum
 			lxa #$00
 .turn_disc_entry
 			sta <.sector
 			sty <.last_block_num
-			stx <.index				;reset block index, x = 0 (if done via turn_disc, it doesn't matter, as no block is transferred, it will just be set to 19 (x = 18))
+			stx <.index				;reset block index, x = 0 (if done via turn_disc, it doesn't matter, as no block is transferred, it will just be set to 18 or 17)
 .load_track
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -922,7 +920,6 @@ ___			= $ff
 			bpl .seek_check				;this is a BRA
 .step
 			lda #.STEPPING_SPEED
-+
 .step_
 			sta $1c05				;clears irq flag in $1c0d
 			tya
@@ -937,12 +934,12 @@ ___			= $ff
 			;XXX TODO postpone after second halfstep, then while waiting
 !if .POSTPONED_XFER = 1 {
 			txa
-			adc <.en_dis_seek			;$4c/$4d
+			adc <.en_dis_seek			;$7f/$80
 			bmi .seek_end				;nope, continue
 
 			jmp .start_send				;send data now
 .send_back
-			ldx #$00
+			inx					;we return with X = $ff from send
 			inc <.en_dis_seek			;disable_jmp
 .seek_end
 }
@@ -996,7 +993,7 @@ ___			= $ff
 			lda .slow6,y
 			sta <.gcr_slow1,x
 			dey
-			txa
+			txa					;A = 0 after exit of loop
 			dex
 			bpl -
 
@@ -1007,6 +1004,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 			;A = 0
+			clc
 .wanted_loop
 			ldy <.blocks + 1
 			bne +
@@ -1020,11 +1018,9 @@ ___			= $ff
 			top
 +
 			dec <.blocks + 1
-			clc
 			adc #.INTERLEAVE
-			sta <.sector				;start next track with sector = 0
 			cmp <.max_sectors			;wrap around?
-			bcc .wanted_loop			;nope
+			bcc +					;nope, store sector and do a BRA, bcc will always be bne
 !if .INTERLEAVE = 4 {
 			adc #$00				;increase
 			and #$03				;modulo 4
@@ -1037,13 +1033,13 @@ ___			= $ff
 			adc #.INTERLEAVE
 			clc					;XXX TODO should not happen and not needed?
 }
++
 			sta <.sector				;start next track with sector = 0
 			bne .wanted_loop			;if zero, done
 								;carry is 0
 								;just track is full
 .load_wanted_blocks						;read and transfer all blocks on wishlist
 			ror <.last_track_of_file		;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
-.new_or_cached_sector
 !if .CACHING = 0 {
 .new_sector
 			ldx <.is_loaded_sector
@@ -1062,9 +1058,9 @@ ___			= $ff
 			ldx <.is_cached_sector
 			bmi .next_sector			;nothing cached yet
 			;maybe not necessary, but with random access loading?
-			ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
-			iny					;is it part of our yet loaded file?
-			beq .next_sector			;something went wrong, seems like we loaded another file
+			;ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
+			;iny					;is it part of our yet loaded file?
+			;beq .next_sector			;something went wrong, seems like we loaded another file
 .restore
 			stx <.is_loaded_sector
 -
@@ -1106,6 +1102,7 @@ ___			= $ff
 			tax					;save A in X as A is tainted on upcoming eor
 
 .en_dis_td		eor .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SET UP SEND LOOP, AND DECIDE BLOCK SIZES FIRST
@@ -1243,7 +1240,7 @@ ___			= $ff
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
 			bne .next_sector			;start over with a new header again as teh check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x		;waste a cycle
-			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
+			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 2 cycles
 			jmp .gcr_entry				;36 cycles until entry
 
 .directory
