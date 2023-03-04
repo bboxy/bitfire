@@ -781,9 +781,10 @@ ___			= $ff
 			sta <.dir_sector
 			dec .en_dis_td				;enable jump back
 			ldy #$00
-			;sty <.is_loaded_sector			;invalidate cached sector, $00 is sufficient here as we either want sector 17 or 18 solely, wanted-check will fail and lead to load next sector
 !if .CACHING = 1 {
 			sty <.is_cached_sector			;invalidate cached sector
+} else {
+			sty <.is_loaded_sector			;invalidate cached sector
 }
 			beq .turn_disc_entry			;BRA a = sector, x = 0 = index
 .reset			jmp (.reset_drive)
@@ -972,9 +973,10 @@ ___			= $ff
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
 			bpl *-3
-			;sta <.is_loaded_sector			;invalidate sector cache, as we changed track, negative value is okay for that
 !if .CACHING = 1 {
 			sta <.is_cached_sector
+} else {
+			sta <.is_loaded_sector			;invalidate sector cache, as we changed track, negative value is okay for that
 }
 .seek_check
 			dex
@@ -987,8 +989,6 @@ ___			= $ff
 			; SET UP BITRATE, MODIFY GCR LOOP IN ZEROPAGE
 			;
 			;----------------------------------------------------------------------------------------------------
-
-.set_bitrate
 .set_max_sectors
 			lda #16
 			cpy #25
@@ -1005,10 +1005,10 @@ ___			= $ff
 			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
 			inx
-			beq +					;check on X == $ff? and preserve carry
+			beq .set_bitrate			;check on X == $ff? and preserve carry
 			dex
 			rts
-+
+.set_bitrate
 			tax
 			lda $1c00
 			ora #$60
@@ -1030,7 +1030,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-
 			lda <.sector				;now create our wishlist for the current track
 .wanted_loop
 			tax
@@ -1043,7 +1042,6 @@ ___			= $ff
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc .wanted_loop			;nope
-
 !if .INTERLEAVE = 4 {
 			adc #$00				;increase
 			and #$03				;modulo 4
@@ -1064,6 +1062,7 @@ ___			= $ff
 			ror <.last_track_of_file		;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
 .new_or_cached_sector
 !if .CACHING = 0 {
+.new_sector
 			ldx <.is_loaded_sector
 			bmi .next_sector
 			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
@@ -1079,6 +1078,7 @@ ___			= $ff
 } else {
 			ldx <.is_cached_sector
 			bmi .next_sector			;nothing cached yet
+			;maybe not necessary, but with random access loading?
 			ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
 			iny					;is it part of our yet loaded file?
 			beq .next_sector			;something went wrong, seems like we loaded another file
@@ -1096,9 +1096,6 @@ ___			= $ff
 			ldy <.wanted,x				;grab index from list
 			cpy <.last_block_num			;current block is last block on list?
 			bne .no_caching				;do not cache this sector
-			;lda .last_block_size			;/!\ special case, if whole sector is used by file and new file starts on new sector, we will fail with caching
-			;bne +
-			;nop
 .stow
 			stx <.is_cached_sector
 -

@@ -142,5 +142,6 @@ v1.2
 - finally fixed and changed buslock-technique so that it also works with THCM's SX64 - broken since introduced in 0.7 /o\
 - saved huge amount of bytes
 - changing layout of dir-sector
-- use free memory and unused dir-sector space for proper caching of first/last sector
+- use free memory for proper caching of first/last sector, thanks to $020b bytes free for cache and dir
 - improve loadraw performance by more than 5%
+- sending data bewteen halfsteps seemed to cause problems on my longboard 1541, moved it to the end of stepping when settle time for the stepper is due
