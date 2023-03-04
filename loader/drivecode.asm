@@ -781,6 +781,7 @@ ___			= $ff
 			sta <.dir_sector
 			dec .en_dis_td				;enable jump back
 			ldy #$00
+			sty <.blocks + 1
 !if .CACHING = 1 {
 			sty <.is_cached_sector			;invalidate cached sector
 } else {
@@ -891,38 +892,12 @@ ___			= $ff
 			bcc +					;file_size + 1
 			iny
 +
-
 .index_to_sectornum
-			;XXX TODO block to index -> can be also done via other means? lookup?
-			;remaining blocks on track to find out start sector
-			ldx <.blocks + 1
-			lda #-.INTERLEAVE			;walk through track from pos 0 on
-.fs_loop
-			clc					;XXX could be omitted for interleave = 4?
-			adc #.INTERLEAVE
-			cmp <.max_sectors
-			bcc +
-								;next revolutiona
-!if .INTERLEAVE = 4 {
-			adc #$00				;increase
-			and #$03				;modulo 4
-} else {
-			adc #$00				;increase
--
-			sec					;modulo INTERLEAVE
-			sbc #.INTERLEAVE			;subtract some #sectors
-			bcs -					;until underflow
-			adc #.INTERLEAVE
-}
-+
-			dex
-			bpl .fs_loop
+			lxa #$00
 .turn_disc_entry
-			sty <.last_block_num
 			sta <.sector
-			inx
+			sty <.last_block_num
 			stx <.index				;reset block index, x = 0 (if done via turn_disc, it doesn't matter, as no block is transferred, it will just be set to 19 (x = 18))
-								;XXX TODO reuse Y = 0 / X = 0, but load_track is entered from 2 positions
 .load_track
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1021,6 +996,7 @@ ___			= $ff
 			lda .slow6,y
 			sta <.gcr_slow1,x
 			dey
+			txa
 			dex
 			bpl -
 
@@ -1030,16 +1006,23 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			lda <.sector				;now create our wishlist for the current track
+			;A = 0
 .wanted_loop
-			tax
+			ldy <.blocks + 1
+			bne +
+			lax <.sector
 			ldy <.index				;get index
 			sty <.wanted,x				;write index into wantedlist
 			inc <.blocks_on_list			;count number of blocks in list (per track num of blocks)
 			cpy <.last_block_num			;inc index and check if index > file_size + 1 -> EOF
 			bcs .load_wanted_blocks			;yep, EOF, carry is set
 			inc <.index				;keep index as low as possible, so that literal blob gets loaded with lz_next_page in any case and over more than one page
+			top
++
+			dec <.blocks + 1
+			clc
 			adc #.INTERLEAVE
+			sta <.sector				;start next track with sector = 0
 			cmp <.max_sectors			;wrap around?
 			bcc .wanted_loop			;nope
 !if .INTERLEAVE = 4 {
@@ -1054,10 +1037,10 @@ ___			= $ff
 			adc #.INTERLEAVE
 			clc					;XXX TODO should not happen and not needed?
 }
+			sta <.sector				;start next track with sector = 0
 			bne .wanted_loop			;if zero, done
 								;carry is 0
 								;just track is full
-			sta <.sector				;start next track with sector = 0
 .load_wanted_blocks						;read and transfer all blocks on wishlist
 			ror <.last_track_of_file		;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
 .new_or_cached_sector
