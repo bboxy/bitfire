@@ -1301,48 +1301,51 @@ ___			= $ff
 			sta $0b
 
 			;fetch first dir sect and by that position head at track 18 to have a relyable start point for stepping
-			lda #$80
-			sta $02
-			lda $02
-			bmi *-2
+			ldx #$80
+			stx $02
+.poll_job		bit $02
+			bmi .poll_job
 			;ends up at $0500?
 
 			;motor and LED is on after that
 
 			sei
 			lda $0503
-			sta .fn + 1				;remember diskside#
+			pha
+
+			;$180e .. 1800
+			;$1c0e .. 1800
 
 			lda #%01111010				;DDR set bits for drivenumber to 0, ATN out, CLK out and DATA out are outputs
 			sta $1802
-
-			;ACR
-			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
-			sta $1c0b
 
 			;PCR					 111                            0        111                                  0
 			lda #%11101110				;CB2 manual output high (read), CB1 low, CA2 manual output high (byte ready), CA1 low (NC)
 			sta $1c0c
 
+			;ACR
+			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
+			sta $1c0b
+
 			ldy #$00				;clear lower part of counter
 			sty $1c08
 			sty $1c04
 
-			lda #$7f				;disable all interrupts
-			sta $180e
-			sta $1c0e
-			lda $180d				;clear all IRQ flags to ack possibly pending IRQs
-			lda $1c0d
+			dex					;disable all interrupts
+			stx $180e
+			stx $1c0e
+			ldx $180d				;clear all IRQ flags to ack possibly pending IRQs
+			ldx $1c0d
 
-			lda #$c0				;enable timer 1 flag
-			sta $1c0e
+			ldx #$c0				;enable timer 1 flag
+			stx $1c0e
 
 			;cli					;now it is save to allow interrupts again, as they won't happen anymore, okay, it is a lie, timer irqs would happen, but we keep sei
 
 			;ldy #$00
 
-			ldx #.BUSY				;signal that we are ready for transfer
-			stx $1800
+			asl;ldx #.BUSY				;signal that we are ready for transfer
+			sta $1800
 
 			bit $1800
 			bpl *-3
@@ -1365,7 +1368,10 @@ ___			= $ff
 			iny
 			bne .get_block
 
-			inc .block + 1
+			lda #$01
+-
+			isc .block + 1
+			beq -
 			bne .get_block
 .done
 			ldx #.BUSY
@@ -1375,7 +1381,7 @@ ___			= $ff
 			bit $1800				;no need to, check is done by get_byte
 			bmi *-3
 
-.fn			lda #$00				;load directory
+			pla
 			jmp .drivecode_entry
 }
 

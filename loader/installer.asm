@@ -93,9 +93,10 @@
 		lda #$37
 		sta $dd02
 
--
-.dc_data = * + 1
-		lda .drivecode_start
+		ldy #$00
+		ldx .dc_data + 2
+.dc_loop
+.dc_data	lda .drivecode_start, y
                 sec
                 ror
 		sta .dc_src
@@ -113,16 +114,18 @@
                 lsr .dc_src
                 bne .s_loop
 
-		inc .dc_data
+		iny
 		bne +
-		inc .dc_data+1
+-
+		inx
+		stx .dc_data + 2
+		cpx #>(.drivecode_start + $0100)
+		beq -
 +
-		lda .dc_data
-		cmp #<.drivecode_end
-		bne -
-		lda .dc_data+1
-		cmp #>.drivecode_end
-		bne -
+		cpy #<(.drivecode_size)
+		bne .dc_loop
+		cpx #>(.drivecode_end)
+		bne .dc_loop
 
 		lda #$37			;raise atn to signal end of transfer
 		sta $dd02
