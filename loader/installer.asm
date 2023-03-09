@@ -119,8 +119,8 @@
 -
 		inx
 		stx .dc_data + 2
-		cpx #>(.drivecode_start + $0100)
-		beq -
+;		cpx #>(.drivecode_start + $0100)
+;		beq -
 +
 		cpy #<(.drivecode_size)
 		bne .dc_loop
@@ -398,4 +398,6 @@
 !bin "resident",,2
 }
 
+!warn *
 !src "drivecode.asm"
+!warn *

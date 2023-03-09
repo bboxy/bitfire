@@ -69,7 +69,8 @@
 
 ;adresses
 .reset_drive		= $fffc	;eaa0
-.drivecode		= $0000
+.zeropage		= $0000
+.drivecode		= $0200
 .bootstrap		= $0700
 .cache			= $0700
 
@@ -82,7 +83,7 @@
 .dir_diskside		= .directory + 3
 								;with those three values, the absolute position on disk is represented
 .drivecode_start
-!pseudopc .drivecode {
+!pseudopc .zeropage {
 .zp_start
 
 ;free			= .zp_start + $00
@@ -128,10 +129,10 @@ ___			= $ff
 .S0			= $00 xor .EOR_VAL			;ser2bin value 0/9
 .S1			= $09 xor .EOR_VAL			;ser2bin value 1/8
 
-.tab00005555_hi		= * + $00
-.tab00333330_hi		= * + $00
-.tab05666660_lo		= * + $01
-.tab00700077_hi		= * + $00				;XXX currently not used
+.tab00005555_hi		= .zp_start + $00
+.tab00333330_hi		= .zp_start + $00
+.tab05666660_lo		= .zp_start + $01
+.tab00700077_hi		= .zp_start + $00			;XXX currently not used
 
 ;tab00AAAAA0
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
@@ -289,8 +290,8 @@ ___			= $ff
 !if >*-1 != >.read_loop { !error "read_sector not in one page: ", .read_loop, " - ", * }
 
 !align 255,0
-!fill 256,0
-!align 255,0
+}
+!pseudopc .drivecode {
 .tables
 
 ;tables with possible offsets
@@ -1363,12 +1364,12 @@ ___			= $ff
 			ror					;shift in
 			bcc -					;do until our counter bit ends up in carry
 .block = * + 1
-			sta .drivecode,y
+			sta .zeropage,y
 
 			iny
 			bne .get_block
 
-			lda #$01
+			lda #$01				;skip stack area
 -
 			isc .block + 1
 			beq -
