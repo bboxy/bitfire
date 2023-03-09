@@ -63,27 +63,6 @@ DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 	}
 }
 
-!macro get_lz_length ~.entry {
-!ifdef SFX_FAST {
--						;get_length as inline
-		+get_lz_bit			;fetch payload bit
-		rol				;can also moved to front and executed once on start
-.entry
-		+get_lz_bit
-		bcc -
-+
-		bne +
-		jsr lz_refill_bits
-		beq lz_eof			;underflow. must have been 0
-+
-		sbc #$01
-} else {
-.entry		jsr get_length
-		sbc #$01
-		bcc lz_eof			;underflow. must have been 0
-}
-}
-
 		* = $0801
 .dali_code_start
                 !byte $0b,$08
@@ -170,7 +149,6 @@ lz_data_size_hi = * + 1
 
 		bne +
 		jsr lz_refill_bits
-		beq .lz_l_page                  ;happens very seldom, so let's do that with lz_l_page that also decrements lz_len_hi, it returns on c = 1, what is always true after jsr .lz_length
 +
 		tax
 .lz_l_page_
@@ -244,11 +222,7 @@ lz_src = * + 1
 .lz_offset_lo = * + 1
 		sbc #$00
 		sta <.lz_msrcr + 0
-!ifdef SFX_FAST {
-		lax <lz_dst + 1
-} else {
 		lda <lz_dst + 1
-}
 .lz_offset_hi = * + 1
 		sbc #$00
 		sta <.lz_msrcr + 1
@@ -287,7 +261,26 @@ lz_len_hi = * + 1
 		;FETCH A NEW OFFSET
 		;------------------
 
-		+get_lz_length ~.lz_new_offset
+!ifdef SFX_FAST {
+-						;get_length as inline
+		+get_lz_bit			;fetch payload bit
+		rol				;can also moved to front and executed once on start
+.lz_new_offset
+		+get_lz_bit
+		bcc -
++
+		bne +
+		jsr lz_refill_bits
+		beq lz_eof			;underflow. must have been 0
++
+		sbc #$01
+} else {
+.lz_new_offset
+		jsr get_length
+		sbc #$01
+		bcc lz_eof			;underflow. must have been 0
+}
+
 		lsr
 		sta <.lz_offset_hi		;hibyte of offset
 
