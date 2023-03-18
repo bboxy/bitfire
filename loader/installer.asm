@@ -398,6 +398,4 @@
 !bin "resident",,2
 }
 
-!warn *
 !src "drivecode.asm"
-!warn *
