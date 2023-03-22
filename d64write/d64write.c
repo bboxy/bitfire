@@ -581,7 +581,11 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     //for (i = 0; i < 32; i++) s_dbg[i] = 0;
 
     /* at which sector on track do we start? */
-    int sectnum = sectors[d64->track] - d64_get_free_track_blocks(d64, d64->track);
+    int sectnum = 0;
+    if (d64->track != 0) {
+        sectnum = sectors[d64->track] - d64_get_free_track_blocks(d64, d64->track);
+        //printf("sectnum: % 2d  track: % 2d  free: % 4d  sectors: % 02d\n", sectnum, d64->track, sectors[d64->track], d64_get_free_track_blocks(d64, d64->track));
+    }
 
     /* partly filled sectors do not count, subtract */
     if (d64->sectpos > 0) sectnum--;
@@ -713,8 +717,8 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
 
     /* blank buffer */
     memset(d64->sectbuf, 0, 256);
-//    /* write changed bam */
-//    d64_write_bam(d64);
+    /* write changed bam */
+    d64_write_bam(d64);
 
     d64->track_link = start_track;
     d64->sector_link = start_sector;
@@ -861,7 +865,7 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
 }
 
 int main(int argc, char *argv[]) {
-    d64 d64;
+    d64 d64 = { 0 };
     int side = -1;
 
     int c;
@@ -886,6 +890,8 @@ int main(int argc, char *argv[]) {
     int free = -1;
 
     int link_to_num = 0;
+
+    memset(&d64, 0 ,sizeof(d64));
 
     debug_level = 0;
     d64.supported_tracks = 35;
