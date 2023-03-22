@@ -135,6 +135,7 @@ v1.2
 - dali now supports --exit_on_warn
 - added proper depack-example to dali
 - dali sfx can be relocated to any address (upon feature request by comos)
+- fixed bug in fast dali sfx
 - 3.5% faster decompressor
 - fixed bug, inplace decompression would miss loading sectors if final literal is > than 1 sector/crosses 2 sectors or more
 - turn disk is a simple loadraw with file# $fx now that returns when done
@@ -145,3 +146,4 @@ v1.2
 - use free memory for proper caching of first/last sector, thanks to $020b bytes free for cache and dir
 - improve loadraw performance by more than 5%
 - sending data bewteen halfsteps seemed to cause problems on my longboard 1541, moved it to the end of stepping when settle time for the stepper is due
+- fixed bug with uninitialized d64 in d64write
