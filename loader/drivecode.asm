@@ -265,14 +265,14 @@ ___			= $ff
 			eor <.ser2bin,x
 			dey					;Y = 0 or 1
 			bpl -					;first byte being processed?
-			eor <.track				;second byte is track
-.back_read_header
-			bne .read_header
-.read_sector
 			ldy #$55				;type (sector) (SP = $ff already)
-			top
+			eor <.track				;second byte is track
+;.back_read_header
+			beq .read_sector
+;.read_sector
 .read_header
 			ldy #$52				;type (header)
+.read_sector
 			jmp .read_gcr
 
 !if .GCR_125 = 1 {
@@ -633,6 +633,8 @@ ___			= $ff
 !if .POSTPONED_XFER = 1 {
 			bit <.en_dis_seek
 			bmi +
+			inx					;we return with X = $ff from send -> X = 0
+			inc <.en_dis_seek			;disable_jmp
 			jmp .send_back
 +
 			lda <.blocks_on_list			;just read again, was decreased before
@@ -926,9 +928,9 @@ ___			= $ff
 			tya
 .halftrack
 			eor $1c00
+			and #$01				;same as and #3 afterwards + clc after rol
 			sec
 			rol
-			anc #3					;also clc for free
 			eor $1c00
 			sta $1c00
 
@@ -936,13 +938,9 @@ ___			= $ff
 !if .POSTPONED_XFER = 1 {
 			txa
 			adc <.en_dis_seek			;$7f/$80
-			bmi .seek_end				;nope, continue
-
+			bmi .send_back				;nope, continue
 			jmp .start_send				;send data now
 .send_back
-			inx					;we return with X = $ff from send
-			inc <.en_dis_seek			;disable_jmp
-.seek_end
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
 			bpl *-3
@@ -1169,9 +1167,8 @@ ___			= $ff
 			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT (HEADER ALREADY ON STACK)
 			;
 			;----------------------------------------------------------------------------------------------------
-
 .back_read_sector
-			;should happen earlier
+			;read happens earlier than needed, 2 cycles over all! as branch is not taken and eor is only 3 cycles
 			ldx $1c01				;44445555
 			eor $0101
 			sta <.chksum2 + 1			;checksum 2 bytes from last round
@@ -1208,7 +1205,7 @@ ___			= $ff
 .next_sector
 			jmp .read_header
 .read_gcr
-			lax <.val07ff - $52,y
+			ldx <.val07ff - $52,y
 			txs
 			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
 -
