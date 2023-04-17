@@ -39,9 +39,6 @@
 		* = CONFIG_INSTALLER_ADDR
 		!src "loader_acme.inc"
 .init_inst
-!if (CONFIG_AUTODETECT = 1) {
-		!src "detect.asm"
-}
 		lda #$7f
 		sta $dc0d
 		lda $dc0d
@@ -157,6 +154,9 @@
 }
 }
 
+!if (CONFIG_AUTODETECT = 1) {
+		!src "detect.asm"
+}
 !if CONFIG_LOADER = 1 {
 .l1		lda $d012
 .l2		cmp $d012
