@@ -1,11 +1,15 @@
-		!macro link_decomp_under_io {
+				#macro link_decomp_under_io 
+		{
+.(
 			dec $01                         ;bank out IO
 			jsr link_decomp                 ;depack
 			inc $01
 ).
 		}
 
-		!macro link_load_next_raw_decomp {
+				#macro link_load_next_raw_decomp 
+		{
+.(
 			jsr link_load_next_raw
 			dec $01                         ;bank out IO
 			jsr link_decomp                 ;depack
@@ -46,7 +50,9 @@
 ).
 		}
 
-		!macro link_load_next_double {
+				#macro link_load_next_double 
+		{
+.(
 			jsr link_load_next_comp
 			jsr link_load_next_raw
 			dec $01
@@ -56,7 +62,9 @@
 		}
 
 		;link irq hook back to base irq
-		!macro link_player_irq {
+				#macro link_player_irq 
+		{
+.(
 			sei
 			lda #<link_player
 			sta $fffe
@@ -68,7 +76,9 @@
 ).
 		}
 
-		!macro reset_drive {
+				#macro reset_drive 
+		{
+.(
 			lda #BITFIRE_RESET
 			jsr bitfire_send_byte_
 ).
@@ -110,20 +120,26 @@ l:
 ).
 		}
 
-		!macro sync {
+				#macro sync 
+		{
+.(
 l:
 			lda link_frame_count + 1	;Counter expired when $8000 is reached
 			bpl l
 ).
 		}
 
-		!macro bus_lock {
+				#macro bus_lock 
+		{
+.(
 			lda #$37			;set ATN
 			sta $dd02
 ).
 		}
 
-		!macro bus_unlock {
+				#macro bus_unlock 
+		{
+.(
 			lda $dd00
 			and #$03
 			sta $dd00
@@ -141,7 +157,9 @@ l:
 ).
 		}
 
-		!macro link_music_update {
+				#macro link_music_update 
+		{
+.(
 			inc link_frame_count + 0
 			bne l
 			inc link_frame_count + 1
@@ -150,7 +168,67 @@ l:
 ).
 		}
 
-		!macro start_music_nmi {
+				#macro to_nmi 
+		{
+.(
+			lda #$ad
+			sta link_player + 7
+			lda #$0d
+			sta link_player + 8
+			lda #$dd
+			sta link_player + 9
+).
+		}
+
+				#macro to_irq 
+		{
+.(
+			lda #$ce
+			sta link_player + 7
+			lda #$19
+			sta link_player + 8
+			lda #$d0
+			sta link_player + 9
+).
+		}
+
+				#macro switch_to_nmi 
+		{
+.(
+			lda #$fe
+l:
+			cmp $d012
+			bne l
+			sei
+			+to_nmi
+			+start_music_nmi
+			jsr link_music_play
+).
+		}
+
+				#macro switch_to_irq 
+		{
+.(
+			lda #$fe
+l:
+			cmp $d012
+			bne l
+			+stop_music_nmi
+			+to_irq
+			ldx #<link_player
+			lda #>link_player
+
+			stx $fffe
+			sta $ffff
+			lda #$ff
+			sta $d012
+			jsr link_music_play
+).
+		}
+
+				#macro start_music_nmi 
+		{
+.(
 			;lda #$20
 			;sta link_music_play_jmp
 			ldx #<link_player
@@ -178,14 +256,18 @@ l:
 ).
 		}
 
-		!macro stop_music_nmi {
+				#macro stop_music_nmi 
+		{
+.(
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
 ).
 		}
 
-		!macro restart_music_nmi {
+				#macro restart_music_nmi 
+		{
+.(
 			lda $dd0d
 			lda #$81
 			sta $dd0d
@@ -201,8 +283,7 @@ l:
 ;			pha
 ;			dex
 ;			bpl l
-;).
-		}
+;		}
 ;
 ;		!macro gaps_restore {
 ;			ldx #$00
@@ -214,5 +295,4 @@ l:
 ;			inx
 ;			cpx #$0a
 ;			bne l
-;).
-		}
+;		}

@@ -2,14 +2,14 @@
 			dec $01                         ;bank out IO
 			jsr link_decomp                 ;depack
 			inc $01
-.endm
+		.endm
 
 		link_load_next_raw_decomp .macro
 			jsr link_load_next_raw
 			dec $01                         ;bank out IO
 			jsr link_decomp                 ;depack
 			inc $01
-.endm
+		.endm
 
 		;load next file as a raw file (do not decomp on the fly) and jump to .addr
 		link_load_next_raw_jmp .macro
@@ -18,7 +18,7 @@
 			lda #<(\1-1)
 			pha
 			jmp link_load_next_raw
-.endm
+		.endm
 
 		;load next file and decomp on the fly, then jump to .arg
 		link_load_next_comp_jmp .macro
@@ -27,7 +27,7 @@
 			lda #<(\1-1)
 			pha
 			jmp link_load_next_comp
-.endm
+		.endm
 
 		;decomp previously loaded file and jump to .arg
 		link_decomp_jmp .macro
@@ -36,7 +36,7 @@
 			lda #<(\1-1)
 			pha
 			jmp link_decomp
-.endm
+		.endm
 
 		link_load_next_double .macro
 			jsr link_load_next_comp
@@ -44,7 +44,7 @@
 			dec $01
 			jsr link_decomp
 			inc $01
-.endm
+		.endm
 
 		;link irq hook back to base irq
 		link_player_irq .macro
@@ -56,12 +56,12 @@
 			lda #$ff
 			sta $d012
 			cli
-.endm
+		.endm
 
 		reset_drive .macro
 			lda #BITFIRE_RESET
 			jsr bitfire_send_byte_
-.endm
+		.endm
 
 		;request next disk side and reset filenum_counter
 		request_disk .macro
@@ -74,7 +74,7 @@
 			;pha
 			;pla
 			;+wait_floppy_idle
-.endm
+		.endm
 
 		;wait for given frame counter value
 		link_wait_syncpoint .macro
@@ -82,7 +82,7 @@ l
 			lda link_syncpoint
 			cmp #\1
 			bcc l
-.endm
+		.endm
 
 		setup_sync .macro
 			lda #$00
@@ -91,18 +91,18 @@ l
 			sta link_frame_count + 1
 			lda #<($8000 - .arg)
 			sta link_frame_count + 0	;now setup counter
-.endm
+		.endm
 
 		sync .macro
 l
 			lda link_frame_count + 1	;Counter expired when $8000 is reached
 			bpl l
-.endm
+		.endm
 
 		bus_lock .macro
 			lda #$37			;set ATN
 			sta $dd02
-.endm
+		.endm
 
 		bus_unlock .macro
 			lda $dd00
@@ -110,14 +110,14 @@ l
 			sta $dd00
 			lda #$3f
 			sta $dd02
-.endm
+		.endm
 
 		set_depack_pointers .macro
 			lda #<\1
 			sta bitfire_load_addr_lo
 			lda #>\1
 			sta bitfire_load_addr_hi
-.endm
+		.endm
 
 		link_music_update .macro
 			inc link_frame_count + 0
@@ -125,7 +125,53 @@ l
 			inc link_frame_count + 1
 l
 			jmp (link_music_addr)
-.endm
+		.endm
+
+		to_nmi .macro
+			lda #$ad
+			sta link_player + 7
+			lda #$0d
+			sta link_player + 8
+			lda #$dd
+			sta link_player + 9
+		.endm
+
+		to_irq .macro
+			lda #$ce
+			sta link_player + 7
+			lda #$19
+			sta link_player + 8
+			lda #$d0
+			sta link_player + 9
+		.endm
+
+		switch_to_nmi .macro
+			lda #$fe
+l
+			cmp $d012
+			bne l
+			sei
+			to_nmi
+			start_music_nmi
+			jsr link_music_play
+		.endm
+
+		switch_to_irq .macro
+			lda #$fe
+l
+			cmp $d012
+			bne l
+			stop_music_nmi
+			to_irq
+			ldx #<link_player
+			lda #>link_player
+
+			stx $fffe
+			sta $ffff
+			lda #$ff
+			sta $d012
+			jsr link_music_play
+		.endm
 
 		start_music_nmi .macro
 			;lda #$20
@@ -152,21 +198,21 @@ l
 
 			lda #$11
 			sta $dd0e
-.endm
+		.endm
 
 		stop_music_nmi .macro
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
-.endm
+		.endm
 
 		restart_music_nmi .macro
 			lda $dd0d
 			lda #$81
 			sta $dd0d
-.endm
+		.endm
 
-;		gaps_setup .macro
+;		!macro gaps_setup {
 ;			ldx #$09
 ;l
 ;			lda CONFIG_RESIDENT_ADDR + $000,x
@@ -175,9 +221,9 @@ l
 ;			pha
 ;			dex
 ;			bpl l
-;.endm
+;		}
 ;
-;		gaps_restore .macro
+;		!macro gaps_restore {
 ;			ldx #$00
 ;l
 ;			pla
@@ -187,4 +233,4 @@ l
 ;			inx
 ;			cpx #$0a
 ;			bne l
-;.endm
+;		}

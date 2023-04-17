@@ -127,6 +127,52 @@ l:
 			jmp [link_music_addr]
 		}
 
+		.macro to_nmi () {
+			lda #$ad
+			sta link_player + 7
+			lda #$0d
+			sta link_player + 8
+			lda #$dd
+			sta link_player + 9
+		}
+
+		.macro to_irq () {
+			lda #$ce
+			sta link_player + 7
+			lda #$19
+			sta link_player + 8
+			lda #$d0
+			sta link_player + 9
+		}
+
+		.macro switch_to_nmi () {
+			lda #$fe
+l:
+			cmp $d012
+			bne l
+			sei
+			:to_nmi()
+			:start_music_nmi()
+			jsr link_music_play
+		}
+
+		.macro switch_to_irq () {
+			lda #$fe
+l:
+			cmp $d012
+			bne l
+			:stop_music_nmi()
+			:to_irq()
+			ldx #<link_player
+			lda #>link_player
+
+			stx $fffe
+			sta $ffff
+			lda #$ff
+			sta $d012
+			jsr link_music_play
+		}
+
 		.macro start_music_nmi () {
 			//lda #$20
 			//sta link_music_play_jmp
@@ -166,7 +212,7 @@ l:
 			sta $dd0d
 		}
 
-//		.macro gaps_setup () {
+//		!macro gaps_setup {
 //			ldx #$09
 //l:
 //			lda CONFIG_RESIDENT_ADDR + $000,x
@@ -177,7 +223,7 @@ l:
 //			bpl l
 //		}
 //
-//		.macro gaps_restore () {
+//		!macro gaps_restore {
 //			ldx #$00
 //l:
 //			pla

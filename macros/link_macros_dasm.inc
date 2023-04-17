@@ -1,10 +1,10 @@
-				mac link_decomp_under_io  
+		mac link_decomp_under_io
 			dec $01                         ;bank out IO
 			jsr link_decomp                 ;depack
 			inc $01
 		endm
 
-				mac link_load_next_raw_decomp  
+		mac link_load_next_raw_decomp
 			jsr link_load_next_raw
 			dec $01                         ;bank out IO
 			jsr link_decomp                 ;depack
@@ -12,7 +12,7 @@
 		endm
 
 		;load next file as a raw file (do not decomp on the fly) and jump to .addr
-				mac link_load_next_raw_jmp 
+		mac link_load_next_raw_jmp
 			lda #>({1}-1)
 			pha
 			lda #<({1}-1)
@@ -21,7 +21,7 @@
 		endm
 
 		;load next file and decomp on the fly, then jump to .arg
-				mac link_load_next_comp_jmp 
+		mac link_load_next_comp_jmp
 			lda #>({1}-1)
 			pha
 			lda #<({1}-1)
@@ -30,7 +30,7 @@
 		endm
 
 		;decomp previously loaded file and jump to .arg
-				mac link_decomp_jmp 
+		mac link_decomp_jmp
 			lda #>({1}-1)
 			pha
 			lda #<({1}-1)
@@ -38,7 +38,7 @@
 			jmp link_decomp
 		endm
 
-				mac link_load_next_double  
+		mac link_load_next_double
 			jsr link_load_next_comp
 			jsr link_load_next_raw
 			dec $01
@@ -47,7 +47,7 @@
 		endm
 
 		;link irq hook back to base irq
-				mac link_player_irq  
+		mac link_player_irq
 			sei
 			lda #<link_player
 			sta $fffe
@@ -58,13 +58,13 @@
 			cli
 		endm
 
-				mac reset_drive  
+		mac reset_drive
 			lda #BITFIRE_RESET
 			jsr bitfire_send_byte_
 		endm
 
 		;request next disk side and reset filenum_counter
-				mac request_disk 
+		mac request_disk
 			lda #{1} + $f0
 			;simply do a bogus loadraw, this will call ld_pblock until eof is raised, nothing is loaded as block_ready never happens :-)
 			jsr bitfire_loadraw_
@@ -77,14 +77,14 @@
 		endm
 
 		;wait for given frame counter value
-				mac link_wait_syncpoint 
+		mac link_wait_syncpoint
 .l
 			lda link_syncpoint
 			cmp #{1}
 			bcc .l
 		endm
 
-				mac setup_sync 
+		mac setup_sync
 			lda #$00
 			sta link_frame_count + 0	;avoid that the counter wraps worstcase, as we can't write atomic
 			lda #>($8000 - .arg)
@@ -93,18 +93,18 @@
 			sta link_frame_count + 0	;now setup counter
 		endm
 
-				mac sync  
+		mac sync
 .l
 			lda link_frame_count + 1	;Counter expired when $8000 is reached
 			bpl .l
 		endm
 
-				mac bus_lock  
+		mac bus_lock
 			lda #$37			;set ATN
 			sta $dd02
 		endm
 
-				mac bus_unlock  
+		mac bus_unlock
 			lda $dd00
 			and #$03
 			sta $dd00
@@ -112,14 +112,14 @@
 			sta $dd02
 		endm
 
-				mac set_depack_pointers 
+		mac set_depack_pointers
 			lda #<{1}
 			sta bitfire_load_addr_lo
 			lda #>{1}
 			sta bitfire_load_addr_hi
 		endm
 
-				mac link_music_update  
+		mac link_music_update
 			inc link_frame_count + 0
 			bne .l
 			inc link_frame_count + 1
@@ -127,7 +127,53 @@
 			jmp (link_music_addr)
 		endm
 
-				mac start_music_nmi  
+		mac to_nmi
+			lda #$ad
+			sta link_player + 7
+			lda #$0d
+			sta link_player + 8
+			lda #$dd
+			sta link_player + 9
+		endm
+
+		mac to_irq
+			lda #$ce
+			sta link_player + 7
+			lda #$19
+			sta link_player + 8
+			lda #$d0
+			sta link_player + 9
+		endm
+
+		mac switch_to_nmi
+			lda #$fe
+.l
+			cmp $d012
+			bne .l
+			sei
+			to_nmi
+			start_music_nmi
+			jsr link_music_play
+		endm
+
+		mac switch_to_irq
+			lda #$fe
+.l
+			cmp $d012
+			bne .l
+			stop_music_nmi
+			to_irq
+			ldx #<link_player
+			lda #>link_player
+
+			stx $fffe
+			sta $ffff
+			lda #$ff
+			sta $d012
+			jsr link_music_play
+		endm
+
+		mac start_music_nmi
 			;lda #$20
 			;sta link_music_play_jmp
 			ldx #<link_player
@@ -154,19 +200,19 @@
 			sta $dd0e
 		endm
 
-				mac stop_music_nmi  
+		mac stop_music_nmi
 			lda #$7f
 			sta $dd0d
 			lda $dd0d
 		endm
 
-				mac restart_music_nmi  
+		mac restart_music_nmi
 			lda $dd0d
 			lda #$81
 			sta $dd0d
 		endm
 
-;				mac gaps_setup  
+;		!macro gaps_setup {
 ;			ldx #$09
 ;.l
 ;			lda CONFIG_RESIDENT_ADDR + $000,x
@@ -175,9 +221,9 @@
 ;			pha
 ;			dex
 ;			bpl .l
-;		endm
+;		}
 ;
-;				mac gaps_restore  
+;		!macro gaps_restore {
 ;			ldx #$00
 ;.l
 ;			pla
@@ -187,4 +233,4 @@
 ;			inx
 ;			cpx #$0a
 ;			bne .l
-;		endm
+;		}
