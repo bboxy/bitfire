@@ -235,6 +235,14 @@ l
 			sta $dd0d
 		.endmacro
 
+		.macro set_music_addr arg
+		.local l
+			lda #<arg
+			sta link_music_addr + 0
+			lda #>arg
+			sta link_music_addr + 1
+		.endmacro
+
 ;		!macro gaps_setup {
 ;			ldx #$09
 ;l

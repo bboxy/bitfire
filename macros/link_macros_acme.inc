@@ -212,6 +212,13 @@
 			sta $dd0d
 		}
 
+		!macro set_music_addr .arg {
+			lda #<.arg
+			sta link_music_addr + 0
+			lda #>.arg
+			sta link_music_addr + 1
+		}
+
 ;		!macro gaps_setup {
 ;			ldx #$09
 ;.l
