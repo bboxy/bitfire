@@ -41,9 +41,11 @@
 ;XXX TODO store track as track * 2, so we can detect with a simple lsr if we are on a half track? Do check before sending? if so do halfstep? make all this postponed xfer simpler?
 
 ;config params
+.SANCHECK_TRAILING_ZERO = 0   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
+.BOGUS_READS		= 0   ;number of discarded successfully read sectors on spinup
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
-.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .CACHING		= 1   ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
 .IGNORE_ILLEGAL_FILE	= 1   ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
 .FORCE_LAST_BLOCK	= 0   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
@@ -105,7 +107,9 @@
 .sector			= .zp_start + $59			;DS
 .valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
-;free			= .zp_start + $66
+!if .BOGUS_READS > 0 {
+.bogus_reads		= .zp_start + $66
+}
 .block_size		= .zp_start + $68
 !if .CACHING = 1 {
 .cache_limit		= .zp_start + $69
@@ -267,13 +271,11 @@ ___			= $ff
 			bpl -					;first byte being processed?
 			ldy #$55				;type (sector) (SP = $ff already)
 			eor <.track				;second byte is track
-;.back_read_header
-			beq .read_sector
-;.read_sector
+			beq +
 .read_header
-			ldy #$52				;type (header)
-.read_sector
-			jmp .read_gcr
+			jmp .next_sector			;type (header)
++
+			jmp .read_sector
 
 !if .GCR_125 = 1 {
 .slow_table
@@ -798,6 +800,10 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .load_file
+!if .BOGUS_READS > 0 {
+			ldy #.BOGUS_READS
+			sty .bogus_reads
+}
 			ldy #.DIR_SECT - 1			;second dir sector
 			sbc #$3e				;carry is cleared
 			bcs +					;no underflow, filenum is >= $3f
@@ -1177,7 +1183,7 @@ ___			= $ff
 			arr #$f0
 			tay					;44444---
 
-;!if .SANCHECK_TRAILING_ZERO = 1 {
+!if .SANCHECK_TRAILING_ZERO = 1 {
 			lda #$0f
 			sbx #.CHECKSUM_CONST1			;4 bits of a trailing zero after checksum
 			bne .next_sector			;check remaining nibble if it is $05
@@ -1190,21 +1196,28 @@ ___			= $ff
 ;			and #$e0
 ;			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
 ;			bne .next_sector
-;}
+}
 			ldx <.threes + 1
 			lda <.tab00333330_hi,x			;sector checksum
 			eor .tab44444000_lo,y
 			eor <.chksum2 + 1
+!if .BOGUS_READS > 0 {
+			bne .next_sector
+			lda .bogus_reads
 			beq .new_sector
-
+			dec .bogus_reads
+} else {
+			beq .new_sector
+}
 			;----------------------------------------------------------------------------------------------------
 			;
 			; HEADER DONE, NOW READ SECTOR DATA
 			;
 			;----------------------------------------------------------------------------------------------------
 .next_sector
-			jmp .read_header
-.read_gcr
+			ldy #$52				;type (header)
+			;jmp .read_header
+.read_sector
 			ldx <.val07ff - $52,y
 			txs
 			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
