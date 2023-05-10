@@ -113,9 +113,9 @@ l:
 .(
 			lda #$00
 			sta link_frame_count + 0	;avoid that the counter wraps worstcase, as we can't write atomic
-			lda #>($8000 - arg)
+			lda #>($8000-arg)
 			sta link_frame_count + 1
-			lda #<($8000 - arg)
+			lda #<($8000-arg)
 			sta link_frame_count + 0	;now setup counter
 ).
 		}
