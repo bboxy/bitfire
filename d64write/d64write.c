@@ -26,8 +26,10 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
+#include <png.h>
 
 #ifdef _MSC_VER
 #else
@@ -35,6 +37,161 @@
 #endif
 #include "d64.h"
 #include "debug.h"
+#include "romchar.h"
+
+typedef struct ctx {
+    png_bytep * row_pointers;
+    png_byte color_type;
+    png_byte bit_depth;
+    int width;
+    int height;
+    int y;
+} ctx;
+
+//void fatal(const char* s, ...) {
+//        va_list args;
+//        va_start(args, s);
+//        vfprintf(stderr, s, args);
+//        fprintf(stderr, "\n");
+//        va_end(args);
+//        exit(2);
+//}
+
+void load_png(ctx* ctx, char* name) {
+    int y;
+
+    png_byte header[8];
+    png_infop info_ptr;
+    png_structp png_ptr;
+
+    FILE *fp = fopen(name, "rb");
+    if (!fp) {
+        fatal_message("File %s not found\n", name);
+    }
+    if (fread(header, 1, 8, fp) != 8 || png_sig_cmp(header, 0, 8)) {
+        fatal_message("%s is not a .png file\n", name);
+    }
+    png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr) {
+        fatal_message("png_create_read_struct failed\n");
+    }
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        fatal_message("png_create_info_struct failed\n");
+    }
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fatal_message("Error during init_io\n");
+    }
+
+    png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
+    png_set_expand(png_ptr);
+
+    png_init_io(png_ptr, fp);
+    png_set_sig_bytes(png_ptr, 8);
+    png_read_info(png_ptr, info_ptr);
+    ctx->width = png_get_image_width(png_ptr, info_ptr);
+    ctx->height = png_get_image_height(png_ptr, info_ptr);
+    ctx->color_type = png_get_color_type(png_ptr, info_ptr);
+    ctx->bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+
+    ctx->bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+    //printf("%d\n",ctx->bit_depth);
+
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fatal_message("Error during read_image\n");
+    }
+
+    png_read_update_info(png_ptr, info_ptr);
+
+    ctx->row_pointers = (png_bytep*) malloc(sizeof(png_bytep) * ctx->height);
+    for (y = 0; y < ctx->height; y++) {
+        ctx->row_pointers[y] = (png_byte*) malloc(png_get_rowbytes(png_ptr,info_ptr));
+    }
+
+    png_read_image(png_ptr, ctx->row_pointers);
+
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    fclose(fp);
+}
+
+int find_col( ctx* ctx, int x, int y) {
+    unsigned char r1, g1, b1;
+    unsigned char r2, g2, b2;
+    int best_col;
+    int best_dist;
+    int dist;
+    int c;
+
+    static const int palette[16][3] = {
+        {0x00, 0x00, 0x00},
+        {0xFF, 0xFF, 0xFF},
+        {0x68, 0x37, 0x2B},
+        {0x70, 0xA4, 0xB2},
+        {0x6F, 0x3D, 0x86},
+        {0x58, 0x8D, 0x43},
+        {0x35, 0x28, 0x79},
+        {0xB8, 0xC7, 0x6F},
+        {0x6F, 0x4F, 0x25},
+        {0x43, 0x39, 0x00},
+        {0x9A, 0x67, 0x59},
+        {0x44, 0x44, 0x44},
+        {0x6C, 0x6C, 0x6C},
+        {0x9A, 0xD2, 0x84},
+        {0x6C, 0x5E, 0xB5},
+        {0x95, 0x95, 0x95},
+    };
+    r1 = ctx->row_pointers[y][x * 4 + 0];
+    g1 = ctx->row_pointers[y][x * 4 + 1];
+    b1 = ctx->row_pointers[y][x * 4 + 2];
+
+    best_dist = - 1;
+    best_col = 0;
+    for (c = 0; c < 16; c++) {
+        r2 = palette[c][0];
+        g2 = palette[c][1];
+        b2 = palette[c][2];
+
+        dist = (r1-r2)*(r1-r2) + (g1-g2)*(g1-g2) + (b1-b2)*(b1-b2);
+
+        if (best_dist < 0 || best_dist > dist) {
+            best_col = c;
+            best_dist = dist;
+        }
+    }
+    return best_col;
+}
+
+int get_line_png(ctx* ctx, char* art) {
+    int x, y;
+    int c, i;
+
+    char block[8];
+
+    c = 0;
+    if (ctx->y + 8 <ctx->height) {
+        for (c = 0; c < ctx->width / 8 || c < 40; c++) {
+            for (y = 0; y < 8; y++) {
+                block[y] = 0;
+                for (x = 0; x < 8; x++) {
+                    block[y] |= (find_col(ctx, c * 8 + x, ctx->y + y) != 6) << (7 - x);
+                }
+            }
+            for (i = 0; i < 256; i++) {
+                if (!memcmp(rom_char + i * 8, block, 8)) break;
+            }
+            art[c] = i;
+            //printf("%02x ", i);
+        }
+        art[c] = 0;
+        //printf("\n");
+        ctx->y += 8;
+        return 1;
+    }
+    ctx->y += 8;
+    return 0;
+}
 
 static void ascii2petscii_char(char* c) {
     if(*c>0x60 && *c<=0x7a) *c^=0x20;
@@ -798,69 +955,93 @@ void screen2petscii(char* data, int size) {
     }
 }
 
+int get_line(ctx* ctx, FILE* file, char* art, int is_png) {
+    int c;
+    int j = 0;
+    if (!is_png) {
+        while((c = fgetc(file)) != EOF && j < 39) {
+            art[j] = c;
+            j++;
+        }
+        art[j] = 0;
+        if (c == EOF) {
+            fclose(file);
+            return 0;
+        }
+    } else {
+        return get_line_png(ctx, art);
+    }
+    return 1;
+}
+
 void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector, int lines) {
     char art[41] = { 0 };
     char header[17] = { 0 };
     char id[6] = { 0 };
     char filename[17] = { 0 };
-    int c, i, j;
+    int c, i;
     FILE* file;
     int head;
     int filetype;
     int locked;
     int blocks;
+    char* extension;
+    int is_png = 0;
+    ctx ctx;
 
-    if(file = fopen(art_path, "rb+"), !file) {
-        fatal_message("unable to open '%s'\n", art_path);
+    extension = strrchr(art_path, '.');
+    if (extension != NULL && (!strcmp(extension, ".png") || !strcmp(extension, ".PNG"))) {
+        is_png = 1;
+        load_png(&ctx, art_path);
+        ctx.y = 0;
     }
-    c = fgetc(file);
-    c = fgetc(file);
-    j = 0;
+
+    if (!is_png) {
+        if(file = fopen(art_path, "rb+"), !file) {
+            fatal_message("unable to open '%s'\n", art_path);
+        }
+        c = fgetc(file);
+        c = fgetc(file);
+    }
     head = 0;
-    while((c = fgetc(file)) != EOF && lines) {
-        if (j < 39) art[j++] = c;
-        else {
-            art[j] = 0;
-            if (head == 0) {
-                for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
-                memcpy(header, art + 3, 16);
-                memcpy(id, art + 21, 5);
-                screen2petscii(header, 16);
-                screen2petscii(id, 5);
-                d64_set_header(d64, header, id);
-                head++;
-            } else {
-                memcpy(filename, art + 6, 16);
-                screen2petscii(filename, 16);
-                blocks = strtoul(art, NULL, 10);
-                locked = art[27] == 0x3c;
-                switch (art[24]) {
-                    case 0x13:
-                        filetype = FILETYPE_SEQ;
-                    break;
-                    case 0x10:
-                        filetype = FILETYPE_PRG;
-                    break;
-                    case 0x04:
-                        filetype = FILETYPE_DEL;
-                    break;
-                    case 0x12:
-                        filetype = FILETYPE_REL;
-                    break;
-                    case 0x15:
-                        filetype = FILETYPE_USR;
-                    break;
-                    default:
-                        filetype = FILETYPE_DEL;
-                    break;
-                }
-                d64_create_direntry(d64, filename, boot_track, boot_sector, filetype, blocks, locked, 0, 0);
-                lines--;
+    while(get_line(&ctx, file, art, is_png) && lines) {
+        if (head == 0) {
+            for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
+            memcpy(header, art + 3, 16);
+            memcpy(id, art + 21, 5);
+            screen2petscii(header, 16);
+            screen2petscii(id, 5);
+            d64_set_header(d64, header, id);
+            head++;
+        } else {
+            memcpy(filename, art + 6, 16);
+            screen2petscii(filename, 16);
+            blocks = strtoul(art, NULL, 10);
+            locked = art[27] == 0x3c;
+            switch (art[24]) {
+                case 0x13:
+                    filetype = FILETYPE_SEQ;
+                break;
+                case 0x10:
+                    filetype = FILETYPE_PRG;
+                break;
+                case 0x04:
+                    filetype = FILETYPE_DEL;
+                break;
+                case 0x12:
+                    filetype = FILETYPE_REL;
+                break;
+                case 0x15:
+                    filetype = FILETYPE_USR;
+                break;
+                default:
+                    filetype = FILETYPE_DEL;
+                break;
             }
-            j = 0;
+            d64_create_direntry(d64, filename, boot_track, boot_sector, filetype, blocks, locked, 0, 0);
+            lines--;
         }
     }
-    fclose(file);
     return;
 }
 
@@ -908,7 +1089,7 @@ int main(int argc, char *argv[]) {
         printf("-s, --standard <file> [line]		Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
         printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
         printf("-B, --boot <file>			Writes a standard file into the dirtrack. The dirart is linked to that file.\n");
-        printf("-a, --art <num> <dirart.prg>		A dirart can be provided, it extracts <num> lines of a petscii screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
+        printf("-a, --art <num> <dirart.prg/.png>	A dirart can be provided, it extracts <num> lines of a petscii or .png screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
         printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("-F, --40				Enable 40 track support.\n");
         printf("-f, --free <num>			Set blocks free to num.\n");
