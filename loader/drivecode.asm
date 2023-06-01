@@ -42,7 +42,7 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 0   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.BOGUS_READS		= 0   ;number of discarded successfully read sectors on spinup
+.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
 .LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
 .LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
 .POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
@@ -1175,6 +1175,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 .back_read_sector
 			;read happens earlier than needed, 2 cycles over all! as branch is not taken and eor is only 3 cycles
+			nop
 			ldx $1c01				;44445555
 			eor $0101
 			sta <.chksum2 + 1			;checksum 2 bytes from last round

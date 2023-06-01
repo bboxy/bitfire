@@ -76,17 +76,13 @@ static unsigned char s2p[] = {
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20
 };
 
-void load_png(ctx* ctx, char* name) {
+void load_png(ctx* ctx, FILE* fp, char* name) {
     int y;
 
     png_byte header[8];
     png_infop info_ptr;
     png_structp png_ptr;
 
-    FILE *fp = fopen(name, "rb");
-    if (!fp) {
-        fatal_message("File %s not found\n", name);
-    }
     if (fread(header, 1, 8, fp) != 8 || png_sig_cmp(header, 0, 8)) {
         fatal_message("%s is not a .png file\n", name);
     }
@@ -132,7 +128,6 @@ void load_png(ctx* ctx, char* name) {
     png_read_image(png_ptr, ctx->row_pointers);
 
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-    fclose(fp);
 }
 
 int find_col( ctx* ctx, int x, int y) {
@@ -182,6 +177,39 @@ int find_col( ctx* ctx, int x, int y) {
     return best_col;
 }
 
+int get_line_c(FILE* file, char* line, int amount, int head) {
+    int c;
+    char num[4] = { 0 };
+    int cnt;
+    int l;
+
+    l = 0;
+    cnt = 0;
+    if (amount > 40) amount = 40;
+    while(((c = fgetc(file)) != EOF) && l < amount) {
+        if (c >= 0x30 && c <= 0x39 && cnt < 3) {
+            num[cnt] = c;
+            cnt++;
+            num[cnt] = 0;
+        }
+        //if (c >= 0x30 && c <= 0x39 && cnt == 3) {
+        //    cnt = 0;
+        //    num[cnt] = 0;
+        //}
+        else if (cnt > 0 && c == ',') {
+            line[l] = strtoul(num, NULL, 10);
+            if (!head) line[l] ^= 0x80;
+            cnt = 0;
+            num[cnt] = 0;
+            l++;
+        } else {
+            cnt = 0;
+            num[cnt] = 0;
+        }
+    }
+    return (c != EOF);
+}
+
 int get_line_png(ctx* ctx, char* art, int head) {
     int x, y;
     int c, i;
@@ -193,7 +221,7 @@ int get_line_png(ctx* ctx, char* art, int head) {
     unsigned char byte1, byte2;
 
     c = 0;
-    if (ctx->y + 8 <ctx->height) {
+    if (ctx->y + 8 <= ctx->height) {
         for (c = 0; c < ctx->width / 8 || c < 40; c++) {
             for (y = 0; y < 8; y++) {
                 block[y] = 0;
@@ -224,10 +252,10 @@ int get_line_png(ctx* ctx, char* art, int head) {
                 //if (!memcmp(rom_char + i * 8, block, 8)) break;
             }
             //art[c] = i;
-            printf("%02x ", art[c] & 255);
+            //printf("%02x ", art[c] & 255);
         }
         art[c] = 0;
-        printf("\n");
+        //printf("\n");
         ctx->y += 8;
         return 1;
     }
@@ -978,22 +1006,28 @@ void screen2petscii(char* data, int size) {
     }
 }
 
-int get_line(ctx* ctx, FILE* file, char* art, int is_png, int head) {
+#define TYPE_PRG	0
+#define TYPE_PNG	1
+#define TYPE_C		2
+
+int get_line_prg(FILE* file, char* art, int head) {
     int c;
     int j = 0;
-    if (!is_png) {
-        while((c = fgetc(file)) != EOF && j < 39) {
-            if (!head) c &= 0x7f;
-            art[j] = c;
-            j++;
-        }
-        art[j] = 0;
-        if (c == EOF) {
-            fclose(file);
-            return 0;
-        }
-    } else {
+    while((c = fgetc(file)) != EOF && j < 39) {
+        if (!head) c &= 0x7f;
+        art[j] = c;
+        j++;
+    }
+    art[j] = 0;
+    return (c != EOF);
+}
+int get_line(ctx* ctx, FILE* file, char* art, int type, int head) {
+    if (type == TYPE_PRG) {
+        return get_line_prg(file, art, head);
+    } else if (type == TYPE_PNG) {
         return get_line_png(ctx, art, head);
+    } else if (type == TYPE_C) {
+        return get_line_c(file, art, 40, head);
     }
     return 1;
 }
@@ -1009,24 +1043,31 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
     int locked;
     int blocks;
     char* extension;
-    int is_png = 0;
+    int type = TYPE_PRG;
     ctx ctx;
 
     extension = strrchr(art_path, '.');
     if (extension != NULL && (!strcmp(extension, ".png") || !strcmp(extension, ".PNG"))) {
-        is_png = 1;
-        load_png(&ctx, art_path);
+        type = TYPE_PNG;
+    }
+    if (extension != NULL && (!strcmp(extension, ".c") || !strcmp(extension, ".C"))) {
+        type = TYPE_C;
+    }
+
+    if(file = fopen(art_path, "rb+"), !file) {
+        fatal_message("unable to open '%s'\n", art_path);
+    }
+    if (type == TYPE_PNG) {
+        fseek(file, 2, SEEK_SET);
+    } else if (type == TYPE_C) {
+        get_line_c(file, art, 2, 0);
+    } else if (type == TYPE_PNG) {
+        load_png(&ctx, file, art_path);
         ctx.y = 0;
     }
 
-    if (!is_png) {
-        if(file = fopen(art_path, "rb+"), !file) {
-            fatal_message("unable to open '%s'\n", art_path);
-        }
-        fseek(file, 2, SEEK_SET);
-    }
     head = 0;
-    while(get_line(&ctx, file, art, is_png, head) && lines) {
+    while(get_line(&ctx, file, art, type, head) && lines) {
         if (head == 0) {
             //for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
             memcpy(header, art + 3, 16);
@@ -1064,6 +1105,7 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
             lines--;
         }
     }
+    fclose(file);
     return;
 }
 
