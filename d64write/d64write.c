@@ -1006,10 +1006,6 @@ void screen2petscii(char* data, int size) {
     }
 }
 
-#define TYPE_PRG	0
-#define TYPE_PNG	1
-#define TYPE_C		2
-
 int get_line_prg(FILE* file, char* art, int head) {
     int c;
     int j = 0;
@@ -1057,7 +1053,7 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
     if(file = fopen(art_path, "rb+"), !file) {
         fatal_message("unable to open '%s'\n", art_path);
     }
-    if (type == TYPE_PNG) {
+    if (type == TYPE_PRG) {
         fseek(file, 2, SEEK_SET);
     } else if (type == TYPE_C) {
         get_line_c(file, art, 2, 0);
