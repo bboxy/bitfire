@@ -146,21 +146,21 @@ l
 		.macro to_nmi
 		.local l
 			lda #$ad
-			sta link_player + 7
+			sta link_ack_interrupt + 0
 			lda #$0d
-			sta link_player + 8
+			sta link_ack_interrupt + 1
 			lda #$dd
-			sta link_player + 9
+			sta link_ack_interrupt + 2
 		.endmacro
 
 		.macro to_irq
 		.local l
 			lda #$ce
-			sta link_player + 7
+			sta link_ack_interrupt + 0
 			lda #$19
-			sta link_player + 8
+			sta link_ack_interrupt + 1
 			lda #$d0
-			sta link_player + 9
+			sta link_ack_interrupt + 2
 		.endmacro
 
 		.macro switch_to_nmi

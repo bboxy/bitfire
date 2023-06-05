@@ -649,6 +649,7 @@ link_player
 			txa
 			pha
 			inc $01							;should be save with $01 == $34/$35, except when music is @ >= $e000
+link_ack_interrupt
 	!if CONFIG_FRAMEWORK_MUSIC_NMI = 1 {
 			lda $dd0d
 	} else {

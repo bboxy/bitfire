@@ -41,14 +41,9 @@
 ;XXX TODO store track as track * 2, so we can detect with a simple lsr if we are on a half track? Do check before sending? if so do halfstep? make all this postponed xfer simpler?
 
 ;config params
-.SANCHECK_TRAILING_ZERO = 0   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
+.SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
-.LOAD_IN_ORDER_LIMIT	= $ff ;number of sectors that should be loaded in order (then switch to ooo loading)
-.LOAD_IN_ORDER		= 0   ;load all blocks in order to check if depacker runs into yet unloaded memory
 .POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
-.CACHING		= 1   ;do caching the right way, by keeping last block of file for next file load (as it will be first block then)
-.IGNORE_ILLEGAL_FILE	= 1   ;on illegal file# halt floppy, turn off motor and light up LED, else just skip load
-.FORCE_LAST_BLOCK	= 0   ;load last block of file last, so that shared sector is cached and next file can be loaded faster. works on loadcomp, but slower on loadraw
 .DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
 .GCR_125		= 1
@@ -94,9 +89,6 @@
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
 .en_dis_seek		= .zp_start + $19
-!if .LOAD_IN_ORDER = 1 {
-.desired_sect		= .zp_start + $20
-}
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 .blocks 		= .zp_start + $28			;2 bytes
 .wanted			= .zp_start + $3e			;21 bytes
@@ -111,10 +103,8 @@
 .bogus_reads		= .zp_start + $66
 }
 .block_size		= .zp_start + $68
-!if .CACHING = 1 {
 .cache_limit		= .zp_start + $69
 .is_cached_sector	= .zp_start + $6a
-}
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
 .val58			= .zp_start + $70
@@ -738,10 +728,6 @@ ___			= $ff
 
 			lsr					;lda #.BUSY
 			sta $1800				;set busy bit
-!if .LOAD_IN_ORDER = 1 {
-			ldy #$00
-			sty .desired_sect
-}
 			lda <.filename
 
 			;----------------------------------------------------------------------------------------------------
@@ -786,11 +772,7 @@ ___			= $ff
 			dec .en_dis_td				;enable jump back
 			ldy #$00
 			sty <.blocks + 1
-!if .CACHING = 1 {
 			sty <.is_cached_sector			;invalidate cached sector
-} else {
-			sty <.is_loaded_sector			;invalidate cached sector
-}
 			beq .turn_disc_entry			;BRA a = sector, x = 0 = index
 .reset			jmp (.reset_drive)
 
@@ -877,21 +859,6 @@ ___			= $ff
 			bne .is_big				;filesize < $100 ? is_big if not
 			bcs .is_big				;it is < $0100 but does not fit in remaining space? -> is_big
 			sta <.first_block_size			;fits in, correct size, this will cause overflow on next subtraction and last_block_num will be zero, last_block_size will be $ff
-!if .CACHING = 0 {
-			tax
-			bne +
-			;file not found
-	!if .IGNORE_ILLEGAL_FILE = 1 {
-			jmp .skip_load
-	} else {
-			lda $1c00
-			and #.MOTOR_OFF
-			ora #.LED_ON
-			sta $1c00
-			jam
-	}
-+
-}
 .is_big
 			clc
 			sbc <.first_block_size
@@ -950,11 +917,7 @@ ___			= $ff
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
 			bpl *-3
-!if .CACHING = 1 {
 			sta <.is_cached_sector
-} else {
-			sta <.is_loaded_sector			;invalidate sector cache, as we changed track, negative value is okay for that
-}
 .seek_check
 			dex
 			bpl .step
@@ -1045,21 +1008,6 @@ ___			= $ff
 								;just track is full
 .load_wanted_blocks						;read and transfer all blocks on wishlist
 			ror <.last_track_of_file		;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
-!if .CACHING = 0 {
-.new_sector
-			ldx <.is_loaded_sector
-			bmi .next_sector
-			lda <.wanted,x				;grab index from list (A with index reused later on after this call)
-			cmp #$ff
-			beq .next_sector			;if block index is $ff, we reread, as block is not wanted then
-	!if .FORCE_LAST_BLOCK = 1 {
-			cmp <.last_block_num			;current block is last block on list?
-			bne +					;nope continue
-			ldy <.blocks_on_list			;yes, it is last block of file, only one block remaining to load?
-			bne .next_sector			;reread
-+
-	}
-} else {
 			ldx <.is_cached_sector
 			bmi .next_sector			;nothing cached yet
 			;maybe not necessary, but with random access loading?
@@ -1093,15 +1041,7 @@ ___			= $ff
 			iny
 			beq .next_sector			;if block index is $ff, we reread, as block is not wanted then
 			ldx <.is_loaded_sector
-}
-!if .LOAD_IN_ORDER = 1 {
-			ldy <.desired_sect
-			cpy #.LOAD_IN_ORDER_LIMIT
-			bcs +
-			cmp <.desired_sect
-			bne .next_sector
-+
-}
+
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
 			tax					;save A in X as A is tainted on upcoming eor
@@ -1114,9 +1054,6 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .setup_send
-!if .LOAD_IN_ORDER = 1 {
-			inc <.desired_sect
-}
 			cpx <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
 			stx <.block_num
 			txa					;is needed then however to restore flags, but cheaper
