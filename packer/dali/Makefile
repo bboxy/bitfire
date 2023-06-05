@@ -7,6 +7,9 @@ DALI_CFLAGS = $(CFLAGS) -O3 -g -Wall -fomit-frame-pointer -I$(DALI_INCLUDES)
 ifdef win
 CC = x86_64-w64-mingw32-gcc
 STRIP = x86_64-w64-mingw32-strip
+else ifdef win32
+CC = x86_64-w64-mingw32-gcc-win32
+STRIP = x86_64-w64-mingw32-strip
 else
 CC ?= gcc
 STRIP ?= strip
@@ -49,6 +52,8 @@ dali: dali.c $(SALVADOR_SRC) sfx_small.h sfx_fast.h
 	@echo "Building dali..."
 	$(VR)$(CC) dali.c $(SALVADOR_SRC) $(DALI_CFLAGS) -o $@
 ifdef win
+	$(VR)$(STRIP) $@.exe
+else ifdef win32
 	$(VR)$(STRIP) $@.exe
 else
 	$(VR)$(STRIP) $@
