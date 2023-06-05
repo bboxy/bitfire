@@ -3,6 +3,9 @@ D64WRITE_LIBS = $(CLIBS) -lpng
 ifdef win
 CC = x86_64-w64-mingw32-gcc
 STRIP = x86_64-w64-mingw32-strip
+else ifdef win32
+CC = x86_64-w64-mingw32-gcc-win32
+STRIP = x86_64-w64-mingw32-strip
 else
 CC ?= gcc
 STRIP ?= strip
@@ -24,6 +27,8 @@ d64write: $(SOURCE) $(HEADER)
 	@echo "Building d64write..."
 	$(VR)$(CC) $(D64WRITE_CFLAGS) -o $@ $(SOURCE) $(D64WRITE_LIBS)
 ifdef win
+	$(VR)$(STRIP) $@.exe
+else ifdef win32
 	$(VR)$(STRIP) $@.exe
 else
 	$(VR)$(STRIP) $@
