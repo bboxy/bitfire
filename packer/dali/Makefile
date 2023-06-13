@@ -8,8 +8,8 @@ ifdef win
 CC = x86_64-w64-mingw32-gcc
 STRIP = x86_64-w64-mingw32-strip
 else ifdef win32
-CC = x86_64-w64-mingw32-gcc-win32
-STRIP = x86_64-w64-mingw32-strip
+CC = i686-w64-mingw32-gcc
+STRIP = i686-w64-mingw32-strip
 else
 CC ?= gcc
 STRIP ?= strip
