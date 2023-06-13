@@ -816,6 +816,10 @@ ___			= $ff
 			ldx #$fc
 .next_dir_entry
 .no_next_track
+			;iny
+			;iny
+			;iny
+			;iny
 			txa
 			sbx #-4					;start with x = 0 by this
 			;XXX TODO better do sum up all filesizes with 24 bit and then subtract sectors until block + 1 and block + 2 is reached?
@@ -1156,7 +1160,7 @@ ___			= $ff
 			;jmp .read_header
 .read_sector
 			ldx <.val07ff - $52,y
-			txs
+			txs					;bytes to read
 			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
 -
 			bit $1c00				;wait for start of sync
@@ -1241,7 +1245,9 @@ ___			= $ff
 			;this bootstrap will upload code from $0000-$06ff, and the bootstrap @ $0700 will be overwritten when dir-sector is read later on
 			lda #.DIR_TRACK
 			sta $0a
+!if .DIR_SECT != .DIR_TRACK {
 			lda #.DIR_SECT
+}
 			sta $0b
 
 			;fetch first dir sect and by that position head at track 18 to have a relyable start point for stepping
