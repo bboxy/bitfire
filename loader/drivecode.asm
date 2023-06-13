@@ -347,7 +347,7 @@ ___			= $ff
 			;----------------------------------------------------------------------------------------------------
 
 .turn_disc_back
-			ldy #$00
+			iny
 -
 			pla
 			ldx #$09
@@ -356,6 +356,7 @@ ___			= $ff
 			dey
 			sta .directory,y
 			bne -
+			nop
 			dop
 			!byte $50
 			dec <.blocks_on_list
@@ -1027,25 +1028,25 @@ ___			= $ff
 			ldx <.is_loaded_sector			;initially $ff
 			;bmi .next_sector			;initial call on a new track? Load content first
 			ldy <.wanted,x				;grab index from list
-			cpy <.last_block_num			;current block is last block on list?
-			bne .no_caching				;do not cache this sector
+			sty <.block_num
+			cpy <.last_block_num			;current block is last block on list? comparision sets carry and is needed later on on setup_send
+			bne .no_caching				;nope, do not cache this sector
 .stow
-			stx <.is_cached_sector
 -
 			pla
 			tsx
 			sta .cache,x
 			inx
 			bne -
+			ldx <.is_loaded_sector
+			stx <.is_cached_sector
 .no_caching
-			tya					;Y is still wanted,x
+			;cpy <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
 			iny
 			beq .next_sector			;if block index is $ff, we reread, as block is not wanted then
-			ldx <.is_loaded_sector
 
 			ldy #$ff				;blocksize full sector ($ff) /!\ reused later on for calculations!
 			sty <.wanted,x				;clear entry in wanted list
-			tax					;save A in X as A is tainted on upcoming eor
 
 .en_dis_td		eor .turn_disc_back			;can be disabled and we continue with send_data, else we are done here already
 
@@ -1055,9 +1056,7 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 .setup_send
-			cpx <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
-			stx <.block_num
-			txa					;is needed then however to restore flags, but cheaper
+			ldx <.block_num
 			bne .is_not_first_block
 .is_first_block
 			ldy <.first_block_size
