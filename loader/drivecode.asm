@@ -973,6 +973,7 @@ ___			= $ff
 
 			;A = 0
 			clc
+								;XXX TODO could also use anc #0 here
 .wanted_loop
 			ldy <.blocks + 1
 			bne +
@@ -1073,7 +1074,6 @@ ___			= $ff
 			tya
 .first_block_small
 			eor #$ff
-.set_positions
 			tax
 .first_block_big
 			dex					;a bit anoying, but SP is SP--/++SP on push/pull
@@ -1189,7 +1189,7 @@ ___			= $ff
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
 			bne .next_sector			;start over with a new header again as teh check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x		;waste a cycle
-			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 2 cycles
+			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 1 cycle
 			jmp .gcr_entry				;36 cycles until entry
 
 .directory
@@ -1226,10 +1226,6 @@ ___			= $ff
 
 ;XXX TODO optimize code size on stepping
 ;XXX TODO optimze eof detection?
-
-;turn disc, make it send a single byte to ack? -> wait block ready, receive a byte and then floppy goes idle?
-
-
 
 
 ;11111222

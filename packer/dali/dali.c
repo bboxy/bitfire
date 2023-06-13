@@ -562,7 +562,11 @@ void do_reencode(ctx* ctx) {
     /* write clamped raw data */
     ctx->clamped_name = (char*)malloc(sizeof(src_name));
     strcpy(ctx->clamped_name, src_name);
+#ifdef _WIN32
+    sfp = fopen(mktemp(ctx->clamped_name),"wb");
+#else
     sfp = fdopen(mkstemp(ctx->clamped_name),"wb");
+#endif
     if (!sfp) {
         fprintf(stderr, "Error: Cannot create clamped file %s\n", ctx->clamped_name);
         exit(1);
@@ -581,7 +585,11 @@ void do_reencode(ctx* ctx) {
         if (ctx->prefix_name == NULL) {
             ctx->prefix_name = (char*)malloc(sizeof(tmp_name));
             strcpy(ctx->prefix_name, tmp_name);
+#ifdef _WIN32
+            dfp = fopen(mktemp(ctx->prefix_name),"wb");
+#else
             dfp = fdopen(mkstemp(ctx->prefix_name),"wb");
+#endif
             printf("using prefix: $%04x - $%04x\n", ctx->cbm_prefix_from, ctx->cbm_prefix_from + dict_size);
             if (!dfp) {
                 fprintf(stderr, "Error: Cannot create dict file %s\n", ctx->prefix_name);
