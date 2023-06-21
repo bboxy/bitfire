@@ -276,26 +276,24 @@ bitfire_ntsc4		bcc .ld_gloop						;BRA, a is anything between 0e and 3e
 			tya							;was lda #$01, but A = 0 + upcoming rol makes this also start with A = 1
 			jsr .lz_length_16_					;get up to 7 more bits
 			sta <lz_len_hi						;and save hibyte
-			ldx #$b0
-		!if OPT_FULL_SET = 1 {						;transform bcs .lz_cp_page to a lda #$01 and by that do not waste a single cycle on a page check if not needed
-			lda #.lz_cp_page - .lz_set1 - 2				;we are very lucky here, we can jump in two steps to bcs of set1 and then to lz_cp_page, so we can set up both bcs with the same value ($c0 that is) and reach or goal in two hops, while keeping the setup code small
-			;ldy #.lz_cp_page - .lz_set2 - 2
-			bne +							;annoying, no dop or top possible, need to skip too many bytes
+		!if OPT_FULL_SET = 1 {						;transform beq .lz_cp_page to a lda #$01 and by that do not waste a single cycle on a page check if not needed
+			ldx #$c0
+			;ldx #.lz_cp_page - .lz_set1 - 2			;we are very lucky here, we can jump in two steps to bcs of set1 and then to lz_cp_page, so we can set up both bcs with the same value ($c0 that is) and reach or goal in two hops, while keeping the setup code small
+			top							;leads to ora ($a9,x) lda #$f0 nop
 .lz_lenchk_dis
 .lz_eof
 			pha
-			ldx #$a9
-			lda #$01
-			;iny							;y and a = 1
-			;tya
+			ldx #$01
+			lda #$a9
+			beq *-($fe-$ea)
 +
-			stx .lz_set1
-			stx .lz_set2
-			sta .lz_set1 + 1
-			sta .lz_set2 + 1
-			;ldy #$00
+			sta .lz_set1
+			sta .lz_set2
 			pla
+			stx .lz_set1 + 1
+			stx .lz_set2 + 1
 		} else {							;only transform bcs .lz_cp_page to anything that is not executes, like a nop #imm
+			ldx #$b0
 			pla
 			top
 .lz_lenchk_dis
@@ -437,7 +435,7 @@ bitfire_loadcomp_
 			ldy #$00
 		}
 			jsr .lz_refill_bits					;fetch remaining bits
-			bcs .lz_match_big					;lobyte != 0? If zero, fall through
+			bcs .lz_match_big					;BRA
 
 			;------------------
 			;SELDOM STUFF
@@ -474,7 +472,7 @@ bitfire_loadcomp_
 			jsr .ld_pblock						;yes, fetch another block, call is disabled for plain decomp
 		!if OPT_FULL_SET = 1 {
 			lda #$01						;restore initial length val
-                }
+		}
 	}
 			;------------------
 			;ENTRY POINT DEPACKER
@@ -482,7 +480,7 @@ bitfire_loadcomp_
 .lz_start_over
 		!if OPT_FULL_SET = 0 {
 			lda #$01						;restore initial length val
-                }
+		}
 			+get_lz_bit
 			bcs .lz_match						;after each match check for another match or literal?
 
@@ -498,7 +496,7 @@ bitfire_loadcomp_
 			+get_lz_bit						;fetch payload bit
 			bcc -
 +
-			bne +							;lz_bits ot empty, so was last bit to fetch for #len
+			bne +							;lz_bits is empty, so was last bit to fetch for #len
 .lz_start_depack
 			jsr .lz_refill_bits
 			beq .lz_cp_page_					;handle special case of length being $xx00
@@ -530,7 +528,7 @@ bitfire_loadcomp_
 			bne .lz_cp_lit
 .lz_set1
 		!if OPT_FULL_SET = 0 {						;if optimization is enabled, the lda #$01 is modified to a bcs .lz_cp_page/lda #$01
--			bcc .lz_cp_page						;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+			bcc .lz_cp_page						;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
                 }
 			;------------------
 			;NEW OR OLD OFFSET
@@ -579,6 +577,7 @@ bitfire_loadcomp_
 .lz_offset_lo		sbc #$00						;carry is cleared, subtract (offset + 1)
 			sta .lz_msrcr + 0
 			lax <lz_dst + 1
+			inx
 .lz_offset_hi		sbc #$00
 			sta .lz_msrcr + 1
 .lz_cp_match									;XXX TODO if repeated offset: add literal size to .lz_msrcr and done?
@@ -587,7 +586,6 @@ bitfire_loadcomp_
 			sta (lz_dst),y
 			iny
 			bne .lz_cp_match
-			inx
 			stx <lz_dst + 1						;cheaper to get lz_dst + 1 into x than lz_dst + 0 for upcoming compare
 .lz_set2
 		!if OPT_FULL_SET = 0 {
