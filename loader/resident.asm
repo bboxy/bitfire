@@ -33,7 +33,7 @@ LZ_BITS_LEFT		= 1							;shift lz_bits left or right, might make a difference on
 
 ;if you do not make use of the nmi-gaps, these optimizations will be enabled, with gaps, they don't fit :-(
 OPT_FULL_SET		= (CONFIG_NMI_GAPS | CONFIG_NEXT_DOUBLE) xor 1		;adds 1,4% more performance, needs 10 bytes extra
-OPT_PRIO_LEN2		= CONFIG_NMI_GAPS xor 1					;adds 0,1% more performance, needs 4 bytes extra
+OPT_PRIO_LEN2		= (CONFIG_NMI_GAPS | CONFIG_NEXT_DOUBLE) xor 1		;adds 0,1% more performance, needs 4 bytes extra
 OPT_LZ_INC_SRC1		= 1							;give non equal case priority on lz_src checks
 OPT_LZ_INC_SRC2		= 1							;give non equal case priority on lz_src checks
 OPT_LZ_INC_SRC3		= 1							;give non equal case priority on lz_src checks
@@ -177,40 +177,29 @@ bitfire_loadraw_
 			ldx #<preamble						;target for received bytes
 			jsr .ld_set_block_tgt					;load 5 bytes preamble - returns with C = 0 at times
 
-			ldy <block_length					;load blocklength
 			ldx <block_addr_lo					;block_address lo
 			lda <block_addr_hi					;block_address hi
 			bit <block_status					;status -> first_block?
-			bmi .ld_set_block_tgt
+			bmi +
 			stx bitfire_load_addr_lo				;yes, store load_address (also lz_src in case depacker is present)
 			sta bitfire_load_addr_hi
++
+										;XXX TODO, should be a4 (ldy preamble) for normal run and a2 (ldx #imm) for preamblerun, hm
+			ldy <block_length					;load blocklength
 .ld_set_block_tgt
 			stx .ld_store + 1					;setup target for block data
 			sta .ld_store + 2
 										;XXX TODO, change busy signal 1 = ready, 0 = eof, leave ld_pblock with carry set, also tay can be done after preamble load as last value is still in a
 			sec							;loadraw enters ld_pblock with C = 0
-										;lax would be a7, would need to swap carry in that case: eof == clc, block read = sec
 			ldx #$8e						;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
-			top
-.ld_en_exit
-			ldx #$60
-			stx .ld_gend						;XXX TODO would be nice if we could do that with ld_store in same time, but happens at different timeslots :-(
-			bpl +							;do bpl first
-bitfire_ntsc5
-			bcs .ld_gentry						;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
+.ld_set
+			stx .ld_gend
+			bcs .ld_gentry
 .ld_gloop
-			lsr							;%xxx1110x
-			lsr							;%xxxx1110
-			ldx #$3f
-bitfire_ntsc0		ora $dd00 - $3f,x
-			stx $dd02
-			dey
-			beq .ld_en_exit						;XXX TODO bail out here and do two bogus flip bits? would need clc + rts then? but set up of rts/adc can be omitted then! also, store forward?
-+
+			ldx <CONFIG_LAX_ADDR					;XXX TODO ldx <CONFIG_LAX_ADDR to waste one cycle
 			lsr							;%xxxxx111
 			lsr							;%xxxxxx11 1
-			ldx #$37
-bitfire_ntsc1		ora $dd00						;XXX TODO could use eor $dd00 if we toggle a bit in data?
+bitfire_ntsc0		ora $dd00						;XXX TODO could use eor $dd00 if we toggle a bit in data?
 			stx $dd02
 			ror							;c = 1
 			ror							;c = 1 a = %11xxxxxx
@@ -227,7 +216,17 @@ bitfire_ntsc3		adc $dd00
 										;%xx1110xx
 .ld_gend
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
-bitfire_ntsc4		bcc .ld_gloop						;BRA, a is anything between 0e and 3e
+			lsr							;%xxx1110x
+			lsr							;%xxxx1110
+			dey
+			cpy #$01						;check on 0 in carry, too bad we can't use that result with direct bail out, still some bits to transfer
+			ldx #$3f
+bitfire_ntsc1		ora $dd00
+			stx $dd02
+			bcs .ld_gloop
+.ld_en_exit
+			ldx #$60
+			bcc .ld_set						;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }			;XXX TODO in fact the branch can also take 4 cycles if needed, ora $dd00 - $3f,x wastes one cycle anyway
 }

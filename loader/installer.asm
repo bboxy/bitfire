@@ -165,33 +165,27 @@
 		cmp #$20
 		bcs .nontsc
 
-		lda #$0d
-		sta bitfire_ntsc0
 		lda #$1d		;ora $xxxx,x
+		sta bitfire_ntsc0
 		sta bitfire_ntsc1
 		lda #$3d		;and $xxxx,x
 		sta bitfire_ntsc2
 		lda #$7d		;adc $xxxx,x
 		sta bitfire_ntsc3
 
-		lda #$00
-		sta bitfire_ntsc0 + 1
-		lda #-$37
-		sta bitfire_ntsc1 + 1
-		sta bitfire_ntsc3 + 1
 		lda #-$3f
+		sta bitfire_ntsc1 + 1
 		sta bitfire_ntsc2 + 1
+		lda #-$37
+		sta bitfire_ntsc0 + 1
+		sta bitfire_ntsc3 + 1
 
-		lda #$dd
-		sta bitfire_ntsc0 + 2
 		lda #$dc
+		sta bitfire_ntsc0 + 2
 		sta bitfire_ntsc1 + 2
 		sta bitfire_ntsc2 + 2
 		sta bitfire_ntsc3 + 2
 
-		;adopt branch to point to bmi and waste another 2 cycles, bmi will always fall through, as two lsr happened before
-		lda #bitfire_ntsc5 - bitfire_ntsc4 - 2
-		sta bitfire_ntsc4 + 1
 .nontsc
 }
 		lda #$3f			;drop atn to signal end of transfer
