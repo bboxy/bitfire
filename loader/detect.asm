@@ -44,50 +44,77 @@
 		and #$01
 		ora link_chip_types	;0 = old, 1 = new sid
 		sta link_chip_types
+
 .detect_cia
-		;lda $d011
-		;bmi *-3
-		;lda $d011
-		;bpl *-3
+		lda #$7f
+		sta $dd0d
+		sta $dc0d
+		lda $dd0d
+		lda $dc0d
+
+		lda #$00
+		sta $d01a
+		sta $dd0e
+		sta $dd0f
+		sta $dc0e
+		sta $dc0f
+		sta $dd0e
+		sta $dd0f
+		sta $dd05
+		sta $dd07
+		sta $dc05
+		sta $dc07
+
+		inc $d019
 
 		lda #<.detect_2
 		sta $fffa
 		lda #>.detect_2
 		sta $fffb
 
-		lda $dd0d
-		lda #$81
-		sta $dd0d
-
-		lda #$04
+		lda #$02
 		sta $dd04
-		lda #$00
-		sta $dd05
-
-		sta $02
-
-		lda #%10011001
+		sta $dc04
+		lda #%10000001
+		sta $dd0d
+		lda #%00011001
 		sta $dd0e
+		tsx
 
-		lda $dd0d
-		lda $dd0d
-		inc $02
-		jmp *
-
+		nop
+		lda #BITFIRE_CIA2_NEW
+		lda #$00
 .detect_2
-		lda $dd0d
-		pla
-		pla
-		pla
-		lda $02
-		asl
-		eor #$02
 		ora link_chip_types
 		sta link_chip_types
 
 		lda #$7f
 		sta $dd0d
-		lda $dd0d
+		bit $dd0d
+
+		lda #<.detect_1
+		sta $fffe
+		lda #>.detect_1
+		sta $ffff
+
+		lda #%10000001
+		sta $dc0d
+		lda #%00011001
+		sta $dc0e
+		cli
+
+		nop
+		lda #BITFIRE_CIA1_NEW
+		lda #$00
+.detect_1
+		ora link_chip_types
+		sta link_chip_types
+
+		lda #$7f
+		sta $dc0d
+		bit $dc0d
+
+		txs
 
 		lda #$37
 		sta $01
