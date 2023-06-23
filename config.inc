@@ -10,7 +10,7 @@ CONFIG_INSTALLER_ADDR		= $1000
 CONFIG_RESIDENT_AUTOINST	= 1		;Set this to zero if you want to do the install of the resident part on your own, but why would you want to do so anyway? :-D
 
 ;Framework options, certain features can be switched on/off separatedly
-CONFIG_FRAMEWORK		= 1		;Enable/Disable whole framework
+CONFIG_FRAMEWORK		= 1		;Enable/Disable whole framework, including load_next calls
 CONFIG_FRAMEWORK_BASEIRQ	= 1		;Include a base irq handler into the framework
 CONFIG_FRAMEWORK_FRAMECOUNTER	= 1		;Include framecounter handling
 CONFIG_FRAMEWORK_MUSIC_NMI	= 1		;should base irq run in NMI or raster IRQ?

@@ -213,7 +213,6 @@ bitfire_ntsc2		and $dd00						;11xxxxxx might loose some lower bits, but will be
 .ld_gentry
 			lax <CONFIG_LAX_ADDR
 bitfire_ntsc3		adc $dd00
-										;%xx1110xx
 .ld_gend
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
 			lsr							;%xxx1110x
@@ -223,18 +222,14 @@ bitfire_ntsc3		adc $dd00
 			ldx #$3f
 bitfire_ntsc1		ora $dd00
 			stx $dd02
+!if >* != >.ld_gloop { !error "getloop code crosses page!" }			;XXX TODO in fact the branch can also take 4 cycles if needed, ldx <CONFIG_LAX_ADDR wastes one cycle anyway
 			bcs .ld_gloop
 .ld_en_exit
 			ldx #$60
-			bcc .ld_set						;also bmi is now in right place to be included in ntsc case to slow down by another 2 cycles. bpl .ld_gloop will then point here and bmi will just fall through always
+			bne .ld_set						;set rts to end loop at right position
 
-!if >* != >.ld_gloop { !error "getloop code crosses page!" }			;XXX TODO in fact the branch can also take 4 cycles if needed, ora $dd00 - $3f,x wastes one cycle anyway
 }
 
-			;lda #$3f
-			;ora $dd00
-			;eor nibble
-			;%00111xxx						;$20 -> carry on adc $18 == 2 MSB for and $dd00
 ;---------------------------------------------------------------------------------
 ;DEPACKER STUFF
 ;---------------------------------------------------------------------------------
@@ -601,7 +596,7 @@ bitfire_loadcomp_
 			bne .lz_start_over
 
 	!if CONFIG_LOADER = 1 {
-			lda #$fe						;force the barrier check to always hit in (eof will end this loop)
+			lda #$fe						;force the barrier check to always hit in (eof will end this loop), will give $ff after upcoming inc
 			sta <lz_src + 1
 
 			;------------------

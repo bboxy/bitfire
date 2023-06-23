@@ -294,6 +294,9 @@ ___			= $ff
 ;table wth no offset
 .tab02200222_lo		= .tables + $00
 
+!if CONFIG_DECOMP = 0 {
+			!fill 21,$ea
+}								;no barriers needed with standalone loadraw
 .preamble_
 			sty <.block_size
 			iny					;set up num of bytes to be transferred
