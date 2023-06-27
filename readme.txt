@@ -178,7 +178,7 @@ link_cia2_type			;alias for CIA2 type
 Functions via macros
 --------------------
 
-The link_* functions represent the same functins as above, but they include a jmp-target that is jumped to after loading. Why? The advantage of this is, that any code in the memory can be overwritten, except the resident part of the loader dunring the loading-operation, and after laoding the code can be entered by the given address:
+The link_* functions represent the same functins as above, but they include a jmp-target that is jumped to after loading. Why? The advantage of this is, that any code in the memory can be overwritten, except the resident part of the loader during the loading-operation, and after loading the code can be entered by the given address:
 
 link_load_next_raw_jmp .addr
 link_load_next_comp_jmp .addr
@@ -201,6 +201,10 @@ set_depack_pointers .addr	;change the decompression target-address of a loaded f
 start_music_nmi			;start an NMI that will call the music-player once per frame via timer on rasterline $ff
 stop_music_nmi			;stop the NMI (for e.g. to hand over to a raster-irq)
 restart_music_nmi		;restart the NMI again, cheaper way when the timers are still set up
+to_nmi				;setup base irq to work as nmi (lda $dd0d)
+to_irq				;setup base irq to work with irq (dec $d019)
+switch_to_nmi			;handover baseirq to NMI and setup NMI
+switch_to_irq			;same as a above, but for IRQ
 
 Examples
 --------
@@ -228,9 +232,9 @@ jsr link_decomp
 Will load third file from disk and depack it afterwards.
 
 !src "link_macros_acme.inc"
-+request_disc 1
++request_disk 1
 
-Will wait until side 2 (counted from side 0 on) is inserted into floppy and directory is sucessfully read. If you want to wait for disc change in a different manner, just have a look into macro, there are just a few lines of code.
+Will wait until side 2 (counted from side 0 on) is inserted into floppy and directory is sucessfully read. If you want to wait for disk change in a different manner, just have a look into macro, there are just a few lines of code.
 
 lda #BITFIRE_RESET
 jsr bitfire_send_byte_
@@ -239,7 +243,7 @@ Will reset the drive after the demo.
 lda #BITFIRE_LOAD_NEXT
 jsr link_load_raw
 
-This will load the next file even without a framework present, as this function is implemented within the floppy code. This might be useful if you do not want to remember a filenumber but just load through disc file by file.
+This will load the next file even without a framework present, as this function is implemented within the floppy code. This might be useful if you do not want to remember a filenumber but just load through disk file by file.
 
 Decomp
 ------
@@ -251,15 +255,10 @@ Other depackers
 
 Feel free to add your own depacker. Just be sure to call pollblock in the yet manner when needing new data, just as done already. If you encounter problems, feel free to ask for my support.
 
-Reset drive
------------
-
-When sending $ff (bitfire_send_byte_), the floppy resets itself, this is handy when the demo ends and we want to leave the hardware in a sane state.
-
 Depacker/Packer
 ---------------
 
-To create a packed files, there is a packer derived from salvador written by Emmanuel Marty. It will pack and adjust the load-address accordingly.
+To create a packed file, there is a packer derived from salvador written by Emmanuel Marty. It will pack and adjust the load-address accordingly.
 The commandline might look like: dali -o file.lz file.prg
 If a file is going under IO it is best to split it somewhere before the IO range starts, for e.g.:
 dali -o part1.lz --from 0x0801 --to 0xd000 mypart
@@ -333,7 +332,7 @@ The .asm files need ACME 0.94 or newer, i didn't focus much on that, as i always
 Dirart
 ------
 
-The dirart is expected like a normal dir-layout would look like on a screen, see the exampledir.bin and exampledir.png, so all you need to do is draw things on a screen (or multiple screens if you need a larger dir-layout) and save the screen. Content must be aligned top/left.
+The dirart is expected like a normal dir-layout would look like on a screen, see the exampledir.bin and exampledir.png, so all you need to do is draw things on a screen (or multiple screens if you need a larger dir-layout) and save the screen. Content must be aligned top/left. Also .c files exported from Marq's Petscii editor can be read and used as dirart.
 
 Synching to music
 -----------------
@@ -380,7 +379,7 @@ During spin up of the drive, the gcr read might fail, as it misses the window wh
 
 7. Glitchy hardware
 
-The buslock issues with THCM's SX64 are history and i found a solution to make this work also on his machine. Ikwai owns a floppy and cable, where the 72 cycles transfer fails. It needs both the combnation form an extra long cable and that certain floppy. The cable works with all other kind of floppys, as well as the floppy works with all other kind of cables. But combined they fail.
+The buslock issues with THCM's SX64 are history and i found a solution to make this work also on his machine. Ikwai owns a floppy and cable, where the 72 cycles transfer fails. It needs both the combination of an extra long cable and that certain floppy. The cable works with all other kind of floppys, as well as the floppy works with all other kind of cables. But combined they fail.
 
 8. Jitter
 
