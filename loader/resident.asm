@@ -165,11 +165,11 @@ bitfire_loadraw_
 -
 .ld_load_raw
 			jsr .ld_pblock						;fetch all blocks until eof
-			bcc -
+			bpl -
 			;rts							;just run into ld_pblock code again that will then branch to rts upon block poll
 .ld_pblock
 			lda $dd00						;bit 6 is always set if not ready or idle/EOF
-			anc #$c0						;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
+			and #$c0						;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bne .ld_en_exit + 1					;block ready? if so, a = 0 (block ready + busy) if not -> rts
 .ld_pblock_
 			ldy #$05						;fetch 5 bytes of preamble
@@ -191,37 +191,39 @@ bitfire_loadraw_
 			sta .ld_store + 2
 										;XXX TODO, change busy signal 1 = ready, 0 = eof, leave ld_pblock with carry set, also tay can be done after preamble load as last value is still in a
 			sec							;loadraw enters ld_pblock with C = 0
-			ldx #$8e						;opcode for stx	-> repair any rts being set (also accidently) by y-index-check
+			ldx #$6d						;opcode for adc	-> repair any rts being set (also accidently) by y-index-check
 .ld_set
 			stx .ld_gend
 			bcs .ld_gentry
 .ld_gloop
-			ldx <CONFIG_LAX_ADDR					;XXX TODO ldx <CONFIG_LAX_ADDR to waste one cycle
-			lsr							;%xxxxx111
-			lsr							;%xxxxxx11 1
-bitfire_ntsc0		ora $dd00						;XXX TODO could use eor $dd00 if we toggle a bit in data?
-			stx $dd02
-			ror							;c = 1
-			ror							;c = 1 a = %11xxxxxx
-			ldx #$3f
-			sax .ld_nibble + 1
-bitfire_ntsc2		and $dd00						;11xxxxxx might loose some lower bits, but will be repaired later on ora
+			lsr							;%0dddd111
+			lsr							;%00dddd11 1
+			ldx <CONFIG_LAX_ADDR					;waste one cycle
+bitfire_ntsc0		ora $dd00						;%dddddd11 1
 			stx $dd02
 
-.ld_nibble		ora #$00						;merge in lower bits again
+			ror							;%1dddddd1 1
+			ror							;%11dddddd 1
+			ldx #$3f
+			sax .ld_nibble + 1
+bitfire_ntsc2		and $dd00						;ddxxxxxx might loose some lower bits, but will be repaired later on ora
+			stx $dd02
+
+.ld_nibble		ora #$00						;dddddddd -> merge in lower bits again and heal bits being dropped by previous and
 .ld_store		sta $b00b,y
-.ld_gentry
-			lax <CONFIG_LAX_ADDR
-bitfire_ntsc3		adc $dd00
+.ld_gentry		lax <CONFIG_LAX_ADDR
 .ld_gend
+bitfire_ntsc3		adc $dd00						;%dd111xx
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
-			lsr							;%xxx1110x
-			lsr							;%xxxx1110
+
+			lsr							;%0dd111xx
+			lsr							;%00dd111x
 			dey
 			cpy #$01						;check on 0 in carry, too bad we can't use that result with direct bail out, still some bits to transfer
 			ldx #$3f
-bitfire_ntsc1		ora $dd00
+bitfire_ntsc1		ora $dd00						;%dddd111x
 			stx $dd02
+
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }			;XXX TODO in fact the branch can also take 4 cycles if needed, ldx <CONFIG_LAX_ADDR wastes one cycle anyway
 			bcs .ld_gloop
 .ld_en_exit
@@ -279,14 +281,14 @@ bitfire_ntsc1		ora $dd00
 			pha
 			ldx #$01
 			lda #$a9
-			beq *-($fe-$ea)
+			beq *-($fe-$ea)						;aka !byte $f0, $ea
 +
 			sta .lz_set1
 			sta .lz_set2
 			pla
 			stx .lz_set1 + 1
 			stx .lz_set2 + 1
-		} else {							;only transform bcs .lz_cp_page to anything that is not executes, like a nop #imm
+		} else {							;only transform bcs .lz_cp_page to anything that is not executed, like a nop #imm
 			ldx #$b0
 			pla
 			top
@@ -611,7 +613,7 @@ lz_next_page
 			pha
 .lz_fetch_sector								;entry of loop
 			jsr .ld_pblock						;fetch another block
-			bcs .lz_fetch_eof					;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
+			bmi .lz_fetch_eof					;eof? yes, finish, only needed if files reach up to $ffxx -> barrier will be 0 then and upcoming check will always hit in -> this would suck
 										;XXX TODO send a high enough barrier on last block being sent
 			lda <lz_src + 1						;get current depack position
 			cmp <block_barrier					;next pending block/barrier reached? If barrier == 0 this test will always loop on first call or until first-block with load-address arrives, no matter what .bitfire_lz_sector_ptr has as value \o/
