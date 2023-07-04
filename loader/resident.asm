@@ -171,7 +171,8 @@ bitfire_loadraw_
 			lda $dd00						;bit 6 is always set if not ready or idle/EOF
 			and #$c0						;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bne .ld_en_exit + 1					;block ready? if so, a = 0 (block ready + busy) if not -> rts
-.ld_pblock_
+
+			sec							;loadraw enters ld_pblock with C = 0
 			ldy #$05						;fetch 5 bytes of preamble
 			;lda #$00						;is already zero due to anc #$c0, that is why we favour anc #$co over asl, as we save a byte
 			ldx #<preamble						;target for received bytes
@@ -179,7 +180,7 @@ bitfire_loadraw_
 
 			ldx <block_addr_lo					;block_address lo
 			lda <block_addr_hi					;block_address hi
-			bit <block_status					;status -> first_block?
+			ldy <block_status					;status -> first_block?
 			bmi +
 			stx bitfire_load_addr_lo				;yes, store load_address (also lz_src in case depacker is present)
 			sta bitfire_load_addr_hi
@@ -190,7 +191,6 @@ bitfire_loadraw_
 			stx .ld_store + 1					;setup target for block data
 			sta .ld_store + 2
 										;XXX TODO, change busy signal 1 = ready, 0 = eof, leave ld_pblock with carry set, also tay can be done after preamble load as last value is still in a
-			sec							;loadraw enters ld_pblock with C = 0
 			ldx #$6d						;opcode for adc	-> repair any rts being set (also accidently) by y-index-check
 .ld_set
 			stx .ld_gend
@@ -199,21 +199,21 @@ bitfire_loadraw_
 			lsr							;%0dddd111
 			lsr							;%00dddd11 1
 			ldx <CONFIG_LAX_ADDR					;waste one cycle
-bitfire_ntsc0		ora $dd00						;%dddddd11 1
+bitfire_ntsc0		ora $dd00						;%dddddd11 1, ora again to preserve
 			stx $dd02
 
 			ror							;%1dddddd1 1
 			ror							;%11dddddd 1
 			ldx #$3f
 			sax .ld_nibble + 1
-bitfire_ntsc2		and $dd00						;ddxxxxxx might loose some lower bits, but will be repaired later on ora
+bitfire_ntsc2		and $dd00						;%ddxxxxxx might loose some lower bits, but will be repaired later on ora
 			stx $dd02
 
-.ld_nibble		ora #$00						;dddddddd -> merge in lower bits again and heal bits being dropped by previous and
+.ld_nibble		ora #$00						;%dddddddd -> merge in lower bits again and heal bits being dropped by previous and
 .ld_store		sta $b00b,y
 .ld_gentry		lax <CONFIG_LAX_ADDR
 .ld_gend
-bitfire_ntsc3		adc $dd00						;%dd111xx
+bitfire_ntsc3		adc $dd00						;%dd1110xx will be like #$38 (A = $37 + carry) be added
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
 
 			lsr							;%0dd111xx
@@ -221,7 +221,7 @@ bitfire_ntsc3		adc $dd00						;%dd111xx
 			dey
 			cpy #$01						;check on 0 in carry, too bad we can't use that result with direct bail out, still some bits to transfer
 			ldx #$3f
-bitfire_ntsc1		ora $dd00						;%dddd111x
+bitfire_ntsc1		ora $dd00						;%dddd111x, ora to preserve the 3 set bits
 			stx $dd02
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }			;XXX TODO in fact the branch can also take 4 cycles if needed, ldx <CONFIG_LAX_ADDR wastes one cycle anyway
@@ -461,14 +461,15 @@ bitfire_loadcomp_
 			;------------------
 			;POLLING
 			;------------------
-.lz_poll
 	!if CONFIG_LOADER = 1 {
-			bit $dd00
-			bvs .lz_start_over
+.lz_ld_blk
 			jsr .ld_pblock						;yes, fetch another block, call is disabled for plain decomp
 		!if OPT_FULL_SET = 1 {
 			lda #$01						;restore initial length val
 		}
+.lz_poll
+			bit $dd00
+			bvc .lz_ld_blk
 	}
 			;------------------
 			;ENTRY POINT DEPACKER
