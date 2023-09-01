@@ -76,11 +76,11 @@ filenum			= block_barrier
 }
 
 !macro inc_src_ptr {
-	!if CONFIG_LOADER = 1 {
+	;!if CONFIG_LOADER = 1 {
 			jsr lz_next_page					;sets X = 0, so all sane
-	} else {
-			inc <lz_src + 1
-	}
+	;} else {
+	;		inc <lz_src + 1
+	;}
 }
 
 bitfire_install_	= CONFIG_INSTALLER_ADDR					;define that label here, as we only aggregate labels from this file into loader_*.inc
@@ -130,6 +130,7 @@ link_decomp_under_io
 }
 
 !if CONFIG_CRT = 1 {
+.ld_pblock
 crt_load_file
 link_load_next_raw
 			jsr read_byte
@@ -508,7 +509,7 @@ bitfire_loadcomp_
 			;------------------
 			;POLLING
 			;------------------
-	!if CONFIG_LOADER = 1 {
+	;!if CONFIG_LOADER = 1 {
 .lz_ld_blk
 			jsr .ld_pblock						;yes, fetch another block, call is disabled for plain decomp
 		!if OPT_FULL_SET = 1 {
@@ -517,7 +518,7 @@ bitfire_loadcomp_
 .lz_poll
 			bit $dd00
 			bvc .lz_ld_blk
-	}
+	;}
 			;------------------
 			;ENTRY POINT DEPACKER
 			;------------------
@@ -645,7 +646,6 @@ bitfire_loadcomp_
 			cpx <lz_src + 0
 			bne .lz_start_over
 
-	!if CONFIG_LOADER = 1 {
 			lda #$fe						;force the barrier check to always hit in (eof will end this loop), will give $ff after upcoming inc
 			sta <lz_src + 1
 
@@ -655,6 +655,7 @@ bitfire_loadcomp_
 lz_next_page
 			inc <lz_src + 1
 .lz_next_page_									;preserves carry and X, clears Y, all sane
+	!if CONFIG_LOADER = 1 {
 .lz_skip_fetch
 			php							;save carry
 			txa							;and x
