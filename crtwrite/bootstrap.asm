@@ -91,7 +91,7 @@ movecode
                         inx
                         bne .chk_done
 read_byte
-.off                    lda $df00 + (files & 255)
+.off                    lda $df00
                         inc .off + 1
                         bne +
                         bit $de00

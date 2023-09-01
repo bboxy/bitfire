@@ -147,19 +147,20 @@ link_load_next_raw
 			lxa #0
 			tay
 -
-.endpos_lo 		cpy #$00
-			bne +
-.endpos_hi		cpx #$00
-			bne +
-			rts
-+
 			jsr read_byte
 			sta (lz_dst),y
 			iny
+			beq .chk_inc
+.chk_done
+.endpos_lo 		cpy #$00
 			bne -
+.endpos_hi		cpx #$00
+			bne -
+			rts
+
 			inc lz_dst + 1
 			inx
-			jmp -
+			bne .chk_done
 read_byte
 .off			lda $df00
 			inc .off + 1
