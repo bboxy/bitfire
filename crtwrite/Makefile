@@ -1,5 +1,8 @@
 CRTWRITE_CFLAGS = $(CFLAGS) -Ofast -Wall
 CRTWRITE_LIBS = $(CLIBS) -lpng
+ACME ?= acme
+ACME_OPTS ?= -f cbm
+
 ifdef win
 CC = x86_64-w64-mingw32-gcc
 STRIP = x86_64-w64-mingw32-strip
@@ -23,7 +26,7 @@ HEADER:= *.h
 
 all: crtwrite
 
-crtwrite: $(SOURCE) $(HEADER)
+crtwrite: $(SOURCE) $(HEADER) bootstrap
 	@echo "Building crtwrite..."
 	$(VR)$(CC) $(CRTWRITE_CFLAGS) -o $@ $(SOURCE) $(CRTWRITE_LIBS)
 ifdef win
@@ -34,5 +37,8 @@ else
 	$(VR)$(STRIP) $@
 endif
 
+bootstrap: bootstrap.asm
+	$(VR)$(ACME) $(ACME_OPTS) -o $@ $<
+
 clean:
-	$(VR)-rm crtwrite
+	$(VR)-rm crtwrite bootstrap

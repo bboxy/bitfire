@@ -38,7 +38,7 @@
 
 #include "debug.h"
 
-int crt_write_file(FILE* crt, char* file) {
+int crt_write_file(FILE* crt, char* file, int header) {
     FILE* fp;
     int c;
     int addr;
@@ -52,17 +52,19 @@ int crt_write_file(FILE* crt, char* file) {
     addr = fgetc(fp);
     addr |= (fgetc(fp) << 8);
 
-    fputc((addr & 255), crt);
-    fputc((addr >> 8),  crt);
+    if (header) {
+        fputc((addr & 255), crt);
+        fputc((addr >> 8),  crt);
 
-    fputc((size & 255), crt);
-    fputc((size >> 8),  crt);
+        fputc((size & 255), crt);
+        fputc((size >> 8),  crt);
+    }
 
     while ((c = fgetc(fp)) != EOF) {
         fputc(c, crt);
     }
     fclose(fp);
-    return size + 4;
+    return size + (header * 4);
 }
 
 int main(int argc, char *argv[]) {
@@ -71,22 +73,25 @@ int main(int argc, char *argv[]) {
     int crt_pos = 0;
     char* crt_path = NULL;
 
-    c = 0;
     if (argc <= 1) {
-        printf("Usage: crtwrite -o image.bin [files]\n");
+        printf("Usage: crtwrite -o image.bin [-b file]\n");
         exit (0);
     }
 
-    //parse out and check options
+    c = 0;
     while(++c < argc) {
         if(!strcmp(argv[c], "-o")) {
             if (crt_path) {
                 fatal_message("image name already given ('%s')\n", crt_path);
             }
-            if (argc -c > 1) crt_path = argv[++c];
-            else {
+            if (argc -c > 1) {
+                crt_path = argv[++c];
+            } else {
                 fatal_message("missing path for option '%s'\n", argv[c]);
             }
+        }
+        else if(!strcmp(argv[c], "-b")) {
+            c++;
         }
         else {
             fatal_message("unknown option '%s'\n", argv[c]);
@@ -95,15 +100,20 @@ int main(int argc, char *argv[]) {
 
     crt = fopen(crt_path, "wb");
 
-    //write crt header first
+    crt_pos += crt_write_file(crt, "bootstrap", 0);
 
     c = 0;
     while(++c < argc) {
         if(argc -c > 1 && (!strcmp(argv[c], "-b") || !strcmp(argv[c], "--boot"))) {
-            crt_pos += crt_write_file(crt, argv[++c]);
+            crt_pos += crt_write_file(crt, argv[++c], 1);
         }
     }
-    fclose (crt);
+
+    while (crt_pos < 0x100000) {
+        fputc(0xff, crt);
+        crt_pos++;
+    }
+    fclose(crt);
     exit(0);
 }
 
