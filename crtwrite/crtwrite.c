@@ -106,8 +106,8 @@ int main(int argc, char *argv[]) {
 
     for (c = 2; c < sizeof(bootstrap); c++) {
         fputc(bootstrap[c],crt);
+        crt_pos++;
     }
-    crt_pos += c;
 
     c = 0;
     while(++c < argc) {
