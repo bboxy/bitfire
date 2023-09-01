@@ -136,7 +136,7 @@ link_load_next_raw
 			sta lz_dst + 0
 			sta lz_src + 0
 			jsr read_byte
-			sta lz_dst + 0
+			sta lz_dst + 1
 			sta lz_src + 1
 
 			jsr read_byte

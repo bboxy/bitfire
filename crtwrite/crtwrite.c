@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
     FILE* crt;
     int crt_pos = 0;
     char* crt_path = NULL;
+    int done = 0;
 
     if (argc <= 1) {
         printf("Usage: crtwrite -o image.bin [-b file]\n");
@@ -112,7 +113,15 @@ int main(int argc, char *argv[]) {
     c = 0;
     while(++c < argc) {
         if(argc -c > 1 && (!strcmp(argv[c], "-b") || !strcmp(argv[c], "--boot"))) {
+            printf("$%04x: %s\n",crt_pos,argv[c + 1]);
             crt_pos += crt_write_file(crt, argv[++c], 1);
+            if (!done) {
+                while ((crt_pos & 255) != 0) {
+                    fputc(0xff,crt);
+                    crt_pos++;
+                }
+                done = 1;
+            }
         }
     }
 

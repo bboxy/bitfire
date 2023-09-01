@@ -84,6 +84,7 @@ movecode
 .chk_hi
 .endpos_hi              cpx #$00
                         bne -
+			lda $de00
         		jmp $E386 ;basic start
 
 .chk_inc
