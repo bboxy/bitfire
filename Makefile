@@ -10,7 +10,7 @@ else
 VR:=@
 endif
 
-all: loader dali d64write
+all: loader dali d64write crtwrite
 
 #zx0-play: FORCE
 #	@$(MAKE) $(MAKE_OPTS) -C packer/$@
@@ -26,6 +26,9 @@ dali: FORCE
 	@$(MAKE) $(MAKE_OPTS) -j4 -C packer/$@
 
 d64write: FORCE
+	@$(MAKE) $(MAKE_OPTS) -C $@
+
+crtwrite: FORCE
 	@$(MAKE) $(MAKE_OPTS) -C $@
 
 loader: FORCE
@@ -50,6 +53,7 @@ clean:
 	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
 	@$(MAKE) $(MAKE_OPTS) -C packer/dali/ clean
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
+	@$(MAKE) $(MAKE_OPTS) -C crtwrite/ clean
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
 	@$(MAKE) $(MAKE_OPTS) -C example/loadertest/ clean
