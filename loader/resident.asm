@@ -157,7 +157,7 @@ link_load_next_raw
 .endpos_hi		cpx #$00
 			bne -
 			rts
-
+.chk_inc
 			inc lz_dst + 1
 			inx
 			bne .chk_done
