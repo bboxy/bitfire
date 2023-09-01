@@ -26,7 +26,7 @@ HEADER:= *.h
 
 all: crtwrite
 
-crtwrite: $(SOURCE) $(HEADER) bootstrap
+crtwrite: $(SOURCE) $(HEADER) bootstrap.h
 	@echo "Building crtwrite..."
 	$(VR)$(CC) $(CRTWRITE_CFLAGS) -o $@ $(SOURCE) $(CRTWRITE_LIBS)
 ifdef win
@@ -36,9 +36,13 @@ else ifdef win32
 else
 	$(VR)$(STRIP) $@
 endif
-
-bootstrap: bootstrap.asm
-	$(VR)$(ACME) $(ACME_OPTS) -o $@ $<
+bootstrap.h: bootstrap.asm
+	$(VR)$(ACME) $(ACME_OPTS) --labeldump $(basename $@).lst -o $(basename $@) $<
+	$(VR)echo 'static const char bootstrap[] = {' >> $@
+	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
+	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/+/g' -e 's/.\{50\}/&+/g' | tr -s '+' '\n' | sed 's/^/&    /g' >> $@
+	$(VR)echo '};' >> $@
+	$(VR)rm $(basename $@).lst $(basename $@)
 
 clean:
-	$(VR)-rm crtwrite bootstrap
+	$(VR)-rm crtwrite bootstrap.h

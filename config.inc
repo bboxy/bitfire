@@ -30,8 +30,9 @@ CONFIG_NEXT_DOUBLE		= 0		;If enabled the old load_next_double code stays in resi
 ;options for drivecode
 CONFIG_MOTOR_ALWAYS_ON		= 0		;If you want to be annoying, let the motor spin during the whole demo :-D
 
-CONFIG_DEBUG			= 0		;transfer retry-counts to c64 for benchmarking
+;CONFIG_DEBUG			= 0		;transfer retry-counts to c64 for benchmarking
 
-CONFIG_LOADED			= 1		;avoid including config twice
+;CONFIG_LOADED			= 1		;avoid including config twice
 
+CONFIG_CRT			= 0
 }

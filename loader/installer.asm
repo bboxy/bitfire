@@ -24,6 +24,7 @@
 ;
 
 !src "config.inc"
+
 !convtab pet
 !cpu 6510
 
@@ -36,20 +37,23 @@
 .iecout		= $ffa8
 .unlisten	= $ffae
 
-		* = CONFIG_INSTALLER_ADDR
 		!src "loader_acme.inc"
+		* = CONFIG_INSTALLER_ADDR
 .init_inst
 		lda #$7f
 		sta $dc0d
 		lda $dc0d
 
 		lda #$37
+!if CONFIG_CRT = 0 {
 		sta <CONFIG_LAX_ADDR
+}
 !if (CONFIG_AUTODETECT = 0) {
 		sta $01
 		lda #$00
 		sta $d015
 }
+!if CONFIG_CRT = 0 {
 		lda $ba
 		sta .mydrive
 
@@ -126,6 +130,7 @@
 
 		lda #$37			;raise atn to signal end of transfer
 		sta $dd02
+}
 
 !if (CONFIG_RESIDENT_AUTOINST != 0) {
 !if (bitfire_resident_size) < 256 {
@@ -157,6 +162,7 @@
 !if (CONFIG_AUTODETECT = 1) {
 		!src "detect.asm"
 }
+!if CONFIG_CRT = 0 {
 !if CONFIG_LOADER = 1 {
 .l1		lda $d012
 .l2		cmp $d012
@@ -207,8 +213,10 @@
 -
 		lda $dd00
 		bpl -
+}
 		rts
 
+!if CONFIG_CRT = 0 {
 .open_w_15
 		lda $ba
 		jsr .listen
@@ -386,10 +394,12 @@
 		jmp ($1800)
 }
 .atnhi_end
-
+}
 !if (CONFIG_RESIDENT_AUTOINST != 0) {
 .res_start
 !bin "resident",,2
 }
 
+!if CONFIG_CRT = 0 {
 !src "drivecode.asm"
+}

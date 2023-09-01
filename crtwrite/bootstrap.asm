@@ -94,7 +94,7 @@ read_byte
 .off                    lda $df00 + (files & 255)
                         inc .off + 1
                         bne +
-                        lda $de00
+                        bit $de00
 +
                         rts
 casend

@@ -37,6 +37,7 @@
 #endif
 
 #include "debug.h"
+#include "bootstrap.h"
 
 int crt_write_file(FILE* crt, char* file, int header) {
     FILE* fp;
@@ -45,6 +46,9 @@ int crt_write_file(FILE* crt, char* file, int header) {
     int size = 0;
 
     fp = fopen(file, "rb");
+    if (!fp) {
+        fatal_message("can't open file '%s'\n", file);
+    }
     fseek(fp, 0L, SEEK_END);
     size = ftell(fp) - 2;
     rewind(fp);
@@ -100,7 +104,10 @@ int main(int argc, char *argv[]) {
 
     crt = fopen(crt_path, "wb");
 
-    crt_pos += crt_write_file(crt, "bootstrap", 0);
+    for (c = 2; c < sizeof(bootstrap); c++) {
+        fputc(bootstrap[c],crt);
+    }
+    crt_pos += c;
 
     c = 0;
     while(++c < argc) {
