@@ -168,6 +168,10 @@ read_byte
 			bne +
 			bit $de00
 +
+;XXX TODO remove to trap the turn disk positions
+;XXX TODO do macro for request_turn_disk + check_turn_disk and wait_turn_disk
+bitfire_send_byte_
+bitfire_loadraw_
 			rts
 }
 
@@ -654,8 +658,8 @@ bitfire_loadcomp_
 			;------------------
 lz_next_page
 			inc <lz_src + 1
-.lz_next_page_									;preserves carry and X, clears Y, all sane
 	!if CONFIG_LOADER = 1 {
+.lz_next_page_									;preserves carry and X, clears Y, all sane
 .lz_skip_fetch
 			php							;save carry
 			txa							;and x
