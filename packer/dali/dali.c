@@ -376,8 +376,8 @@ void write_reencoded_stream(ctx* ctx) {
         if (ctx->cbm_relocate_sfx_addr >= 0) {
             printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", ctx->cbm_relocate_sfx_addr, ctx->cbm_relocate_sfx_addr + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
             if (ctx->sfx_small) {
-                ctx->sfx_code[DALI_SMALL_SFX_SRC + 0] = (ctx->cbm_relocate_sfx_addr + 0x13) & 255;
-                ctx->sfx_code[DALI_SMALL_SFX_SRC + 1] = (ctx->cbm_relocate_sfx_addr + 0x13) >> 8;
+                ctx->sfx_code[DALI_SMALL_SFX_SRC + 0] = (ctx->cbm_relocate_sfx_addr + 0xd) & 255;
+                ctx->sfx_code[DALI_SMALL_SFX_SRC + 1] = (ctx->cbm_relocate_sfx_addr + 0xd) >> 8;
                 ctx->sfx_code[DALI_SMALL_DATA_END + 0] = (ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) & 0xff;
                 ctx->sfx_code[DALI_SMALL_DATA_END + 1] = ((ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) >> 8) & 0xff;
             } else {
@@ -731,7 +731,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("dali v0.3.2 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
+    printf("dali v0.3.3 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
     printf("underlying zx0-packer salvador by Emmanuel Marty\n");
 
     if (argc == 1) {
