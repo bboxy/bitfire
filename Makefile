@@ -1,4 +1,5 @@
 MAKE_OPTS ?= --no-print-directory --quiet
+ACME ?= acme
 
 LDLIBS =
 CC ?= cc
@@ -13,38 +14,38 @@ endif
 all: loader dali d64write crtwrite
 
 #zx0-play: FORCE
-#	@$(MAKE) $(MAKE_OPTS) -C packer/$@
+#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
 
 zx0: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C packer/$@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
 
 bitnax: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C packer/$@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
 
 dali: FORCE
 	@git submodule update --init --recursive
-	@$(MAKE) $(MAKE_OPTS) -j4 -C packer/$@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
 
 d64write: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C $@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C $@
 
 crtwrite: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C $@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C $@
 
 loader: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C $@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C $@
 
 macros: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C $@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C $@
 
 benchmark-lz: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C benchmark/ $@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
 benchmark-dali: FORCE
-	@$(MAKE) $(MAKE_OPTS) -C benchmark/ $@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
 benchmark: FORCE zx0 dali d64write loader
-	@$(MAKE) $(MAKE_OPTS) -C benchmark/ $@
+	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
 #link: FORCE zx0 bitnax d64write loader
 #	@$(MAKE) $(MAKE_OPTS) -C link/
