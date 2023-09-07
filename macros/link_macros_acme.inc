@@ -239,17 +239,23 @@
 
 		!macro crt_request_disk .arg {
 			+setup_sync .arg
+			ldx #$00
 .l
-			+wait_shift_lock
-			lda #$7f
+			lda #$7f			;space pressed?
 			sta $dc00
 			lda $dc01
-			asl
-			asl
-			asl
-			eor #$80
-			ora link_frame_count + 1	;Counter expired when $8000 is reached
-			bpl .l
+			and #$10
+			beq .e				;yes, exit
+			lda link_frame_count + 1	;check counter
+			bpl +
+			tax
++
+			lda #$fd			;shift lock pressed?
+			sta $dc00
+			txa
+			and $dc01
+			bpl .l				;shift lock pressed or not expired
+.e
 		}
 
 ;		!macro gaps_setup {
