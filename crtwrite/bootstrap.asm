@@ -56,7 +56,14 @@ routine_start            ; current start address in rom of routine to be copied 
 			;Call the Kernal to check for "CBM80" string
 			;if still visible, we need to do another read $DE00.
 			;This is due to RESET and COUNT of the 4040 IC are switched at the same time
-		 	jsr $fd02
+		 	lda $df04
+			cmp #$C3
+			bne movecode
+		 	lda $df05
+			cmp #$C2
+			bne movecode
+		 	lda $df06
+			cmp #$CD
 			bne movecode
 		        lda $de00 ;This access will then move definitely to block 1
 movecode
