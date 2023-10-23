@@ -239,7 +239,6 @@
 
 		!macro crt_request_disk .arg {
 			+setup_sync .arg
-			ldx #$00
 .l
 			lda #$7f			;space pressed?
 			sta $dc00
@@ -248,12 +247,12 @@
 			beq .e				;yes, exit
 			lda link_frame_count + 1	;check counter
 			bpl +
-			tax
+			sta .f + 1
 +
 			lda #$fd			;shift lock pressed?
 			sta $dc00
-			txa
-			and $dc01
+			lda $dc01
+.f			and #$00
 			bpl .l				;shift lock pressed or not expired
 .e
 		}
