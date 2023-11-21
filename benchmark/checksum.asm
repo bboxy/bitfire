@@ -32,10 +32,10 @@ REQDISC = 1
 BUSLOCK = 0
 WAIT_SPIN_DOWN = 0
 
-TIME_RAW = 1
+TIME_RAW = 0
 TIME_LOADCOMP = 0
 TIME_RAW_DECOMP = 0
-TIME_DECOMP = 0
+TIME_DECOMP = 1
 
 TIME_STRICT = 0
 
@@ -76,9 +76,9 @@ screen		= $2000
 		ldx #$00
 		stx err
 		stx err + 1
-!if CONFIG_DEBUG == 1 {
-		stx bitfire_errors
-}
+;!if CONFIG_DEBUG == 1 {
+;		stx bitfire_errors
+;}
 -
 		lda #$20
 		sta screen + $0000,x
@@ -312,7 +312,7 @@ numb		lda #$00		;file number
 		;clc
 		;adc #1
 		jsr bitfire_loadraw_
-!if TIME_RAW_DECOMP = 0 {
+!if TIME_DECOMP = 1 {
 		jsr .start_timer
 }
 		jsr bitfire_decomp_
@@ -339,28 +339,28 @@ numb		lda #$00		;file number
 ;		bne +
 }
 		ldx numb + 1
-!if CONFIG_DEBUG == 1 {
-		lda accum,x
-		clc
-		adc bitfire_errors
-		sta accum,x
-}
+;!if CONFIG_DEBUG == 1 {
+;		lda accum,x
+;		clc
+;		adc bitfire_errors
+;		sta accum,x
+;}
 
 !if CHECKSUM == 1 & TIME_STRICT != 1 {
 		jsr checksum
 }
 +
-!if CONFIG_DEBUG == 1 {
-		lda err
-		clc
-		adc bitfire_errors
-		sta err
-		bcc +
-		inc err + 1
-+
-		lda #$00
-		sta bitfire_errors
-}
+;!if CONFIG_DEBUG == 1 {
+;		lda err
+;		clc
+;		adc bitfire_errors
+;		sta err
+;		bcc +
+;		inc err + 1
+;+
+;		lda #$00
+;		sta bitfire_errors
+;}
 
 		inc numb+1
 		lda numb+1
@@ -540,18 +540,18 @@ rev
 		lda $0f03,x
 		jsr print_
 
-!if CONFIG_DEBUG == 1 {
-		iny
-		iny
-		lda bitfire_errors
-		jsr print_
-
-		iny
-		iny
-		ldx numb + 1
-		lda accum,x
-		jsr print_
-}
+;!if CONFIG_DEBUG == 1 {
+;		iny
+;		iny
+;		lda bitfire_errors
+;		jsr print_
+;
+;		iny
+;		iny
+;		ldx numb + 1
+;		lda accum,x
+;		jsr print_
+;}
 
 		lda prnt + 1
 		and #$03

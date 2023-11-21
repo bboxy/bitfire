@@ -48,7 +48,7 @@
 !if CONFIG_CRT = 0 {
 		sta <CONFIG_LAX_ADDR
 }
-!if (CONFIG_AUTODETECT = 0) {
+!if CONFIG_LOADER_ONLY = 1 {
 		sta $01
 		lda #$00
 		sta $d015
@@ -159,11 +159,12 @@
 }
 }
 
-!if (CONFIG_AUTODETECT = 1) {
+!if CONFIG_LOADER_ONLY = 0 {
 		!src "detect.asm"
 }
+
 !if CONFIG_CRT = 0 {
-!if CONFIG_LOADER = 1 {
+;!if CONFIG_LOADER = 1 {
 .l1		lda $d012
 .l2		cmp $d012
 		beq .l2
@@ -193,7 +194,7 @@
 		sta bitfire_ntsc3 + 2
 
 .nontsc
-}
+;}
 		lda #$3f			;drop atn to signal end of transfer
 		sta $dd02
 
