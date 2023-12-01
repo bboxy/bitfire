@@ -45,7 +45,7 @@ block_length		= preamble + 0
 block_addr_lo		= preamble + 1
 block_addr_hi		= preamble + 2
 block_barrier		= preamble + 3
-block_status		= preamble + 4
+block_status		= preamble + 4 - CONFIG_LOADER_ONLY
 
 filenum			= block_barrier
 
@@ -214,7 +214,7 @@ bitfire_loadraw_
 			bne .rts						;block ready? if so, a = 0 (block ready + busy) if not -> rts
 
 			sec							;loadraw enters ld_pblock with C = 0
-			ldy #$05						;fetch 5 bytes of preamble
+			ldy #$05 - CONFIG_LOADER_ONLY				;fetch 5 bytes of preamble
 			;lda #$00						;is already zero due to anc #$c0, that is why we favour anc #$co over asl, as we save a byte
 			ldx #<preamble						;target for received bytes
 			jsr .ld_set_block_tgt					;load 5 bytes preamble - returns with C = 1 always

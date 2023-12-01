@@ -284,7 +284,7 @@ ___			= $ff
 ;table wth no offset
 .tab02200222_lo		= .tables + $00
 
-!if CONFIG_DECOMP = 0 {
+!if CONFIG_LOADER_ONLY = 1 {
 			!fill 21,$ea
 }								;no barriers needed with standalone loadraw
 .preamble_
@@ -294,7 +294,7 @@ ___			= $ff
 
 			ldy <.dir_entry_num
 
-!if CONFIG_DECOMP = 1 {						;no barriers needed with standalone loadraw
+!if CONFIG_LOADER_ONLY = 0 {					;no barriers needed with standalone loadraw
 			ldx #$14				;walk through list of sectors to be loaded
 			lda <.index
 .min_loop
@@ -509,7 +509,7 @@ IZY			= $a1
 			;----------------------------------------------------------------------------------------------------
 
 .preamble___
-			stx <.preamble_data + 3 + CONFIG_DECOMP	;ack/status to set load addr, signal block ready
+			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY	;ack/status to set load addr, signal block ready
 			;clc					;should never overrun, or we would wrap @ $ffff?
 !if .POSTPONED_XFER = 1 {
 			;ldy <.blocks_on_list
@@ -519,7 +519,7 @@ IZY			= $a1
 			bpl .postpone
 }
 .start_send
-			ldy #$03 + CONFIG_DECOMP + 1		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldy #$05 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 -
 			lax <.preamble_data - 1,y
 			ldx #$09				;masking value
@@ -540,7 +540,7 @@ IZY			= $a1
 			inx
 			bcc .sendloop				;send data or preamble?
 
-			ldy #$03 + CONFIG_DECOMP		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldy #$04 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
 .sendloop = * + 2						;send the data block
 			lda <.preamble_data,y
