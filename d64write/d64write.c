@@ -1153,7 +1153,7 @@ int main(int argc, char *argv[]) {
         printf("-b, --bitfire <file>			Writes a file in bitfire format without a visible dir entry.\n");
         printf("-s, --standard <file> [line]		Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
         printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
-        printf("-B, --boot <file> [line]		Writes a standard file into the dirtrack. All PRG entries from dirart are linked to that file. Optional it is linked to given line number.\n");
+        printf("-B, --boot <file> [line]		Writes a standard file into the dirtrack. All PRG entries from dirart are linked to that file. Optionally it is linked to given line number only.\n");
         printf("-a, --art <num> <dirart.prg/.png>	A dirart can be provided, it extracts <num> lines of a petscii or .png screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
         printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("-F, --40				Enable 40 track support.\n");
@@ -1301,7 +1301,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    //write the boot file
+    //write the boot file first to have position on disk
     if(boot_file) {
         d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, verbose, -1);
     }
@@ -1320,9 +1320,6 @@ int main(int argc, char *argv[]) {
       	        if (argv[c + 1][0] != '-' && !errno) c++;
                 else link_to_num = -1;
             }
-//            if (line < 1 && !errno) {
-//                fatal_message("can't link file '%s' to line nummer %d\n", filename, line);
-//            }
             if (!dir_art) {
                 printf("ignoring linenumber for standard-file '%s', as no dir-art ist used.\n", filename);
                 link_to_num = -1;
