@@ -39,7 +39,11 @@ lz_bits			= CONFIG_ZP_ADDR + 2					;1 byte	- ommits preamble in case and occupie
 lz_dst			= CONFIG_ZP_ADDR + 3					;2 bytes
 lz_len_hi		= CONFIG_ZP_ADDR + 5					;1 byte
 lz_src			= bitfire_load_addr_lo
+!if CONFIG_LOADER_ONLY = 0 {
 preamble		= CONFIG_ZP_ADDR + 6					;5 bytes
+} else {
+preamble		= CONFIG_ZP_ADDR + 2					;5 bytes
+}
 
 block_length		= preamble + 0
 block_addr_lo		= preamble + 1
