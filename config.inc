@@ -7,11 +7,9 @@ CONFIG_LAX_ADDR			= $00		;Usually save to have the value $37 here, but can be al
 
 ;options for installer
 CONFIG_INSTALLER_ADDR		= $1000
-CONFIG_RESIDENT_AUTOINST	= 1		;Set this to zero if you want to do the install of the resident part on your own, but why would you want to do so anyway? :-D
 
+;only compile with loader, no depacker
 CONFIG_LOADER_ONLY		= 0		;Only compile loader standalone
-
-;CONFIG_AUTODETECT		= 1		;Autodetect CIA + SID and store the results in the resident part for later use, so upcoming parts do not need an own detection anymore but can read out that values again
 
 CONFIG_NEXT_DOUBLE		= 0		;If enabled the old load_next_double code stays in resident area (Hi Bob/Censor!)
 

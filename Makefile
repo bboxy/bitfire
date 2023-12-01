@@ -16,8 +16,8 @@ all: loader dali d64write crtwrite
 #zx0-play: FORCE
 #	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
 
-zx0: FORCE
-	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
+#zx0: FORCE
+#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
 
 bitnax: FORCE
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
@@ -44,7 +44,7 @@ benchmark-lz: FORCE
 benchmark-dali: FORCE
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
-benchmark: FORCE zx0 dali d64write loader
+benchmark: FORCE dali d64write loader
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
 #link: FORCE zx0 bitnax d64write loader

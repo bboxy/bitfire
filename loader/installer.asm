@@ -132,7 +132,7 @@
 		sta $dd02
 }
 
-!if (CONFIG_RESIDENT_AUTOINST != 0) {
+;!if (CONFIG_RESIDENT_AUTOINST != 0) {
 !if (bitfire_resident_size) < 256 {
 		;better force to 8 bit, label might be defined as 16 bit
 		ldx #<(bitfire_resident_size)
@@ -157,7 +157,7 @@
 		dex
 		bne -
 }
-}
+;}
 
 !if CONFIG_LOADER_ONLY = 0 {
 		!src "detect.asm"
@@ -396,10 +396,10 @@
 }
 .atnhi_end
 }
-!if (CONFIG_RESIDENT_AUTOINST != 0) {
+;!if (CONFIG_RESIDENT_AUTOINST != 0) {
 .res_start
 !bin "resident",,2
-}
+;}
 
 !if CONFIG_CRT = 0 {
 !src "drivecode.asm"
