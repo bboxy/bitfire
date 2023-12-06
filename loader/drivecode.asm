@@ -692,11 +692,11 @@ IZY			= $a1
 			bne +
 			stx $1c00				;turn off motor
 +
+}
 .rechk
 			bit $1800				;check for clk toggle
 			bmi .wait_bit1
 			beq .wait_bit1
-}
 .got_bit1
 			lda $1800				;now read again
 			;bmi .lock				;check for lock

@@ -42,7 +42,7 @@ lz_src			= bitfire_load_addr_lo
 !if CONFIG_LOADER_ONLY = 0 {
 preamble		= CONFIG_ZP_ADDR + 6					;5 bytes
 } else {
-preamble		= CONFIG_ZP_ADDR + 2					;5 bytes
+preamble		= CONFIG_ZP_ADDR + 2					;4 bytes
 }
 
 block_length		= preamble + 0
