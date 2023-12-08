@@ -285,16 +285,16 @@ ___			= $ff
 .tab02200222_lo		= .tables + $00
 
 !if CONFIG_LOADER_ONLY = 1 {
-;			!fill 21,$ea
+			!fill 21,$ea
 }								;no barriers needed with standalone loadraw
-.preamble_
+.preamble
 			sty <.block_size
 			iny					;set up num of bytes to be transferred
 			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
 
 			ldy <.dir_entry_num
 
-;!if CONFIG_LOADER_ONLY = 0 {					;no barriers needed with standalone loadraw
+!if CONFIG_LOADER_ONLY = 0 {					;no barriers needed with standalone loadraw
 			ldx #$14				;walk through list of sectors to be loaded
 			lda <.index
 .min_loop
@@ -310,7 +310,7 @@ ___			= $ff
 			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
-;}
+}
 			;sbc #$00				;subtract one in case of overflow
 			;clc
 			lda .dir_load_addr + 0,y		;fetch load address lowbyte
@@ -1084,8 +1084,8 @@ IZY			= $a1
 			; SET UP HEADERDATA FOR BLOCK TO BE SENT
 			;
 			;----------------------------------------------------------------------------------------------------
-.preamble							;y = blocksize
-			jmp .preamble_
+
+			jmp .preamble
 
 			;----------------------------------------------------------------------------------------------------
 			;
