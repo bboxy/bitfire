@@ -294,7 +294,7 @@ ___			= $ff
 
 			ldy <.dir_entry_num
 
-!if CONFIG_LOADER_ONLY = 0 {					;no barriers needed with standalone loadraw
+;!if CONFIG_LOADER_ONLY = 0 {					;no barriers needed with standalone loadraw
 			ldx #$14				;walk through list of sectors to be loaded
 			lda <.index
 .min_loop
@@ -310,7 +310,7 @@ ___			= $ff
 			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
-}
+;}
 			;sbc #$00				;subtract one in case of overflow
 			;clc
 			lda .dir_load_addr + 0,y		;fetch load address lowbyte
@@ -593,9 +593,6 @@ IZY			= $a1
 			bit $1800
 			bmi *-3
 			sta $1800				;signal busy after atn drops
-
-			ldx #$ff
-			txs
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -904,6 +901,8 @@ IZY			= $a1
 			dex
 			bpl .step
 .seek_done
+			txs					;reset stack pointer
+
 			ldy <.track				;already part of set_bitrate -> load track
 
 			;----------------------------------------------------------------------------------------------------
