@@ -470,7 +470,7 @@ ___			= $ff
 
 +
 			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY	;ack/status to set load addr, signal block ready
-			ldy #$05 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldy #$06 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -493,15 +493,12 @@ IZY			= $a1
 			;XXX TODO jmp ($c1c1) would also work, jumps to $0099 and wastes 2 extra cycles, nop could be omitted, but strongly depends on ROM :-(
 
 			;clc					;should never overrun, or we would wrap @ $ffff?
-.start_send
 -
-			lax <.preamble_data - 1,y
-			ldx #$09				;masking value
+			lda <.preamble_data - 1,y
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
-			dey
-			bcs +
-			nop
+			sta <.preamble_data - 1,y
+			bcs .start_send
 
 			;would also suit at $91, $95, $99
 .bitrate
@@ -513,18 +510,19 @@ IZY			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 
+.start_send
 ;!if .POSTPONED_XFER = 1 {
 ;			;ldy <.blocks_on_list
 ;			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
-;			bpl .start_send
+;			bpl +
 ;			bit <.last_track_of_file		;eof?
 ;			bpl .postpone
+;+
 ;}
-+
-			sta <.preamble_data,y			;meh, 16 bit
+			ldx #$09				;XXX TODO meh, just the value we loaded before :-( masking value for later sax $1800 and for preamble encoding
+			dey
 			bne -
 
-			ldx #$09				;XXX TODO meh, just the value we loaded before :-( masking value for later sax $1800 and for preamble encoding
 			lda #.preloop - .branch - 2		;be sure branch points to preloop
 .send_sector_data_setup
 			sta .branch + 1
