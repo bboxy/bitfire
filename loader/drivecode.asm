@@ -43,7 +43,7 @@
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
-.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+;.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
 
@@ -259,11 +259,11 @@ ___			= $ff
 +
 			jmp .read_sector
 
-.slow_table
-			!byte <(.slow0 + 2)
-			!byte <(.slow2 + 2)
-			!byte <(.slow4 + 2)
-			!byte <(.slow6 + 2)
+.slow_tab
+			!byte (<.gcr_slow1_00) << 1
+			!byte (<.gcr_slow1_20) << 1
+			!byte (<.gcr_slow1_40) << 1
+			!byte (1 << 1) | 1
 
 !ifdef .second_pass {
 	!warn $0100 - *, " bytes remaining in zeropage."
@@ -285,7 +285,7 @@ ___			= $ff
 .tab02200222_lo		= .tables + $00
 
 !if CONFIG_LOADER_ONLY = 1 {
-			!fill 21,$ea
+;			!fill 21,$ea
 }								;no barriers needed with standalone loadraw
 .preamble_
 			sty <.block_size
@@ -385,10 +385,11 @@ ___			= $ff
 			lda <.block_num				;add block num
 			adc .dir_load_addr + 1,y		;add load address highbyte
 			sta <.preamble_data + 2			;block address high
-			bcc .preamble___
+			bcc +
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
-                        !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08, $f3
+                        !byte $90, $29, $0d, $05, $08, $00, $09, $01, $1a, $06, $0c, $04, $da, $02, $08
++
 
 ;                        !byte $50, ___, ___, ___, $0d, ___, ___, ___, $40, ___, ___, ___, $05, ___, ___, ___		;20 bytes with 3 dops
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, $0e, $0f, $07, $00, $0a, $0b, $03
@@ -467,8 +468,9 @@ ___			= $ff
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, ___, ___, ___, ___, ___, ___, ___
 ;                        !byte $90, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 
-
-			* = $300
++
+			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY	;ack/status to set load addr, signal block ready
+			ldy #$05 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -476,13 +478,9 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-IZY			= $a1
+			bne .start_send
 
-			nop
-			nop
-			nop
-			nop
-			nop
+IZY			= $a1
 
 .gcr_slow1_00		= * + 3
 .gcr_slow1_20		= * + 7
@@ -492,11 +490,18 @@ IZY			= $a1
 			lda $1c01
 			nop
 			jmp .gcr_slow1 + 3
+			;XXX TODO jmp ($c1c1) would also work, jumps to $0099 and wastes 2 extra cycles, nop could be omitted, but strongly depends on ROM :-(
 
-.slow0			jmp .gcr_slow1_00
-.slow2			jmp .gcr_slow1_20
-.slow4			jmp .gcr_slow1_40
-.slow6			lda $1c01
+			;clc					;should never overrun, or we would wrap @ $ffff?
+.start_send
+-
+			lax <.preamble_data - 1,y
+			ldx #$09				;masking value
+			sbx #$00
+			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
+			dey
+			bcs +
+			nop
 
 			;would also suit at $91, $95, $99
 .bitrate
@@ -508,36 +513,24 @@ IZY			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 
-.preamble___
-			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY	;ack/status to set load addr, signal block ready
-			;clc					;should never overrun, or we would wrap @ $ffff?
-!if .POSTPONED_XFER = 1 {
-			;ldy <.blocks_on_list
-			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
-			bpl .start_send
-			bit <.last_track_of_file		;eof?
-			bpl .postpone
-}
-.start_send
-			ldy #$05 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
--
-			lax <.preamble_data - 1,y
-			ldx #$09				;masking value
-			sbx #$00
-			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
-			sta <.preamble_data - 1,y		;meh, 16 bit
-			dey
+;!if .POSTPONED_XFER = 1 {
+;			;ldy <.blocks_on_list
+;			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
+;			bpl .start_send
+;			bit <.last_track_of_file		;eof?
+;			bpl .postpone
+;}
++
+			sta <.preamble_data,y			;meh, 16 bit
 			bne -
 
 			ldx #$09				;XXX TODO meh, just the value we loaded before :-( masking value for later sax $1800 and for preamble encoding
 			lda #.preloop - .branch - 2		;be sure branch points to preloop
-			top
 .send_sector_data_setup
-			ldy #$68				;place mnemonic pla in highbyte
 			sta .branch + 1
 			sty .sendloop
 			ldy <.block_size			;blocksize + 1
-			inx
+			inx					;increase counter, as we go through sendloop twice, for preamble and for data
 			bcc .sendloop				;send data or preamble?
 
 			ldy #$04 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
@@ -592,6 +585,7 @@ IZY			= $a1
 	!error "sendloop-size changed, .sendloop - .branch - 2 is != $d1: ", .sendloop - .branch - 2
 }
 								;keep code here small to not waste much time until busy flag is set after sending
+			ldy #$68				;place mnemonic pla in highbyte
 			lda #.sendloop - .branch - 2		;redirect branch to sendloop (A = $d1)
 			cpx #$0b				;check on second round, clear carry by that
 			bcc .send_sector_data_setup		;second round, send sector data now
@@ -604,30 +598,31 @@ IZY			= $a1
 
 			ldx #$ff
 			txs
+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; BLOCK OF TRACK LOADED AND SENT
 			;
 			;----------------------------------------------------------------------------------------------------
 
-!if .POSTPONED_XFER = 1 {
-			bit <.en_dis_seek
-			bmi +
-			inx					;we return with X = $ff from send -> X = 0
-			inc <.en_dis_seek			;disable_jmp
-			jmp .send_back
-+
-			lda <.blocks_on_list			;just read again, was decreased before
-} else {
+;!if .POSTPONED_XFER = 1 {
+;			bit <.en_dis_seek
+;			bmi +
+;			inx					;we return with X = $ff from send -> X = 0
+;			inc <.en_dis_seek			;disable_jmp
+;			jmp .send_back
+;+
+;			lda <.blocks_on_list			;just read again, was decreased before
+;} else {
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
-}
+;}
 			bmi .track_finished
 			;XXX TODO, exists twice, and so expensive, as a branch would suffice :-(
 			jmp .next_sector			;nope, continue loading
-!if .POSTPONED_XFER = 1 {
-.postpone
-			dec <.en_dis_seek			;enable jmp, skip send of data for now
-}
+;!if .POSTPONED_XFER = 1 {
+;.postpone
+;			dec <.en_dis_seek			;enable jmp, skip send of data for now
+;}
 .en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
@@ -725,7 +720,9 @@ IZY			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			beq .reset				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
+			bne +					;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
+.reset			jmp (.reset_drive)
++
 			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
 .drivecode_entry
 			;top
@@ -761,8 +758,7 @@ IZY			= $a1
 			ldy #$00
 			sty <.blocks + 1
 			sty <.is_cached_sector			;invalidate cached sector
-			beq .turn_disc_entry			;BRA a = sector, x = 0 = index
-.reset			jmp (.reset_drive)
+			beq .turn_disc_entry			;BRA a = sector, y = 0 = index
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -896,13 +892,13 @@ IZY			= $a1
 			sta $1c00
 
 			;XXX TODO postpone after second halfstep, then while waiting
-!if .POSTPONED_XFER = 1 {
-			txa
-			adc <.en_dis_seek			;$7f/$80
-			bmi .send_back				;nope, continue
-			jmp .start_send				;send data now
-.send_back
-}
+;!if .POSTPONED_XFER = 1 {
+;			txa
+;			adc <.en_dis_seek			;$7f/$80
+;			bmi .send_back				;nope, continue
+;			jmp .start_send				;send data now
+;.send_back
+;}
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
 			bpl *-3
 			sta <.is_cached_sector			;invalidate chached sector upon track change
@@ -943,15 +939,17 @@ IZY			= $a1
 			eor .bitrate,x
 			sta $1c00
 
-			ldy .slow_table,x
-			ldx #$02
--
-			lda .slow6 & $ff00,y
-			sta <.gcr_slow1,x
-			dey
-			txa					;A = 0 after exit of loop
-			dex
-			bpl -
+			lda .slow_tab,x
+			ldy #$4c
+			ldx #>.gcr_slow1_00
+			lsr
+			bcc +
+			ldy #$ad
+			ldx #$1c
++
+			sty <.gcr_slow1 + 0
+			sta <.gcr_slow1 + 1
+			stx <.gcr_slow1 + 2
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -960,7 +958,8 @@ IZY			= $a1
 			;----------------------------------------------------------------------------------------------------
 
 			;A = 0
-			clc
+			asr #$00
+			;clc
 								;XXX TODO could also use anc #0 here, but might fail on 1541 U1
 .wanted_loop
 			ldy <.blocks + 1
