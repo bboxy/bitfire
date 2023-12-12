@@ -83,9 +83,14 @@
 .zp_start
 
 ;free			= .zp_start + $00
+;free			= .zp_start + $01
+;free			= .zp_start + $02
+;free			= .zp_start + $03
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
+;free			= .zp_start + $12
+;free			= .zp_start + $13
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
 .en_dis_seek		= .zp_start + $19
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
@@ -143,15 +148,11 @@ ___			= $ff
 ;                        !byte ___, ___, ___, $0e, ___, $0f, ___, $07, ___, ___, ___, $0a, ___, $0b, ___, $03
 ;                        !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01
 ;                        !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08, ___, ___
-;tabAAA000AA
-;                        !byte ___, $b0, $80, $a0, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, $20, $00, $80, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 
 			;     0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f
-                        !byte ___, $b0, $80, $a0, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
+                        !byte ___, ___, ___, ___, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
                         !byte .DS, ___, $f0, $1e, $70, $1f, $60, $17, ___, $80, $b0, $1a, $30, $1b, $20, $13	;10
-                        !byte ___, $20, $00, $80, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
+                        !byte ___, ___, ___, ___, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
                         !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, .DT, ___, $ff, $0a, ___, $0b, ___, $03	;50
@@ -300,13 +301,13 @@ ___			= $ff
 .min_loop
 			cmp <.wanted,x				;compare
 			bcc .is_bigger				;bigger index, next please
-			clc
 			lda <.wanted,x				;smaller (or same, but can't happen, as index is unique) remember new minimum
 			beq .barr_zero
 .is_bigger
 			dex					;next entry
 			bpl .min_loop
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
+			clc
 			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
 .barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
@@ -385,6 +386,7 @@ ___			= $ff
 			lda <.block_num				;add block num
 			adc .dir_load_addr + 1,y		;add load address highbyte
 			sta <.preamble_data + 2			;block address high
+			;clc					;should never overrun, or we would wrap @ $ffff?
 			bcc +
 
                         !byte                                         $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
@@ -490,14 +492,13 @@ IZY			= $a1
 			lda $1c01
 			nop
 			jmp .gcr_slow1 + 3
-			;XXX TODO jmp ($c1c1) would also work, jumps to $0099 and wastes 2 extra cycles, nop could be omitted, but strongly depends on ROM :-(
-
-			;clc					;should never overrun, or we would wrap @ $ffff?
+			;XXX TODO jmp ($c1c1) would also work, jumps to $0099 and wastes 2 extra cycles, nop could be omitted, but strongly depends on ROM :-( could place that in ZP, still addrs free
 -
-			lda <.preamble_data - 1,y
+			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
+			lda .preamble_data - 1,y
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
-			sta <.preamble_data - 1,y
+			sta .preamble_data - 1,y
 			bcs .start_send
 
 			;would also suit at $91, $95, $99
@@ -622,14 +623,14 @@ IZY			= $a1
 			;set stepping speed to $0c, if we loop once, set it to $18
 			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
 			lda #.DIR_TRACK
--
 ;!if .POSTPONED_XFER = 1 {
-			sec					;set by send_block and also set if beq
+;			sec					;set by send_block and also set if beq
 ;}
+-
 			isc <.to_track
 			beq -					;skip dirtrack however
-
 			jmp .load_track
+
 .track_finished
 			;XXX TODO make this check easier? only done here?
 			bit <.last_track_of_file		;EOF
@@ -646,17 +647,16 @@ IZY			= $a1
 .idle_
 			sta <.filenum				;filenum will be $ff and autoinced later to be zero
 .skip_load
-			lda $1c00				;turn off LED
+			lax $1c00
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
+			sbx #.MOTOR_ON & .LED_ON		;prepare value to turn off motor and LED after spindown delay
+}
 !if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
 			and #.MOTOR_OFF & .LED_OFF
 } else {
-			and #.LED_OFF
+			and #.LED_OFF				;for now only turn off LED
 }
 			sta $1c00
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-			and #.MOTOR_OFF
-			tax
-}
 			;----------------------------------------------------------------------------------------------------
 			;
 			; RECEIVE/WAIT FOR A BYTE FROM HOST
@@ -668,8 +668,8 @@ IZY			= $a1
 .lock
 			lda #$80
 			sta <.filename
-.bitloop
 			lda #$04
+.bitloop
 .wait_bit1
 !if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 .check_spindown
@@ -683,24 +683,19 @@ IZY			= $a1
 			stx $1c00				;turn off motor
 +
 }
-.rechk
 			bit $1800				;check for clk toggle
-			bmi .wait_bit1
+			bmi .lock
 			beq .wait_bit1
 .got_bit1
-			lda $1800				;now read again
-			;bmi .lock				;check for lock
-			lsr
+			ldy $1800				;now read again
+			cpy #5					;won't destroy A
 			ror <.filename
-
-			lda #$04
 .wait_bit2
 			bit $1800
 			bmi .lock
 			bne .wait_bit2				;do we have clk == 0?
+
 			lsr $1800				;XXX TODO can do lsr $1800 here
-			;bmi .lock
-			;lsr					;all sane, we can read bit in data
 			ror <.filename
 			bcc .bitloop				;more bits to fetch?
 
