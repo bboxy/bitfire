@@ -713,7 +713,7 @@ IZY			= $a1
 			bne +					;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
 .reset			jmp (.reset_drive)
 +
-			eor #$ff				;invert bits, saves a byte in resident code, space is more restricted there, so okay
+			eor #$ff				;invert bits, saves a byte in resident code, and makes reset detection easier
 .drivecode_entry
 			;top
 			;lda <.filenum
@@ -1167,7 +1167,7 @@ IZY			= $a1
 			bne .next_sector			;start over with a new header again as teh check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x		;waste a cycle
 			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 1 cycle
-			jmp .gcr_entry				;36 cycles until entry
+			jmp .gcr_entry				;35 cycles until entry
 
 .directory
 

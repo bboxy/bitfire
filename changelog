@@ -149,4 +149,4 @@ v1.2
 - fixed bug with uninitialized d64 in d64write
 - added .c (petscii editor by marc) and .png support for dirart (save without border!)
 - bootfile can be linked to a single line of dirart
-- saved bytes in drivecode by reqorking preamble scrambling and slow down code
+- saved bytes in drivecode by reworking preamble scrambling, gcr slow down and get_byte
