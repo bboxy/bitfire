@@ -82,9 +82,10 @@
 !pseudopc .zeropage {
 .zp_start
 
-;free			= .zp_start + $00
-;free			= .zp_start + $01
-;free			= .zp_start + $02
+.blocks			= .zp_start + $00
+.to_track		= .zp_start + $00			;DT
+.blocks_hi 		= .zp_start + $01
+.blocks_lo 		= .zp_start + $02
 ;free			= .zp_start + $03
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
@@ -94,12 +95,13 @@
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
 .en_dis_seek		= .zp_start + $19
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
-.blocks 		= .zp_start + $28			;2 bytes
+;free	 		= .zp_start + $28
+;free	 		= .zp_start + $29
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
 .val07ff		= .zp_start + $57			;DT ;current track
-.to_track		= .zp_start + $58			;DT
+;.to_track		= .zp_start + $58			;DT
 .sector			= .zp_start + $59			;DS
 .valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
@@ -155,7 +157,7 @@ ___			= $ff
                         !byte ___, ___, ___, ___, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
-                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, .DT, ___, $ff, $0a, ___, $0b, ___, $03	;50
+                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, ___, ___, $ff, $0a, ___, $0b, ___, $03	;50
                         !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
                         !byte $58, ___, ___, $06, ___, $0c, ___, $04, $4c, ___, ___, $02, ___, $08		;70
 
@@ -254,11 +256,10 @@ ___			= $ff
 			bpl -					;first byte being processed?
 			ldy #$55				;type (sector) (SP = $ff already)
 			eor <.track				;second byte is track
-			beq +
+			bne .read_header			;track check failed
+			jmp .read_sector			;all sane, now read payload of sector
 .read_header
 			jmp .next_sector			;type (header)
-+
-			jmp .read_sector
 
 .slow_tab
 			!byte (<.gcr_slow1_00) << 1
@@ -746,8 +747,8 @@ IZY			= $a1
 			sta <.dir_sector
 			dec .en_dis_td				;enable jump back
 			ldy #$00
-			sty <.blocks + 1
-			sty <.is_cached_sector			;invalidate cached sector
+			sty <.blocks_hi
+			sty <.is_cached_sector			;invalidate cached sector (must be != DIR_SECT)
 			beq .turn_disc_entry			;BRA a = sector, y = 0 = index
 
 			;----------------------------------------------------------------------------------------------------
@@ -780,36 +781,35 @@ IZY			= $a1
 			;----------------------------------------------------------------------------------------------------
 
 .find_file_in_dir
-			lda .dir_first_file_index		;sectorindex of first file in dir (not sector number, but as if written with interleave = 1)
-			sta <.blocks + 1
-			lda .dir_first_block_pos		;pos in first sector where file starts
-			sta <.blocks + 0
-
-			ldy .dir_first_file_track		;track of first file in dir
+			ldx #$02
+-
+			ldy .directory,x			;copy over dir info
+			sty .blocks,x				;to track is in Y after copy
+			dex
+			bpl -
 			ldx #$fc
 .next_dir_entry
-.no_next_track
 			txa
 			sbx #-4					;start with x = 0 by this
 			;XXX TODO better do sum up all filesizes with 24 bit and then subtract sectors until block + 1 and block + 2 is reached?
-			lda <.blocks + 0
+			lda <.blocks_lo
 			cpx <.dir_entry_num
 			beq .found_file
 
 			sec
 			adc .dir_file_size + 0,x
-			sta <.blocks + 0
+			sta <.blocks_lo
 
 			;XXX TODO on very huge files, this could fail, as we overflow!!! but then again, files are max $d000 in size due to i/o limitation?
-			lda <.blocks + 1
+			lda <.blocks_hi
 			adc .dir_file_size + 1,x
 .next_track
-			sta <.blocks + 1
+			sta <.blocks_hi
 			jsr .set_max_sectors			;setup max_sectors, expects track in Y, returns with carry set
-			lda <.blocks + 1
+			lda <.blocks_hi
 
 			sbc <.max_sectors			;reduce blockcount track by track
-			bcc .no_next_track
+			bcc .next_dir_entry
 -
 			;skip dir_track				;advance track
 			iny
@@ -823,9 +823,6 @@ IZY			= $a1
 			;calc first block size
 			eor #$ff
 			sta <.first_block_size
-
-			;set max_sectors for track in Y		;XXX TODO .max_sectors is not used again in between and set later on
-			;jsr .set_max_sectors			;setup max_sectors, expects track in Y, max_sectors might be unset for current to_track
 
 			lda .dir_file_size + 0,x
 			cmp <.first_block_size
@@ -954,7 +951,7 @@ IZY			= $a1
 			;clc
 								;XXX TODO could also use anc #0 here, but might fail on 1541 U1
 .wanted_loop
-			ldy <.blocks + 1
+			ldy <.blocks_hi
 			bne +
 			lax <.sector
 			ldy <.index				;get index
@@ -965,7 +962,7 @@ IZY			= $a1
 			inc <.index				;keep index as low as possible, so that literal blob gets loaded with lz_next_page in any case and over more than one page
 			top
 +
-			dec <.blocks + 1
+			dec <.blocks_hi
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc +					;nope, store sector and do a BRA, bcc will always be bne
@@ -995,13 +992,13 @@ IZY			= $a1
 			;iny					;is it part of our yet loaded file?
 			;beq .next_sector			;something went wrong, seems like we loaded another file
 .restore
-			stx <.is_loaded_sector
+			ldy #$00
 -
-			tsx
-			lda .cache,x
+			lda .cache,y
 			pha
-			txa
+			iny
 			bne -
+			top
 .new_sector
 			ldx <.is_loaded_sector			;initially $ff
 			;bmi .next_sector			;initial call on a new track? Load content first
@@ -1010,14 +1007,16 @@ IZY			= $a1
 			cpy <.last_block_num			;current block is last block on list? comparision sets carry and is needed later on on setup_send
 			bne .no_caching				;nope, do not cache this sector
 .stow
+			stx <.is_cached_sector
+
+			ldy #$00
 -
 			pla
-			tsx
-			sta .cache,x
-			inx
+			dey
+			sta .cache,y
 			bne -
-			ldx <.is_loaded_sector
-			stx <.is_cached_sector
+
+			;ldy <.last_block_num			;restore Y, can be omitted, as it falls through anyway on next beq
 .no_caching
 			;cpy <.last_block_num			;compare once when code-path is still common, carry is not tainted until needed
 			iny
@@ -1041,7 +1040,7 @@ IZY			= $a1
 			bcc .first_block_big			;bcs = last_block, so a small file that starts and ends in same sector, bcc = big_file, all done
 			tya
 			clc
-			adc <.blocks + 0
+			adc <.blocks_lo
 			bcc .first_block_small			;XXX TODO bcc would also suffice? Can this really overflow if we end in same block?
 .is_not_first_block
 			bcc .full_block				;a is !0
@@ -1089,33 +1088,29 @@ IZY			= $a1
 			;----------------------------------------------------------------------------------------------------
 .back_read_sector
 			;read happens earlier than needed, 2 cycles over all! as branch is not taken and eor is only 3 cycles
-			nop
-			ldx $1c01				;44445555
-			eor $0101
-			sta <.chksum2 + 1			;checksum 2 bytes from last round
-			txa
-
-			arr #$f0
-			tay					;44444---
-
+			tax					;partial checksum in x, need to waste 2 cycles anyway
+			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero
 !if .SANCHECK_TRAILING_ZERO = 1 {
-			lda #$0f
-			sbx #.CHECKSUM_CONST1			;4 bits of a trailing zero after checksum
-			bne .next_sector			;check remaining nibble if it is $05
-;			ldx $1c01
-;			clv					;after arr, as it influences v-flag
-;			bvc *
-;			cpx #.CHECKSUM_CONST2			;0 01010 01 - more traiing zeroes
-;			bne .next_sector
-;			lda $1c01
-;			and #$e0
-;			cmp #.CHECKSUM_CONST3 & $e0		;010 xxxxx - and more trailing zeroes, last nibble varies on real hardware
-;			bne .next_sector
+			ror					;xxxxx010
+			tay
+			bcc .next_sector
+			;rol					;would check against constant explicitely
+			;and #$0f
+			;eor #.CHECKSUM_CONST1
+			;bne .next_sector
+} else {
+			arr #$f0
+			tay
 }
+			txa
 			ldx <.threes + 1
-			lda <.tab00333330_hi,x			;sector checksum
+!if .SANCHECK_TRAILING_ZERO = 1 {
+			eor .tab44444000_lo - 2,y		;compensate for CONST1 where bit 1 is still set, if bits for CONST1 are not 010, this read will be off and checksum will fail, hopefully @_@
+} else {
 			eor .tab44444000_lo,y
-			eor <.chksum2 + 1
+}
+			eor <.tab00333330_hi,x			;sector checksum
+			eor $0101
 !if .BOGUS_READS > 0 {
 			bne .next_sector
 			lda .bogus_reads
