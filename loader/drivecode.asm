@@ -109,7 +109,7 @@
 .bogus_reads		= .zp_start + $66
 }
 .block_size		= .zp_start + $68
-.cache_limit		= .zp_start + $69
+;free			= .zp_start + $69
 .is_cached_sector	= .zp_start + $6a
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
@@ -190,6 +190,7 @@ ___			= $ff
 			eor $0103,x
 .gcr_entry
 			sta <.chksum2 + 1
+.v1c01 = * + 1
 			lda $1c01				;44445555		third read
 			ldx #$0f
 			sax <.fives + 1
@@ -354,17 +355,18 @@ ___			= $ff
 			nop
 			dop
 			!byte $50
-			dec <.blocks_on_list
-			dop
-			!byte $0d
-			lax <.filenum				;just loading a new dir-sector, not requesting turn disk?
+			inc .en_dis_td
+			!byte $0d				;does not harm, ora $eaea
+			nop
+			nop
 			dop
 			!byte $40
-			inc .en_dis_td
+			dec <.blocks_on_list
+			top
 			!byte $05				;ora $0b, does not harm, it is a ora $00
 			!byte $0b
 			;XXX TODO would also work with dey, needs tya on and + ldx #$fc, would save tsx and end up the same way
-			jmp .drivecode_entry
+			jmp .td_back
 .preamble__
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
 			beq ++
@@ -483,19 +485,19 @@ ___			= $ff
 
 			bne .start_send
 
-IZY			= $a1
+IZX			= $a1
 
 .gcr_slow1_00		= * + 3
 .gcr_slow1_20		= * + 7
 .tab0070dd77_hi                                                     ;lda ($b0,x) dop #$a0 lda ($b0,x) dop #$a0
-                        !byte                          $b0, $80, $a0, IZY, $b0, $80, $a0, IZY, $b0, $80, $a0
+                        !byte                          $b0, $80, $a0, IZX, $b0, $80, $a0, IZX, $b0, $80, $a0
 .gcr_slow1_40							;wastes 8 cycles:jmp to .gcr_slow1_40, nop, jmp .gcr_slow1 + 3
 			lda $1c01
 			nop
 			jmp .gcr_slow1 + 3
 			;XXX TODO jmp ($c1c1) would also work, jumps to $0099 and wastes 2 extra cycles, nop could be omitted, but strongly depends on ROM :-( could place that in ZP, still addrs free
 -
-			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
+			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP 
 			lda .preamble_data - 1,y
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
@@ -521,7 +523,7 @@ IZY			= $a1
 ;			bpl .postpone
 ;+
 ;}
-			ldx #$09				;XXX TODO meh, just the value we loaded before :-( masking value for later sax $1800 and for preamble encoding
+			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
 			dey
 			bne -
 
@@ -728,6 +730,7 @@ IZY			= $a1
 			ora #.LED_ON				;only turn LED on if file is loaded
 +
 			sta $1c00
+.td_back
 			lax <.filenum				;load filenum
 			bcc .load_file
 
@@ -1091,9 +1094,9 @@ IZY			= $a1
 			tax					;partial checksum in x, need to waste 2 cycles anyway
 			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero
 !if .SANCHECK_TRAILING_ZERO = 1 {
-			ror					;xxxxx010
+			ror					;xxxxx010 1
 			tay
-			bcc .next_sector
+			bcc .next_sector			;check bit 0 of CONST1
 			;rol					;would check against constant explicitely
 			;and #$0f
 			;eor #.CHECKSUM_CONST1
@@ -1150,16 +1153,16 @@ IZY			= $a1
 			;lsr
 			;eor #$06
 
-			bvc *
 			bne .next_sector			;start over with a new header again as check against first bits of headertype already fails
+			bvc *
 			sta <.gcr_h_or_s			;setup return jump
 			asl
-			eor $1c01				;read 22333334 - 2 most significant bits should be zero now
 			ldx <.val3e				;set x to $3e and waste a cycle
+			eor (.v1c01 - $3e,x)			;read 22333334 - 2 most significant bits should be zero now, waste 2 cycles
 			eor <.val58 - $3e,x			;eor #$58 to compensate for the unsued bits of eor #$4c * 2 and waste 2 cycles
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
-			bne .next_sector			;start over with a new header again as teh check for header type failed in all bits
+			bne .next_sector			;start over with a new header again as the check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x		;waste a cycle
 			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 1 cycle
 			jmp .gcr_entry				;35 cycles until entry
