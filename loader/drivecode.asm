@@ -84,7 +84,7 @@
 !pseudopc .zeropage {
 .zp_start
 
-.blocks			= .zp_start + $00
+.dirinfo		= .zp_start + $00
 .to_track		= .zp_start + $00			;DT
 .blocks_hi 		= .zp_start + $01
 .blocks_lo 		= .zp_start + $02
@@ -239,7 +239,7 @@ ___			= $ff
 			bne .read_loop
 .gcr_end
 			;Z-Flag = 1 on success, 0 on failure (wrong type)
-			eor $0103				;do remaining checksum, yet same for header or sector
+			eor $0103				;do remaining checksum, yet same for header or sector, skip $0f in $0101
 			eor <.chksum + 1
 .gcr_h_or_s		jmp .back_read_sector			;will either happen or disabled for fall through
 			bne .read_header			;header checksum check failed? reread
@@ -494,7 +494,7 @@ IZX			= $a1
 			jmp .gcr_slow1 + 3
 			;XXX TODO jmp ($c1c1) would also work, jumps to $0099 and wastes 2 extra cycles, nop could be omitted, but strongly depends on ROM :-( could place that in ZP, still addrs free
 -
-			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP 
+			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
 			lda .preamble_data - 1,y
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
@@ -781,7 +781,7 @@ IZX			= $a1
 			ldx #$03
 -
 			ldy .directory - 1,x			;copy over dir info
-			sty .blocks - 1,x			;to track is in Y after copy
+			sty <.dirinfo - 1,x			;to track is in Y after copy
 			dex
 			bne -
 .next_dir_entry
@@ -1106,7 +1106,7 @@ IZX			= $a1
 			eor .tab44444000_lo,y
 }
 			eor <.tab00333330_hi,x			;sector checksum
-			eor $0101
+			eor $0101				;not checksummed in case of header
 ;!if .BOGUS_READS > 0 {
 ;			bne .next_sector
 ;			lda .bogus_reads
@@ -1141,6 +1141,26 @@ IZX			= $a1
 
 			clv
 			cpy $1c01				;11111222
+			;XXX TODO sbc $1c01
+;			sta <.gcr_h_or_s			;setup return jump either $0c or $4c
+;			ldx #$f8
+;			lda (.v1c01 - $f8,x)
+;			sbx #$50
+;			bne .next_sector
+;			ldx #$07
+;			sax .twos_ + 1
+;			bvc *
+;			lda (.v1c01 - $07,x)
+;			ldx #$3e
+;			sax <.threes + 1
+;			asr #$c1
+;			tay
+;.twos_			lda .tab02200222_lo,y
+;			bne .next_sector
+;			sta <.chksum
+;			lda #$7f
+			;
+			;
 			;lsr
 			;ror
 			;lsr
@@ -1148,16 +1168,16 @@ IZX			= $a1
 
 			bne .next_sector			;start over with a new header again as check against first bits of headertype already fails
 			bvc *
-			sta <.gcr_h_or_s			;setup return jump
+			ldx #$3e				;set x to $3e
+			sta <.gcr_h_or_s			;setup return jump either $0c or $4c
 			asl
-			ldx <.val3e				;set x to $3e and waste a cycle
 			eor (.v1c01 - $3e,x)			;read 22333334 - 2 most significant bits should be zero now, waste 2 cycles
-			eor <.val58 - $3e,x			;eor #$58 to compensate for the unsued bits of eor #$4c * 2 and waste 2 cycles
+			eor <.val58 - $3e,x			;eor #$58 to compensate for $0c component of gcr_h_or_s * 2, set bit 6
 			sax <.threes + 1
-			asr #$c1				;shift out LSB and mask two most significant bits (should be zero)
+			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_sector			;start over with a new header again as the check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x		;waste a cycle
-			lda <.ser2bin; - $3e,x			;lda #.EOR_VAL and waste 1 cycle
+			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
 			jmp .gcr_entry				;35 cycles until entry
 
 .directory

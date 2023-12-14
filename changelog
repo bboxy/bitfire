@@ -142,11 +142,10 @@ v1.2
 - fixed nasty bitrate bug in drivecode that would sometimes choose wrong bitrate on slowest speed zone and bring timing to its edge
 - finally fixed and changed buslock-technique so that it also works with THCM's SX64 - broken since introduced in 0.7 /o\
 - saved huge amount of bytes
-- changing layout of dir-sector
-- use free memory for proper caching of first/last sector, thanks to $020b bytes free for cache and dir
+- changed layout of dir-sector
+- use free memory for proper caching of first/last sector, thanks to $0262 bytes free for cache and dir
 - improve loadraw performance by more than 5%
 - sending data bewteen halfsteps seemed to cause problems on my longboard 1541, moved it to the end of stepping when settle time for the stepper is due
 - fixed bug with uninitialized d64 in d64write
-- added .c (petscii editor by marc) and .png support for dirart (save without border!)
+- added .c (petscii editor by marq) and .png support for dirart (save without border!)
 - bootfile can be linked to a single line of dirart
-- saved bytes in drivecode by reworking preamble scrambling, gcr slow down and get_byte
