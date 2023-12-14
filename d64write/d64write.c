@@ -756,11 +756,11 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
         dir_pos = 0;
         while (dir_pos < 63) {
             //empty entries have track set to 0
-            if (dir[4 + dir_pos * 4 + 0] + dir[4 + dir_pos * 4 + 1] + dir[4 + dir_pos * 4 + 2] + dir[4 + dir_pos * 4 + 3] == 0) {
-                dir[4 + dir_pos * 4 + 0] = loadaddr & 0xff;
-                dir[4 + dir_pos * 4 + 1] = ((loadaddr >> 8) & 0xff) - 1;
-                dir[4 + dir_pos * 4 + 2] = (length - 1) & 0xff;
-                dir[4 + dir_pos * 4 + 3] = ((length - 1) >> 8) & 0xff;
+            if (dir[4 + dir_pos + (0 * 0x3f)] + dir[4 + dir_pos + (1 * 0x3f)] + dir[4 + dir_pos + (2 * 0x3f)] + dir[4 + dir_pos + (3 * 0x3f)] == 0) {
+                dir[4 + dir_pos + (0 * 0x3f)] = loadaddr & 0xff;
+                dir[4 + dir_pos + (1 * 0x3f)] = ((loadaddr >> 8) & 0xff) - 1;
+                dir[4 + dir_pos + (2 * 0x3f)] = (length - 1) & 0xff;
+                dir[4 + dir_pos + (3 * 0x3f)] = ((length - 1) >> 8) & 0xff;
                 //first file in dir sector -> place init values
             	if (dir_pos == 0) {
                     dir[0x0] = track;

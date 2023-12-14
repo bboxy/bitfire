@@ -71,8 +71,10 @@
 .cache			= $0700
 
 			;XXX TODO allocate this dynamically at end of code and before tables? but bootstrap needs to be in stack then and page needs to be skipped upon upload?
-.dir_load_addr		= .directory + 4
-.dir_file_size		= .directory + 6
+.dir_load_addr_lo	= .directory + 4 + (0 * $3f)
+.dir_load_addr_hi	= .directory + 4 + (1 * $3f)
+.dir_file_size_lo	= .directory + 4 + (2 * $3f)
+.dir_file_size_hi	= .directory + 4 + (3 * $3f)
 .dir_first_file_track	= .directory + 0			;starttrack of first file in dir
 .dir_first_file_index	= .directory + 1			;how many blocks are used on this track up to the file
 .dir_first_block_pos	= .directory + 2			;startposition within block
@@ -306,13 +308,13 @@ ___			= $ff
 			bpl .min_loop
 								;we need to at least wait with setting barrier until first block is loaded, as load-address comes with this block, barrier check on resident side must fail until then by letting barrier set to 0
 			clc
-			adc .dir_load_addr + 1,y		;add load address highbyte to lowest blockindex
+			adc .dir_load_addr_hi,y			;add load address highbyte to lowest blockindex
 .barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
 			;sbc #$00				;subtract one in case of overflow
 			;clc
-			lda .dir_load_addr + 0,y		;fetch load address lowbyte
+			lda .dir_load_addr_lo,y			;fetch load address lowbyte
 			sec
 			bcs .preamble__
 
@@ -382,7 +384,7 @@ ___			= $ff
                         !byte $d0, $38, $1d, $15, $0c, $10, $19, $11, $c0, $16, $1c, $14, $04, $12, $18
 +
 			lda <.block_num				;add block num
-			adc .dir_load_addr + 1,y		;add load address highbyte
+			adc .dir_load_addr_hi,y			;add load address highbyte
 			sta <.preamble_data + 2			;block address high
 			;clc					;should never overrun, or we would wrap @ $ffff?
 			bcc +
@@ -767,8 +769,6 @@ IZX			= $a1
 			cpy <.dir_sector			;is this dir sector loaded?
 			bne .load_dir_sect
 
-			asl					;shift by 4 to get index into dir
-			asl
 			sta <.dir_entry_num			;and save
 
 			;----------------------------------------------------------------------------------------------------
@@ -778,28 +778,27 @@ IZX			= $a1
 			;----------------------------------------------------------------------------------------------------
 
 .find_file_in_dir
-			ldx #$02
+			ldx #$03
 -
-			ldy .directory,x			;copy over dir info
-			sty .blocks,x				;to track is in Y after copy
+			ldy .directory - 1,x			;copy over dir info
+			sty .blocks - 1,x			;to track is in Y after copy
 			dex
-			bpl -
-			ldx #$fc
+			bne -
 .next_dir_entry
-			txa
-			sbx #-4					;start with x = 0 by this
 			;XXX TODO better do sum up all filesizes with 24 bit and then subtract sectors until block + 1 and block + 2 is reached?
 			lda <.blocks_lo
 			cpx <.dir_entry_num
 			beq .found_file
 
 			sec
-			adc .dir_file_size + 0,x
+			adc .dir_file_size_lo,x
 			sta <.blocks_lo
 
 			;XXX TODO on very huge files, this could fail, as we overflow!!! but then again, files are max $d000 in size due to i/o limitation?
 			lda <.blocks_hi
-			adc .dir_file_size + 1,x
+			adc .dir_file_size_hi,x
+
+			inx
 .next_track
 			sta <.blocks_hi
 			jsr .set_max_sectors			;setup max_sectors, expects track in Y, returns with carry set
@@ -821,9 +820,9 @@ IZX			= $a1
 			eor #$ff
 			sta <.first_block_size
 
-			lda .dir_file_size + 0,x
+			lda .dir_file_size_lo,x
 			cmp <.first_block_size
-			ldy .dir_file_size + 1,x		;load file_size + 1
+			ldy .dir_file_size_hi,x			;load file_size + 1
 			bne .is_big				;filesize < $100 ? is_big if not
 			bcs .is_big				;it is < $0100 but does not fit in remaining space? -> is_big
 			sta <.first_block_size			;fits in, correct size, this will cause overflow on next subtraction and last_block_num will be zero, last_block_size will be $ff
