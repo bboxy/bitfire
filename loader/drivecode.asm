@@ -42,7 +42,7 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
+;.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
 ;.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
@@ -105,9 +105,9 @@
 .sector			= .zp_start + $59			;DS
 .valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
-!if .BOGUS_READS > 0 {
-.bogus_reads		= .zp_start + $66
-}
+;!if .BOGUS_READS > 0 {
+;.bogus_reads		= .zp_start + $66
+;}
 .block_size		= .zp_start + $68
 ;free			= .zp_start + $69
 .is_cached_sector	= .zp_start + $6a
@@ -132,7 +132,7 @@ ___			= $ff
 .tab00005555_hi		= .zp_start + $00
 .tab00333330_hi		= .zp_start + $00
 .tab05666660_lo		= .zp_start + $01
-.tab00700077_hi		= .zp_start + $00			;XXX currently not used
+;.tab00700077_hi		= .zp_start + $00			;XXX currently not used
 
 ;tab00AAAAA0
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
@@ -161,11 +161,7 @@ ___			= $ff
                         !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
                         !byte $58, ___, ___, $06, ___, $0c, ___, $04, $4c, ___, ___, $02, ___, $08		;70
 
-
-			;XXX TODO, move PA to $68, need to fix table afterwards by setting $00? but could the do lda $68,y? but still not possible with 8 bit addressing, but would make setup easier
-
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
-			;XXX see if we can use bit 2 from original data, would save space in tables
 
 ;this reflects the perfect timing, it is most likely delayed by 2-3 cycles due to bvs branching before?
 ;in fact this can jitter a lot, bvc can loop at cycle 0 if it misses at the end and then there's up to 5 cycles delay (branch + fallthrough)
@@ -355,18 +351,17 @@ ___			= $ff
 			nop
 			dop
 			!byte $50
-			inc .en_dis_td
+			dec <.blocks_on_list
+			dop
 			!byte $0d				;does not harm, ora $eaea
-			nop
-			nop
+			lax <.filenum
 			dop
 			!byte $40
-			dec <.blocks_on_list
-			top
+			inc .en_dis_td
 			!byte $05				;ora $0b, does not harm, it is a ora $00
 			!byte $0b
 			;XXX TODO would also work with dey, needs tya on and + ldx #$fc, would save tsx and end up the same way
-			jmp .td_back
+			jmp .drivecode_entry
 .preamble__
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
 			beq ++
@@ -730,7 +725,8 @@ IZX			= $a1
 			ora #.LED_ON				;only turn LED on if file is loaded
 +
 			sta $1c00
-.td_back
+
+			ldy #.DIR_SECT				;second dir sector
 			lax <.filenum				;load filenum
 			bcc .load_file
 
@@ -742,12 +738,11 @@ IZX			= $a1
 .turn_disc
 			eor .dir_diskside			;compare side info
 			beq .idle_
-			ldy #.DIR_SECT				;first dir sector
 .load_dir_sect
 			ldx #.DIR_TRACK				;set target track to 18
 			stx <.to_track
+			sty <.dir_sector
 			tya
-			sta <.dir_sector
 			dec .en_dis_td				;enable jump back
 			ldy #$00
 			sty <.blocks_hi
@@ -760,16 +755,15 @@ IZX			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 .load_file
-!if .BOGUS_READS > 0 {
-			ldy #.BOGUS_READS
-			sty .bogus_reads
-}
-			ldy #.DIR_SECT - 1			;second dir sector
-			sbc #$3e				;carry is cleared
-			bcs +					;no underflow, filenum is >= $3f
+			sbx #$3f				;check if filnum >= $3f
+			bcc +					;underflow, filenum is < $3f
 			txa
-			iny					;select first dir sector
+			dey					;select second dir sector
 +
+;!if .BOGUS_READS > 0 {
+;			ldx #.BOGUS_READS
+;			stx .bogus_reads
+;}
 			cpy <.dir_sector			;is this dir sector loaded?
 			bne .load_dir_sect
 
@@ -1114,14 +1108,14 @@ IZX			= $a1
 }
 			eor <.tab00333330_hi,x			;sector checksum
 			eor $0101
-!if .BOGUS_READS > 0 {
-			bne .next_sector
-			lda .bogus_reads
+;!if .BOGUS_READS > 0 {
+;			bne .next_sector
+;			lda .bogus_reads
+;			beq .new_sector
+;			dec .bogus_reads
+;} else {
 			beq .new_sector
-			dec .bogus_reads
-} else {
-			beq .new_sector
-}
+;}
 			;----------------------------------------------------------------------------------------------------
 			;
 			; HEADER DONE, NOW READ SECTOR DATA
