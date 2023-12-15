@@ -498,7 +498,7 @@ IZX			= $a1
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
 			sta .preamble_data - 1,y
-			bcs .start_send
+			bcs +
 
 			;would also suit at $91, $95, $99
 .bitrate
@@ -517,8 +517,8 @@ IZX			= $a1
 ;			bpl +
 ;			bit <.last_track_of_file		;eof?
 ;			bpl .postpone
-;+
 ;}
++
 			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
 			dey
 			bne -
@@ -617,18 +617,8 @@ IZX			= $a1
 ;!if .POSTPONED_XFER = 1 {
 ;.postpone
 ;			dec <.en_dis_seek			;enable jmp, skip send of data for now
+;			jmp .en_dis_seek_
 ;}
-.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
-			;set stepping speed to $0c, if we loop once, set it to $18
-			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
-			lda #.DIR_TRACK
-;!if .POSTPONED_XFER = 1 {
-;			sec					;set by send_block and also set if beq
-;}
--
-			isc <.to_track
-			beq -					;skip dirtrack however
-			jmp .load_track
 
 .track_finished
 			;XXX TODO make this check easier? only done here?
@@ -710,9 +700,7 @@ IZX			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			bne +					;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
-.reset			jmp (.reset_drive)
-+
+			beq .reset				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
 			eor #$ff				;invert bits, saves a byte in resident code, and makes reset detection easier
 .drivecode_entry
 			;top
@@ -750,6 +738,20 @@ IZX			= $a1
 			sty <.blocks_hi
 			sty <.is_cached_sector			;invalidate cached sector (must be != DIR_SECT)
 			beq .turn_disc_entry			;BRA a = sector, y = 0 = index
+
+.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
+			;set stepping speed to $0c, if we loop once, set it to $18
+			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
+			lda #.DIR_TRACK
+;!if .POSTPONED_XFER = 1 {
+;			sec					;set by send_block and also set if beq
+;}
+-
+			isc <.to_track
+			beq -					;skip dirtrack however
+			bne .load_track
+
+.reset			jmp (.reset_drive)
 
 			;----------------------------------------------------------------------------------------------------
 			;
