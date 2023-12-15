@@ -644,18 +644,19 @@ IZX			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 .idle_
-			sta <.filenum				;filenum will be $ff and autoinced later to be zero
+			sta <.filenum
 .skip_load
 			lax $1c00
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
-			sbx #.MOTOR_ON & .LED_ON		;prepare value to turn off motor and LED after spindown delay
-}
 !if .DELAY_SPIN_DOWN = 0 & CONFIG_MOTOR_ALWAYS_ON = 0 {
 			and #.MOTOR_OFF & .LED_OFF
 } else {
 			and #.LED_OFF				;for now only turn off LED
 }
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
+			sbx #.MOTOR_ON				;prepare value to turn off motor
+}
 			sta $1c00
+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; RECEIVE/WAIT FOR A BYTE FROM HOST
@@ -1129,12 +1130,11 @@ IZX			= $a1
 			bit $1c00				;wait for end of sync
 			bmi -
 
-			adc $1c01				;sync mark -> $ff
-			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
+			adc $1c01				;read mark and throw away
+			lax <.val0c4c - $52,y			;setup A ($0c/$4c) (lax allows for 8 bit address)
 
 			bvc *
-			cpy $1c01				;11111222
-
+			cpy $1c01				;11111222 compare type
 			bne .next_sector			;start over with a new header again as check against first bits of headertype already fails
 			sta <.gcr_h_or_s			;setup return jump either $0c or $4c
 			adc #$13				;carry is set due to preceeding cpy, adc does clv for free, set bit 5, clear bits 2 and 3 -> $0c/$4c will be $20 or $60
