@@ -88,7 +88,7 @@
 .to_track		= .zp_start + $00			;DT
 .blocks_hi 		= .zp_start + $01
 .blocks_lo 		= .zp_start + $02
-;free			= .zp_start + $03
+;.free			= .zp_start + $03
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
@@ -115,12 +115,11 @@
 .is_cached_sector	= .zp_start + $6a
 .is_loaded_sector	= .zp_start + $6c
 .first_block_size	= .zp_start + $6e
-.val58			= .zp_start + $70
-.filename		= .zp_start + $71
-.last_block_num		= .zp_start + $72
-.last_block_size	= .zp_start + $74
+.filename		= .zp_start + $70
+.last_block_num		= .zp_start + $71
+.last_block_size	= .zp_start + $72
+.first_block_pos	= .zp_start + $74
 .val0c4c		= .zp_start + $75			;and $78!
-.first_block_pos	= .zp_start + $76
 .block_num		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
 .last_track_of_file	= .zp_start + $7c
@@ -161,7 +160,7 @@ ___			= $ff
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
                         !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, ___, ___, $ff, $0a, ___, $0b, ___, $03	;50
                         !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
-                        !byte $58, ___, ___, $06, ___, $0c, ___, $04, $4c, ___, ___, $02, ___, $08		;70
+                        !byte ___, ___, ___, $06, ___, $0c, ___, $04, $4c, ___, ___, $02, ___, $08		;70
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
 
@@ -242,7 +241,7 @@ ___			= $ff
 			eor $0103				;do remaining checksum, yet same for header or sector, skip $0f in $0101
 			eor <.chksum + 1
 .gcr_h_or_s		jmp .back_read_sector			;will either happen or disabled for fall through
-			bne .read_header			;header checksum check failed? reread
+			bne +					;header checksum check failed? reread
 
 			ldy #$01
 -
@@ -255,9 +254,9 @@ ___			= $ff
 			bpl -					;first byte being processed?
 			ldy #$55				;type (sector) (SP = $ff already)
 			eor <.track				;second byte is track
-			bne .read_header			;track check failed
+			bne +					;track check failed
 			jmp .read_sector			;all sane, now read payload of sector
-.read_header
++
 			jmp .next_sector			;type (header)
 
 .slow_tab
@@ -1122,11 +1121,7 @@ IZX			= $a1
 			;----------------------------------------------------------------------------------------------------
 .next_sector
 			ldy #$52				;type (header)
-			;jmp .read_header
 .read_sector
-			ldx <.val07ff - $52,y
-			txs					;bytes to read
-			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
 -
 			bit $1c00				;wait for start of sync
 			bpl -
@@ -1134,50 +1129,27 @@ IZX			= $a1
 			bit $1c00				;wait for end of sync
 			bmi -
 
-			bit $1c01				;sync mark -> $ff
-			clv
+			adc $1c01				;sync mark -> $ff
+			lax <.val0c4c - $52,y			;setup A ($0c/$4c)
 
 			bvc *
-
-			clv
 			cpy $1c01				;11111222
-			;XXX TODO sbc $1c01
-;			sta <.gcr_h_or_s			;setup return jump either $0c or $4c
-;			ldx #$f8
-;			lda (.v1c01 - $f8,x)
-;			sbx #$50
-;			bne .next_sector
-;			ldx #$07
-;			sax .twos_ + 1
-;			bvc *
-;			lda (.v1c01 - $07,x)
-;			ldx #$3e
-;			sax <.threes + 1
-;			asr #$c1
-;			tay
-;.twos_			lda .tab02200222_lo,y
-;			bne .next_sector
-;			sta <.chksum
-;			lda #$7f
-			;
-			;
-			;lsr
-			;ror
-			;lsr
-			;eor #$06
 
 			bne .next_sector			;start over with a new header again as check against first bits of headertype already fails
-			bvc *
-			ldx #$3e				;set x to $3e
 			sta <.gcr_h_or_s			;setup return jump either $0c or $4c
-			asl
+			adc #$13				;carry is set due to preceeding cpy, adc does clv for free, set bit 5, clear bits 2 and 3 -> $0c/$4c will be $20 or $60
+
+			bvc *
+			asl					;shift to left -> $40/$c0
+			ldx <.val3e				;set x to $3e
 			eor (.v1c01 - $3e,x)			;read 22333334 - 2 most significant bits should be zero now, waste 2 cycles
-			eor <.val58 - $3e,x			;eor #$58 to compensate for $0c component of gcr_h_or_s * 2, set bit 6
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_sector			;start over with a new header again as the check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x		;waste a cycle
 			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
+			ldx <.val07ff - $52,y
+			txs					;bytes to read
 			jmp .gcr_entry				;35 cycles until entry
 
 .directory
