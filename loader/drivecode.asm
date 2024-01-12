@@ -43,7 +43,7 @@
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 ;.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
-;.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
 
@@ -96,6 +96,8 @@
 ;free			= .zp_start + $13
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
 .en_dis_seek		= .zp_start + $19
+.next_sector__		= .zp_start + $20
+.preamble_data_		= .zp_start + $22
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
 ;free	 		= .zp_start + $28
 ;free	 		= .zp_start + $29
@@ -130,6 +132,12 @@ ___			= $ff
 .S0			= $00 xor .EOR_VAL			;ser2bin value 0/9
 .S1			= $09 xor .EOR_VAL			;ser2bin value 1/8
 
+.N1			= <.next_sector
+.N2			= >.next_sector
+
+.P1			= <(.preamble_data - 1)
+.P2			= >(.preamble_data - 1)
+
 .tab00005555_hi		= .zp_start + $00
 .tab00333330_hi		= .zp_start + $00
 .tab05666660_lo		= .zp_start + $01
@@ -155,7 +163,7 @@ ___			= $ff
 			;     0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f
                         !byte ___, ___, ___, ___, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
                         !byte .DS, ___, $f0, $1e, $70, $1f, $60, $17, ___, $80, $b0, $1a, $30, $1b, $20, $13	;10
-                        !byte ___, ___, ___, ___, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
+                        !byte .N1, .N2, .P1, .P2, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
                         !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, ___, ___, $ff, $0a, ___, $0b, ___, $03	;50
@@ -182,6 +190,15 @@ ___			= $ff
 ;v = v-flag clear
 ;g = gcr slowdown
 
+			;XXX TODO swap low/hinibbles on disk? then 566666 bit from 5 can be added when in carry?
+;.gcr_slow1		lda $1c01				;56666677		fourth read
+;			sax <.sevens + 1			;----6677
+;			asr #$fc				;-566666-
+;			cmp #$40
+;			tax
+;
+;			lda <.tab00005555_lo
+;			adc <.tab00666660_hi,x
 .read_loop
 			eor $0101,x
 			eor $0103,x
@@ -194,8 +211,8 @@ ___			= $ff
 
 			arr #$f0
 			tay					;44444---
-.threes			lda <.tab00333330_hi			;ZP!
-			eor .tab44444000_lo,y
+.threes			lda <.tab00333330_hi			;offset 0 - ZP!
+			eor .tab44444000_lo,y			;offset 4
 			pha					;$0103
 
 .gcr_slow1		lda $1c01				;56666677		fourth read
@@ -203,8 +220,8 @@ ___			= $ff
 			asr #$fc				;-566666-
 			tax
 
-.fives			lda <.tab00005555_hi			;ZP!
-			adc <.tab05666660_lo,x			;ZP but index
+.fives			lda <.tab00005555_hi			;offset 0 - ZP!
+			adc <.tab05666660_lo,x			;offset 1 - ZP but index
 			pha					;$0102
 .chksum			eor #$00				;103,101,100
 .chksum2		eor #$00
@@ -214,9 +231,9 @@ ___			= $ff
 			asr #$40
 			tay
 
-			lda .tab7d788888_lo,x
+			lda .tab7d788888_lo,x			;offset 0
 			ldx #$07
-.sevens			adc .tab0070dd77_hi,y			;clears v-flag, decodes the remaining bits of quintuple 7, no need to set x to 3, f is enough
+.sevens			adc .tab0070dd77_hi,y			;offset $20 - clears v-flag, decodes the remaining bits of quintuple 7
 			pha					;$0101
 			lda $1c01				;11111222	first read
 			sax <.twos + 1
@@ -231,8 +248,14 @@ ___			= $ff
 			sax <.threes + 1
 			asr #$c1
 			tax
-			lda .tab11111000_hi,y
-.twos			eor .tab02200222_lo,x
+;			lda .tab11111002_hi,y			;offset 0
+;.twos			eor .tab02200220_lo,x			;offset 0
+;			lda .tab01111000_hi,y			;offset 0
+;.twos			eor .tab12200222_lo,x			;offset 0
+;			lda .tab11110000_hi,y			;offset 0
+;.twos			eor .tab02201222_lo,x			;offset 0
+			lda .tab11111000_hi,y			;offset 0
+.twos			eor .tab02200222_lo,x			;offset 0
 			tsx
 			pha					;$0100
 			bne .read_loop
@@ -471,6 +494,7 @@ ___			= $ff
 
 +
 			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY	;ack/status to set load addr, signal block ready
+.start_send
 			ldy #$06 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 
 			;----------------------------------------------------------------------------------------------------
@@ -479,7 +503,7 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			bne .start_send
+			bne .start_send_
 
 IZX			= $a1
 
@@ -494,23 +518,24 @@ IZX			= $a1
 			;XXX TODO jmp ($c1c1) would also work, jumps to $0099 and wastes 2 extra cycles, nop could be omitted, but strongly depends on ROM :-( could place that in ZP, still addrs free
 -
 			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
-			lda .preamble_data - 1,y
+			lda (.preamble_data_),y
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
-			sta .preamble_data - 1,y
-			bcs +
+			sta (.preamble_data_),y
+.start_send_
+			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
+			bne +
 
 			;would also suit at $91, $95, $99
 .bitrate
-                        !byte                $60, $40, $20, $00, $80, ___, $20, $00, $80, ___, $20, $00, $80
+.next_sector_ = * + 9	;jmp ($0020) -> jmp next_sector
+                        !byte                $60, $40, $20, $00, $80, ___, $20, $00, $80, $6c, $20, $00, $80
 			                     ;|bitrate|bitrate + table combined ->
 			;----------------------------------------------------------------------------------------------------
 			;
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
-
-.start_send
 ;!if .POSTPONED_XFER = 1 {
 ;			;ldy <.blocks_on_list
 ;			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
@@ -519,7 +544,6 @@ IZX			= $a1
 ;			bpl .postpone
 ;}
 +
-			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
 			dey
 			bne -
 
@@ -537,7 +561,7 @@ IZX			= $a1
 			lda <.preamble_data,y
 								;just pull from stack instead of lda $0100,y, sadly no tsx can be done, due to x being destroyed
 
-								;our possibiloities to send bits:
+								;our possibilities to send bits:
 								;...-0.1.
 								;...10.-.
 
@@ -603,7 +627,7 @@ IZX			= $a1
 ;!if .POSTPONED_XFER = 1 {
 ;			bit <.en_dis_seek
 ;			bmi +
-;			inx					;we return with X = $ff from send -> X = 0
+;			ldx #$00				;we return with X = $ff from send -> X = 0
 ;			inc <.en_dis_seek			;disable_jmp
 ;			jmp .send_back
 ;+
@@ -611,19 +635,15 @@ IZX			= $a1
 ;} else {
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
 ;}
-			bmi .track_finished
-			;XXX TODO, exists twice, and so expensive, as a branch would suffice :-(
-			jmp .next_sector			;nope, continue loading
+			bpl .next_sector_
 ;!if .POSTPONED_XFER = 1 {
 ;.postpone
 ;			dec <.en_dis_seek			;enable jmp, skip send of data for now
-;			jmp .en_dis_seek_
+;			jmp .next_track
 ;}
-
-.track_finished
 			;XXX TODO make this check easier? only done here?
 			bit <.last_track_of_file		;EOF
-			bpl .en_dis_seek_
+			bpl .next_track
 
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
 			top
@@ -739,9 +759,15 @@ IZX			= $a1
 			sty <.is_cached_sector			;invalidate cached sector (must be != DIR_SECT)
 			beq .turn_disc_entry			;BRA a = sector, y = 0 = index
 
-.en_dis_seek_							;XXX TODO if entered here, Y != $ff :-(
-			;set stepping speed to $0c, if we loop once, set it to $18
-			;XXX TODO can we always do first halfstep with $0c as timerval? and then switch to $18?
+			;----------------------------------------------------------------------------------------------------
+			;
+			; INCREMENT TRACK
+			;
+			;----------------------------------------------------------------------------------------------------
+
+
+			;XXX TODO two ways to increment track, can we make this code common?
+.next_track
 			lda #.DIR_TRACK
 ;!if .POSTPONED_XFER = 1 {
 ;			sec					;set by send_block and also set if beq
@@ -801,7 +827,7 @@ IZX			= $a1
 			adc .dir_file_size_hi,x
 
 			inx
-.next_track
+.inc_track
 			sta <.blocks_hi
 			jsr .set_max_sectors			;setup max_sectors, expects track in Y, returns with carry set
 			lda <.blocks_hi
@@ -813,7 +839,7 @@ IZX			= $a1
 			iny
 			cpy #.DIR_TRACK
 			beq -
-			bne .next_track
+			bne .inc_track
 .found_file
 			;store track
 			sty <.to_track
@@ -1089,9 +1115,12 @@ IZX			= $a1
 			tax					;partial checksum in x, need to waste 2 cycles anyway
 			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero
 !if .SANCHECK_TRAILING_ZERO = 1 {
+			;lda #$00
+			;rra $1c01				;works as well, but read would be delayed and would 1541U1 like this?
 			ror					;xxxxx010 1
-			tay
 			bcc .next_sector			;check bit 0 of CONST1
+			;adc #0					;would also be okay
+			tay
 			;rol					;would check against constant explicitely
 			;and #$0f
 			;eor #.CHECKSUM_CONST1

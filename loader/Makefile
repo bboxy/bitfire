@@ -11,7 +11,11 @@ else
 VR:=@
 endif
 
-all: bitfire gcr_tables
+all: bitfire gcr_tables frag
+
+frag: frag.c
+	@echo "Building frag tool..."
+	$(VR)$(CC) $< -o $@ $(loader_CFLAGS)
 
 gcr_tables: gcr_tables.c
 	@echo "Building gcr table tool..."
@@ -47,4 +51,4 @@ installer: resident drivecode.asm installer.asm constants.inc ../config.inc dete
 bitfire: installer
 
 clean:
-	$(VR)-rm installer loader_acme.inc loader_c6510.inc loader_kickass.inc resident gcr_tables
+	$(VR)-rm installer loader_acme.inc loader_c6510.inc loader_kickass.inc resident gcr_tables frag
