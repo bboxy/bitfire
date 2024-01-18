@@ -124,6 +124,7 @@
 .block_num		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
 .last_track_of_file	= .zp_start + $7c
+.val01			= .zp_start + $6f
 
 .DT			= 18					;dir_track
 .DS			= 18					;dir_sector
@@ -232,6 +233,10 @@ ___			= $ff
 			tay
 
 			lda .tab7d788888_lo,x			;offset 0
+;			ldx #$20				;tab7d788888 contains $20 set if bit 6 is set
+;			sbx #$00				;isolate bit 5
+;								;upcoming tab must compensate for x = 20 and subtract 20 then
+;.sevens		adc .tab0070dd77_hi,x			;offset $20 - clears v-flag, decodes the remaining bits of quintuple 7
 			ldx #$07
 .sevens			adc .tab0070dd77_hi,y			;offset $20 - clears v-flag, decodes the remaining bits of quintuple 7
 			pha					;$0101
@@ -276,13 +281,14 @@ ___			= $ff
 ;			sax bits00000111
 
 .gcr_end
-			;Z-Flag = 1 on success, 0 on failure (wrong type)
+			ldy <.val01
 			eor $0103				;do remaining checksum, yet same for header or sector, skip $0f in $0101
 			eor <.chksum + 1
+			tax					;partial checksum in x, need to waste 2 cycles anyway
+			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero
 .gcr_h_or_s		jmp .back_read_sector			;will either happen or disabled for fall through
+			txa					;restore checksum
 			bne +					;header checksum check failed? reread
-
-			ldy #$01
 -
 			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
 			lda $0105,y				;read in sector and track from header
@@ -370,6 +376,23 @@ ___			= $ff
 ;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
 ;                        !byte $30, ___, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, ___
 
+;tabAAAAA000
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $f0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $70, ___, ___, ___, ___, ___, ___, ___, $60, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $b0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $30, ___, ___, ___, ___, ___, ___, ___, $20, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $50, ___, ___, ___, ___, ___, ___, ___, $40, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $10, ___, ___, ___, ___, ___, ___, ___, $00, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $e0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $d0, ___, ___, ___, ___, ___, ___, ___, $c0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $90, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 			;----------------------------------------------------------------------------------------------------
 			;
 			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
@@ -1125,9 +1148,6 @@ IZX			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 .back_read_sector
-			;read happens earlier than needed, 2 cycles over all! as branch is not taken and eor is only 3 cycles
-			tax					;partial checksum in x, need to waste 2 cycles anyway
-			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero
 !if .SANCHECK_TRAILING_ZERO = 1 {
 			;lda #$00
 			;rra $1c01				;works as well, but read would be delayed and would 1541U1 like this?
@@ -1135,9 +1155,6 @@ IZX			= $a1
 			bcc .next_header			;check bit 0 of CONST1
 			;adc #0					;would also be okay
 			tay
-			;rol					;would check against constant explicitely
-			;and #$0f
-			;eor #.CHECKSUM_CONST1
 			;bne .next_header
 } else {
 			arr #$f0
@@ -1160,11 +1177,6 @@ IZX			= $a1
 ;} else {
 			beq .new_sector
 ;}
-			;----------------------------------------------------------------------------------------------------
-			;
-			; HEADER DONE, NOW READ SECTOR DATA
-			;
-			;----------------------------------------------------------------------------------------------------
 .back_read_header
 			beq .read_sector			;always falls through if we come from sector read, else it decides if we continue with sector payload are start with a new header
 .next_header
@@ -1177,7 +1189,7 @@ IZX			= $a1
 			bit $1c00				;wait for end of sync
 			bmi -
 
-			adc $1c01				;read mark and throw away
+			adc $1c01				;read mark and throw away, clear V
 			lax <.val0c4c - $52,y			;setup A ($0c/$4c) (lax allows for 8 bit address)
 
 			bvc *
