@@ -42,11 +42,7 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-!if CONFIG_MOTOR_ALWAYS_ON = 0 {
 .BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
-} else {
-.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
-}
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
@@ -107,7 +103,7 @@
 .sector			= .zp_start + $59			;DS
 .valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
-!if .BOGUS_READS > 0 {
+!if .BOGUS_READS != 0 {
 .bogus_reads		= .zp_start + $66
 }
 .block_size		= .zp_start + $68
@@ -802,7 +798,7 @@ IZX			= $a1
 
 .find_file_in_dir
 			ldx #$03
-!if .BOGUS_READS > 0 {
+!if .BOGUS_READS != 0 {
 			stx <.bogus_reads
 }
 -
@@ -1126,7 +1122,7 @@ IZX			= $a1
 			ldx <.threes + 1
 			eor <.tab00333330_hi,x			;sector checksum
 			eor $0101				;not checksummed in case of header
-!if .BOGUS_READS > 0 {
+!if .BOGUS_READS != 0 {
 			bne .next_header
 			lda <.bogus_reads
 			beq .new_sector
