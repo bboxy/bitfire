@@ -163,6 +163,60 @@ const unsigned char results11111lo[16] = {
 	0xf
 };
 
+void print_table(int* table, int from, int to) {
+	int i;
+	if ((from & 0xf) != 0) {
+		printf("\t\t\t!byte ");
+		for (i = from & 0xf0; i < from; i++) {
+			printf ("     ");
+		}
+	}
+	for (i = from; i <= to; i++) {
+		if ((i & 0xf) == 0) {
+			printf("\t\t\t!byte ");
+		}
+		if (table[i] >= 0) printf("$%02x", table[i]);
+		else printf ("___");
+		if ((i != to) && ((i & 0xf) != 0xf)) printf(", ");
+		if ((i & 0xf) == 0xf || i == to) printf("      ;%04x\n", (i) & 0xfff0);
+	}
+}
+
+void comb_table() {
+    int table[1024] = { -1 };
+    int quint1;
+    int quint2;
+    int gcr1;
+    int gcr2;
+    int mask = 0x1a;
+
+    int i;
+    int pos;
+    int byte;
+
+    for (i = 0; i < 1024; i++) {
+        table[i] = - 1;
+    }
+
+    for (quint1 = 0; quint1 < 32; quint1++) {
+        for (quint2 = 0; quint2 < 32; quint2++) {
+            for (gcr1 = 0; gcr1 < 16; gcr1++) {
+                if (quint1 == gcr[gcr1]) break;
+            }
+            for (gcr2 = 0; gcr2 < 16; gcr2++) {
+                if (quint2 == gcr[gcr2]) break;
+            }
+            if (gcr1 < 16 && gcr2 < 16) {
+                pos = (((quint1) << 5) + ((quint2 & mask) << 0));
+                byte = ((gcr1) << 4) | (gcr2 & mask);
+                if ((table[pos] != byte) && (table[pos] >= 0)) printf("fuck $%02x $%02x\n", table[pos], byte);
+                table[pos] = byte;
+            }
+        }
+    }
+    print_table(table, 0, 1023);
+}
+
 void create_table(const unsigned char* gcr, const unsigned char* res_hi, const unsigned char* res_lo, int* table, char* order, int eor, int mask) {
 	int i, j, c;
 	unsigned char pos;
@@ -238,25 +292,6 @@ int merge_table(int* table1, int* table2, int offset, int silent, int merge_lo, 
 	return 0;
 }
 
-void print_table(int* table, int from, int to) {
-	int i;
-	if ((from & 0xf) != 0) {
-		printf("\t\t\t!byte ");
-		for (i = from & 0xf0; i < from; i++) {
-			printf ("     ");
-		}
-	}
-	for (i = from; i <= to; i++) {
-		if ((i & 0xf) == 0) {
-			printf("\t\t\t!byte ");
-		}
-		if (table[i] >= 0) printf("$%02x", table[i]);
-		else printf ("___");
-		if ((i != to) && ((i & 0xf) != 0xf)) printf(", ");
-		if ((i & 0xf) == 0xf || i == to) printf("\n");
-	}
-}
-
 int main () {
 	int tabAAAAA000[256];
 	int tab0bb00bbb[256];
@@ -275,6 +310,9 @@ int main () {
 	int col;
 
 	int i;
+
+        comb_table();
+        return 0;
 
 	for (i = 0; i < 256; i++) {
 		tabAAAAA000[i] = -1;

@@ -42,22 +42,21 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-;.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
+!if CONFIG_MOTOR_ALWAYS_ON = 0 {
+.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
+} else {
+.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
+}
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
-.DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
+.DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
 
 ;constants
 .STEPPING_SPEED		= $18
-.STEPPING_SETTLE	= $08
-.CHECKSUM_CONST1	= $05					;%00000101 -> 4 times 01010
-.CHECKSUM_CONST2	= $29					;%00101001
-.CHECKSUM_CONST3	= $4a					;%01001010
 .EOR_VAL		= $7f
 .DIR_SECT		= 18
 .DIR_TRACK		= 18
 .BUSY			= $02
-.BLOCK_READY		= $08
 .LED_OFF		= $f7
 .LED_ON			= $08
 .MOTOR_OFF		= $fb
@@ -108,9 +107,9 @@
 .sector			= .zp_start + $59			;DS
 .valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
-;!if .BOGUS_READS > 0 {
-;.bogus_reads		= .zp_start + $66
-;}
+!if .BOGUS_READS > 0 {
+.bogus_reads		= .zp_start + $66
+}
 .block_size		= .zp_start + $68
 ;free			= .zp_start + $69
 .is_cached_sector	= .zp_start + $6a
@@ -184,21 +183,14 @@ ___			= $ff
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
 ;              2                       ccccccccccc   3                   ggg   4ggggg                   ccccccc   5             v      1         bbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;              2                       ccccccccccc   3                      4                   ccccccc   5             v      1         bbbbb
+;              2                       ccccccccccc   3                      4                 ccccccc   5             v      1           bbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
 ;g = gcr slowdown
 
-			;XXX TODO swap low/hinibbles on disk? then 566666 bit from 5 can be added when in carry?
-;.gcr_slow1		lda $1c01				;56666677		fourth read
-;			sax <.sevens + 1			;----6677
-;			asr #$fc				;-566666-
-;			cmp #$40
-;			tax
-;
-;			lda <.tab00005555_lo
-;			adc <.tab00666660_hi,x
+;XXX TODO 		try out tabs that have both, two quintuples as index that add each other? one in lowbyte and one in hibyte? -> bigger than $0100 but maybe cool?
+			;lda .tab00333330_hi_tab44444000_lo,y -> y = fours, lowbyte = threes -> adition of both
 .read_loop
 			eor $0101,x
 			eor $0103,x
@@ -212,7 +204,7 @@ ___			= $ff
 			arr #$f0
 			tay					;44444---
 .threes			lda <.tab00333330_hi			;offset 0 - ZP!
-			eor .tab44444000_lo,y			;offset 4
+.fours			eor .tab44444000_lo,y			;offset 4
 			pha					;$0103
 
 .gcr_slow1		lda $1c01				;56666677		fourth read
@@ -229,14 +221,9 @@ ___			= $ff
 
 			lax $1c01				;77788888	fifth read
 			asr #$40
-;			asr #$a0				;would directly decode bit 0 and 2 :-(
 			tay
 
 			lda .tab7d788888_lo,x			;offset 0
-;			ldx #$20				;tab7d788888 contains $20 set if bit 6 is set
-;			sbx #$00				;isolate bit 5
-;								;upcoming tab must compensate for x = 20 and subtract 20 then
-;.sevens		adc .tab0070dd77_hi,x			;offset $20 - clears v-flag, decodes the remaining bits of quintuple 7
 			ldx #$07
 .sevens			adc .tab0070dd77_hi,y			;offset $20 - clears v-flag, decodes the remaining bits of quintuple 7
 			pha					;$0101
@@ -253,39 +240,18 @@ ___			= $ff
 			sax <.threes + 1
 			asr #$c1
 			tax
-;			lda .tab11111002_hi,y			;offset 0
-;.twos			eor .tab02200220_lo,x			;offset 0
-;			lda .tab01111000_hi,y			;offset 0
-;.twos			eor .tab12200222_lo,x			;offset 0
-;			lda .tab11110000_hi,y			;offset 0
-;.twos			eor .tab02201222_lo,x			;offset 0
 			lda .tab11111000_hi,y			;offset 0
 .twos			eor .tab02200222_lo,x			;offset 0
 			tsx
 			pha					;$0100
 			bne .read_loop
 
-
-			;56666677
-			;-> shift
-			;05666667		7
-			;77788888
-			;-> shift
-			;77778888		8
-			;lda lookup bit 7 of 7
-			;adc tab77778888	-> adds with carry, so 5 bits of 8 are decoded
-
-;XXX TODO		this reads contents of a reg and we can mask out bits without destroying them in A (but invert)
-;			lax reg
-;			eor #%11111000
-;			sax bits00000111
-
 .gcr_end
-			ldy <.val01
+			ldy <.val01				;waste one cycle
 			eor $0103				;do remaining checksum, yet same for header or sector, skip $0f in $0101
 			eor <.chksum + 1
 			tax					;partial checksum in x, need to waste 2 cycles anyway
-			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero
+			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 .gcr_h_or_s		jmp .back_read_sector			;will either happen or disabled for fall through
 			txa					;restore checksum
 			bne +					;header checksum check failed? reread
@@ -300,7 +266,7 @@ ___			= $ff
 			ldy #$55				;type (sector) (SP = $ff already)
 			eor <.track				;second byte is track
 +
-			jmp .back_read_header
+			jmp .back_read_header			;case handling will happen there reread/continue depending on Z-flag
 
 .slow_tab
 			!byte (<.gcr_slow1_00) << 1
@@ -354,8 +320,6 @@ ___			= $ff
 .barr_zero
 			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
-			;sbc #$00				;subtract one in case of overflow
-			;clc
 			lda .dir_load_addr_lo,y			;fetch load address lowbyte
 			sec
 			bcs .preamble__
@@ -376,23 +340,6 @@ ___			= $ff
 ;                        !byte ___, ___, $07, $03, $05, $01, $04, ___, $b0, $4e, $4f, $47, $0a, $4a, $4b, $43
 ;                        !byte $30, ___, $4d, $45, $0b, $40, $49, $41, $20, $46, $4c, $44, $03, $42, $48, ___
 
-;tabAAAAA000
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $f0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $70, ___, ___, ___, ___, ___, ___, ___, $60, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $b0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $30, ___, ___, ___, ___, ___, ___, ___, $20, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $50, ___, ___, ___, ___, ___, ___, ___, $40, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $10, ___, ___, ___, ___, ___, ___, ___, $00, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $e0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $d0, ___, ___, ___, ___, ___, ___, ___, $c0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, ___, ___, ___, ___, ___, ___, ___
-;                        !byte $90, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 			;----------------------------------------------------------------------------------------------------
 			;
 			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
@@ -459,6 +406,23 @@ ___			= $ff
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, $0e, $0f, $07, $02, $0a, $0b, $03		;9 bytes
 ;                        !byte $90, ___, $0d, $05, $08, $00, $09, $01, ___, $06, $0c, $04, ___, $02, $08, ___
 
+;tabAAAAA000
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $f0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $70, ___, ___, ___, ___, ___, ___, ___, $60, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $b0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $30, ___, ___, ___, ___, ___, ___, ___, $20, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $50, ___, ___, ___, ___, ___, ___, ___, $40, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $80, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $10, ___, ___, ___, ___, ___, ___, ___, $00, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $e0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $d0, ___, ___, ___, ___, ___, ___, ___, $c0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, $a0, ___, ___, ___, ___, ___, ___, ___
+;                        !byte $90, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 ;tab000bbbbb
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 ;                        !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
@@ -760,8 +724,6 @@ IZX			= $a1
 			beq .reset				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
 			eor #$ff				;invert bits, saves a byte in resident code, and makes reset detection easier
 .drivecode_entry
-			;top
-			;lda <.filenum
 			cmp #BITFIRE_LOAD_NEXT			;carry clear = load normal file, carry set = request disk
 			beq .clc				;clear carry and skip sta <.filenum by that, filenum = $18 == clc
 .clc = * + 1
@@ -827,10 +789,6 @@ IZX			= $a1
 			txa
 			dey					;select second dir sector
 +
-;!if .BOGUS_READS > 0 {
-;			ldx #.BOGUS_READS
-;			stx .bogus_reads
-;}
 			cpy <.dir_sector			;is this dir sector loaded?
 			bne .load_dir_sect
 
@@ -844,6 +802,9 @@ IZX			= $a1
 
 .find_file_in_dir
 			ldx #$03
+!if .BOGUS_READS > 0 {
+			stx <.bogus_reads
+}
 -
 			ldy .directory - 1,x			;copy over dir info
 			sty <.dirinfo - 1,x			;to track is in Y after copy
@@ -1148,37 +1109,34 @@ IZX			= $a1
 			;
 			;----------------------------------------------------------------------------------------------------
 .back_read_sector
+			;XXX TODO check if we accidently fall through here and start with another sector read without checking header?!?!
 !if .SANCHECK_TRAILING_ZERO = 1 {
-			;lda #$00
-			;rra $1c01				;works as well, but read would be delayed and would 1541U1 like this?
 			ror					;xxxxx010 1
-			bcc .next_header			;check bit 0 of CONST1
-			;adc #0					;would also be okay
+			sbc #2					;clear out constant (incl. carry) if anything goes wrong, offset into table will be off and checksum will fail?
+			;bcc .next_header			;check bit 0 of CONST1
 			tay
-			;bne .next_header
+			and #$07
+			bne .next_header
 } else {
 			arr #$f0
 			tay
 }
 			txa
+			eor (.fours + 1),y
 			ldx <.threes + 1
-!if .SANCHECK_TRAILING_ZERO = 1 {
-			eor .tab44444000_lo - 2,y		;compensate for CONST1 where bit 1 is still set, if bits for CONST1 are not 010, this read will be off and checksum will fail, hopefully @_@
-} else {
-			eor .tab44444000_lo,y
-}
 			eor <.tab00333330_hi,x			;sector checksum
 			eor $0101				;not checksummed in case of header
-;!if .BOGUS_READS > 0 {
-;			bne .next_header
-;			lda .bogus_reads
-;			beq .new_sector
-;			dec .bogus_reads
-;} else {
+!if .BOGUS_READS > 0 {
+			bne .next_header
+			lda <.bogus_reads
 			beq .new_sector
-;}
+			dec <.bogus_reads
+			top
+} else {
+			beq .new_sector
+}
 .back_read_header
-			beq .read_sector			;always falls through if we come from sector read, else it decides if we continue with sector payload are start with a new header
+			beq .read_sector			;always falls through if we come from sector read, else it decides if we continue with sector payload or start with a new header
 .next_header
 			ldy #$52				;type (header)
 .read_sector
