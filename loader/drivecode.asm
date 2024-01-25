@@ -41,6 +41,7 @@
 ;XXX TODO store track as track * 2, so we can detect with a simple lsr if we are on a half track? Do check before sending? if so do halfstep? make all this postponed xfer simpler?
 
 ;config params
+.SANCHECK_CYCLES	= 1   ;check if read of 256 bytes of sector is within range when counting cycles (two low speed can be detected and sectors can be discarded)
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
@@ -86,8 +87,6 @@
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
-;free			= .zp_start + $12
-;free			= .zp_start + $13
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
 .en_dis_seek		= .zp_start + $19
 .next_header__		= .zp_start + $20
@@ -99,7 +98,7 @@
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
 .val07ff		= .zp_start + $57			;DT ;current track
-;.to_track		= .zp_start + $58			;DT
+.density		= .zp_start + $58
 .sector			= .zp_start + $59			;DS
 .valff			= .zp_start + $5a			;DT
 .preamble_data		= .zp_start + $60
@@ -187,6 +186,7 @@ ___			= $ff
 
 ;XXX TODO 		try out tabs that have both, two quintuples as index that add each other? one in lowbyte and one in hibyte? -> bigger than $0100 but maybe cool?
 			;lda .tab00333330_hi_tab44444000_lo,y -> y = fours, lowbyte = threes -> adition of both
+;XXX TODO setup timer prior to read sect, then after back check timer -> way more than table? discaard?
 .read_loop
 			eor $0101,x
 			eor $0103,x
@@ -263,7 +263,6 @@ ___			= $ff
 			eor <.track				;second byte is track
 +
 			jmp .back_read_header			;case handling will happen there reread/continue depending on Z-flag
-
 .slow_tab
 			!byte (<.gcr_slow1_00) << 1
 			!byte (<.gcr_slow1_20) << 1
@@ -941,6 +940,9 @@ IZX			= $a1
 			rts
 .set_bitrate
 			tax
+!if .SANCHECK_CYCLES = 1 {
+			stx <.density
+}
 			lda $1c00
 			ora #$60
 			eor .bitrate,x
@@ -1122,6 +1124,10 @@ IZX			= $a1
 			ldx <.threes + 1
 			eor <.tab00333330_hi,x			;sector checksum
 			eor $0101				;not checksummed in case of header
+!if .SANCHECK_CYCLES = 1 {
+			bne .next_header
+			lda $1c0d
+}
 !if .BOGUS_READS != 0 {
 			bne .next_header
 			lda <.bogus_reads
@@ -1129,13 +1135,23 @@ IZX			= $a1
 			dec <.bogus_reads
 			top
 } else {
+	!if .SANCHECK_CYCLES = 1 {
+			bpl .new_sector
+	} else {
 			beq .new_sector
+	}
 }
 .back_read_header
 			beq .read_sector			;always falls through if we come from sector read, else it decides if we continue with sector payload or start with a new header
 .next_header
 			ldy #$52				;type (header)
 .read_sector
+!if .SANCHECK_CYCLES = 1 {
+			ldx <.density
+			lda .timer_lo,y
+			sta $1c06
+			lda .timer_hi,x
+}
 -
 			bit $1c00				;wait for start of sync
 			bpl -
@@ -1143,6 +1159,9 @@ IZX			= $a1
 			bit $1c00				;wait for end of sync
 			bmi -
 
+!if .SANCHECK_CYCLES = 1 {
+			sta $1c05
+}
 			adc $1c01				;read mark and throw away, clear V
 			lax <.val0c4c - $52,y			;setup A ($0c/$4c) (lax allows for 8 bit address)
 
@@ -1154,17 +1173,26 @@ IZX			= $a1
 
 			bvc *
 			asl					;shift to left -> $40/$c0
-			ldx <.val3e				;set x to $3e
+			ldx <.val3e				;set x to $3e and waste 1 cycle
 			eor (.v1c01 - $3e,x)			;read 22333334 - 2 most significant bits should be zero now, waste 2 cycles
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_header			;start over with a new header again as the check for header type failed in all bits
-			sta <.chksum + 1 - $3e,x		;waste a cycle
-			lda <.ser2bin - $3e,x			;lda #.EOR_VAL and waste 2 cycles
+			sta <.chksum + 1 - $3e,x		;init checksum and waste 1 cycle
+			lda <.ser2bin - $3e,x			;waste 2 cycles with loading initial value
 			ldx <.val07ff - $52,y
 			txs					;bytes to read
 			jmp .gcr_entry				;35 cycles until entry
 
+.time0			= $2a00
+.time1			= $27d0
+.time2			= $2500
+.time3			= $2250
+
+.timer_lo
+			!byte <.time0, <.time1, <.time2, <.time3
+.timer_hi
+			!byte >.time0, >.time1, >.time2, >.time3
 .directory
 
 !ifdef .second_pass {
@@ -1247,14 +1275,14 @@ IZX			= $a1
 			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
 			sta $1c0b
 
-			sax $1c08				;clear counters
-			sax $1c04
+			;sax $1c08				;clear counters
+			;sax $1c04
 
-			dex					;disable all interrupts
-			stx $180e
-			stx $1c0e
-			ldx $180d				;clear all IRQ flags to ack possibly pending IRQs
-			ldx $1c0d
+			;dex					;disable all interrupts
+			;stx $180e
+			;stx $1c0e
+			;ldx $180d				;clear all IRQ flags to ack possibly pending IRQs
+			;ldx $1c0d
 
 			ldx #$c0				;enable timer 1 flag
 			stx $1c0e
