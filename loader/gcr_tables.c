@@ -88,22 +88,22 @@ const unsigned char results00101hi_orig[16] = {
 
 //values are eored with 0x10, as both partitions underly the eor #$7f and on both partitions bit 0 can be set in resulting value, so we need to compensate for that
 const unsigned char results11110hi_orig[16] = {
-	0x10,
-	0x10,
-	0x30,
-	0x30,
-	0x50,
-	0x50,
-	0x70,
-	0x70,
-	0x80,
+	0x00,
+	0x00,
+	0x20,
+	0x20,
+	0x40,
+	0x40,
+	0x60,
+	0x60,
 	0x90,
-	0xb0,
-	0xb0,
-	0xc0,
+	0x80,
+	0xa0,
+	0xa0,
 	0xd0,
-	0xf0,
-	0xf0
+	0xc0,
+	0xe0,
+	0xe0
 };
 
 const unsigned char results00001hi_orig[16] = {
@@ -311,8 +311,8 @@ int main () {
 
 	int i;
 
-        comb_table();
-        return 0;
+        //comb_table();
+        //return 0;
 
 	for (i = 0; i < 256; i++) {
 		tabAAAAA000[i] = -1;
