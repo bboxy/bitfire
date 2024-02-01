@@ -172,13 +172,13 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;                2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbbbb
+;                2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                 ccccccc   5             v      1      bbbbbbbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;                2                       ccccccccccc   3                   ggggggggggg   4ggggg                 ccccccc   5             v      1         bbbbbbbbb
+;                2                       ccccccccccc   3                   ggggggggggg   4ggggg                 ccccccc   5             v      1      bbbbbbbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;                2                       ccccccccccc   3                   ggg   4ggggg                 ccccccc   5             v      1         bbbbbbb
+;                2                       ccccccccccc   3                   ggg   4ggggg                 ccccccc   5             v      1      bbbbbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;                2                       ccccccccccc   3                      4                 ccccccc   5             v      1         bbbbb
+;                2                       ccccccccccc   3                      4                 ccccccc   5             v      1      bbbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -725,7 +725,7 @@ IZX			= $a1
 			lda #.MOTOR_ON				;always turn motor on
 			ora $1c00
 			bcs +
-			;ora #.LED_ON				;only turn LED on if file is loaded
+			ora #.LED_ON				;only turn LED on if file is loaded
 +
 			sta $1c00
 
@@ -1117,11 +1117,10 @@ IZX			= $a1
 			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT (HEADER ALREADY ON STACK)
 			;
 			;----------------------------------------------------------------------------------------------------
-.next_header_bvs
-			lda $1c00
-			ora #.LED_ON
-			sta $1c00
-			bne .next_header
+;			lda $1c00
+;			ora #.LED_ON
+;			sta $1c00
+;			bne .next_header
 
 .back_read_sector
 			;XXX TODO check if we accidently fall through here and start with another sector read without checking header?!?!
@@ -1164,6 +1163,7 @@ IZX			= $a1
 			ldy #$55				;type (sector) (SP = $ff already)
 			eor <.track				;second byte is track
 			beq .read_sector			;always falls through if we come from sector read, else it decides if we continue with sector payload or start with a new header
+.next_header_bvs
 .next_header
 			ldy #$52				;type (header)
 .read_sector
