@@ -574,6 +574,7 @@ IZX			= $a1
 								;...+6.7.
 								;...76.-.
 
+			;XXX TODO also use $1802 to send data by setting to input?
 			bit $1800
 			bmi *-3
 			sax $1800				;76540213	-> ddd-0d1d
@@ -1165,9 +1166,9 @@ IZX			= $a1
 	!if .SANCHECK_CYCLES = 1 {
 			bne .next_header
 			lda $180d
-			bpl .next_header
+			bpl .next_header			;read too fast?
 			lda $1c0d
-			bpl .new_sector
+			bpl .new_sector				;read too slow?
 
 			;lda $1c00
 			;ora #.LED_ON
@@ -1181,7 +1182,7 @@ IZX			= $a1
 	}
 }
 .back_read_header
-			beq .read_sector			;always falls through if we come from sector read, else it decides if we continue with sector payload or start with a new header
+			beq .read_sector			;always falls through if we come from sector read (negtive is alsways != 0), else it decides if we continue with sector payload or start with a new header
 .next_header
 			ldy #$52				;type (header)
 .read_sector
@@ -1200,7 +1201,7 @@ IZX			= $a1
 			;sta $1c04
 			;sta $1c05
 !if .SANCHECK_CYCLES = 1 {
-			lda .time_lo_s,x
+			lda .time_lo_s,x			;setup safeguard timers for sane range of rotation speeds
 			sta $1c04
 			lda .time_hi_s,x
 			sta $1c05
@@ -1231,10 +1232,10 @@ IZX			= $a1
 			jmp .gcr_entry				;35 cycles until entry
 
 !if .SANCHECK_CYCLES = 1 {
-.t0_f			= $ffff - $d7cc ;$d603 ;29fc (50 / 160 * 160)	;32*2
-.t1_f			= $ffff - $da50 ;$d8a8 ;2757 (50 / 160 * 150)	;30*2
-.t2_f			= $ffff - $dcc8 ;$db3b ;24c4 (50 / 160 * 140)	;28*2
-.t3_f			= $ffff - $df49 ;$ddd7 ;2228 (50 / 160 * 130)	;26*2
+.t0_f			= $ffff - $d7cc ;2833
+.t1_f			= $ffff - $da50 ;25af
+.t2_f			= $ffff - $dcc8 ;2337
+.t3_f			= $ffff - $df49 ;20b6
 
 .t0_s			= $ffff - $d603 ;29fc (50 / 160 * 160)	;32*2
 .t1_s			= $ffff - $d8a8 ;2757 (50 / 160 * 150)	;30*2
@@ -1255,19 +1256,6 @@ IZX			= $a1
 !ifdef .second_pass {
 	!warn $0800 - *, " bytes remaining for drivecode, cache and directory."
 }
-;
-;!if * > .tables {
-;	!set .junk_start = *
-;} else {
-;	!set .junk_start = .tables
-;}
-;
-;
-;			* = .junk_start
-;			;use remaining space with code or fill up with junk
-;			!for .x, 0, $20 - <.junk_start {
-;				!byte ((.x & $f) << 4) + (.x & $f xor $f)
-;			}
 
 }
 
@@ -1278,22 +1266,9 @@ IZX			= $a1
 
 ;11111000 table fits into zp if compressed with asr #$f8, preamble then starts @ $89, zero bytes free then, but fits
 
-;halfstep, send_data, timer elapsed? else wait rest, halfstep, wait
 ;XXX TODO
 ;XXX TODO change interleave depending on track (via set max_sectors?)
 
-;XXX TODO optimize code size on stepping
-;XXX TODO optimze eof detection?
-
-
-;11111222
-
-;22333334
-
-;44445555
-
-;56666677
-;77788888
 .bootstrap_start
 !pseudopc .bootstrap {
 .bootstrap_run
