@@ -182,6 +182,11 @@ ___			= $ff
 ;                2                       ccccccccccc   3                   ggg   4ggggg                 ccccccc   5             v      1       bbbbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
 ;                2                       ccccccccccc   3                      4                 ccccccc   5             v      1       bbbbbbb
+;                                                      ^                                                                ^
+;                                                      |                                                                |
+;                                                      __________________________________________________________________
+;                                                                                      |
+;                                                            timing is so so on these points, need better solutions
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
@@ -225,13 +230,12 @@ ___			= $ff
 			pha					;$0101
 			lda $1c01				;11111222	first read
 			sax <.twos + 1
+			;sbc <.twos + 1 is possible
 			and #$f8
 			tay
-
 			bvc *
 .val3e = * + 1
 			ldx #$3e
-
 			lda $1c01				;22333334
 			sax <.threes + 1
 			asr #$c1
@@ -1160,12 +1164,15 @@ IZX			= $a1
 } else {
 	!if .SANCHECK_CYCLES = 1 {
 			bne .next_header
+			lda $180d
+			bpl .next_header
 			lda $1c0d
-			bmi .new_sector
+			bpl .new_sector
+
 			;lda $1c00
 			;ora #.LED_ON
 			;sta $1c00
-			top
+			;top
 			;lda $1c00
 			;ora #$08
 			;sta $1c00
@@ -1193,10 +1200,14 @@ IZX			= $a1
 			;sta $1c04
 			;sta $1c05
 !if .SANCHECK_CYCLES = 1 {
-			lda .time_lo,x
+			lda .time_lo_s,x
 			sta $1c04
-			lda .time_hi,x
+			lda .time_hi_s,x
 			sta $1c05
+			lda .time_lo_f,x
+			sta $1804
+			lda .time_hi_f,x
+			sta $1805
 }
 			bvc *					;wait for first byte after sync
 
@@ -1220,15 +1231,25 @@ IZX			= $a1
 			jmp .gcr_entry				;35 cycles until entry
 
 !if .SANCHECK_CYCLES = 1 {
-.t0			= $ffff - $d7cc;$d603 ;29fc (50 / 160 * 160)	;32*2
-.t1			= $ffff - $da50;$d8a8 ;2757 (50 / 160 * 150)	;30*2
-.t2			= $ffff - $dcc8;$db3b ;24c4 (50 / 160 * 140)	;28*2
-.t3			= $ffff - $df49;$ddd7 ;2228 (50 / 160 * 130)	;26*2
+.t0_f			= $ffff - $d7cc ;$d603 ;29fc (50 / 160 * 160)	;32*2
+.t1_f			= $ffff - $da50 ;$d8a8 ;2757 (50 / 160 * 150)	;30*2
+.t2_f			= $ffff - $dcc8 ;$db3b ;24c4 (50 / 160 * 140)	;28*2
+.t3_f			= $ffff - $df49 ;$ddd7 ;2228 (50 / 160 * 130)	;26*2
 
-.time_lo
-			!byte <.t0, <.t1, <.t2, <.t3
-.time_hi
-			!byte >.t0, >.t1, >.t2, >.t3
+.t0_s			= $ffff - $d603 ;29fc (50 / 160 * 160)	;32*2
+.t1_s			= $ffff - $d8a8 ;2757 (50 / 160 * 150)	;30*2
+.t2_s			= $ffff - $db3b ;24c4 (50 / 160 * 140)	;28*2
+.t3_s			= $ffff - $ddd7 ;2228 (50 / 160 * 130)	;26*2
+
+.time_lo_f
+			!byte <.t0_f, <.t1_f, <.t2_f, <.t3_f
+.time_hi_f
+			!byte >.t0_f, >.t1_f, >.t2_f, >.t3_f
+
+.time_lo_s
+			!byte <.t0_s, <.t1_s, <.t2_s, <.t3_s
+.time_hi_s
+			!byte >.t0_s, >.t1_s, >.t2_s, >.t3_s
 }
 
 !ifdef .second_pass {
