@@ -42,7 +42,10 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.BOGUS_READS		= 0   ;XXX TODO reset bogus counter only, when motor spins down, so set on init? And on spin down? but do not miss incoming bits!1! number of discarded successfully read sectors on spinup
+.SANCHECK_CYCLES	= 1   ;start a timer when reading sync + whole sector, if this took too short, discard sector, as we are prone to false positives then.
+!if CONFIG_MOTOR_ALWAYS_ON = 0 {
+.BOGUS_READS		= 0
+}
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
@@ -161,7 +164,7 @@ ___			= $ff
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
                         !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, ___, ___, $ff, $0a, ___, $0b, ___, $03	;50
-                        !byte ___, ___, ___, ___, ___, $0d, ___, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
+                        !byte ___, ___, ___, ___, ___, $0d, $02, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
                         !byte ___, ___, ___, $06, ___, $0c, ___, $04, $4c, ___, ___, $02, ___, $08		;70
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
@@ -172,34 +175,19 @@ ___			= $ff
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;                2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                 ccccccc   5             v      1      bbbbbbbbbbbbbb
+;                2                       ccccccccccc   3                   ggggggggggggggggggg   4ggggg                 ccccccc   5             v      1       bbbbbbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;                2                       ccccccccccc   3                   ggggggggggg   4ggggg                 ccccccc   5             v      1      bbbbbbbbbbbb
+;                2                       ccccccccccc   3                   ggggggggggg   4ggggg                 ccccccc   5             v      1       bbbbbbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;                2                       ccccccccccc   3                   ggg   4ggggg                 ccccccc   5             v      1      bbbbbbbbbb
+;                2                       ccccccccccc   3                   ggg   4ggggg                 ccccccc   5             v      1       bbbbbbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
-;                2                       ccccccccccc   3                      4                 ccccccc   5             v      1      bbbbbbbb
+;                2                       ccccccccccc   3                      4                 ccccccc   5             v      1       bbbbbbb
 ;b = bvc *
 ;c = checksum
 ;v = v-flag clear
 ;g = gcr slowdown
 
-;XXX TODO 		try out tabs that have both, two quintuples as index that add each other? one in lowbyte and one in hibyte? -> bigger than $0100 but maybe cool?
-			;lda .tab00333330_hi_tab44444000_lo,y -> y = fours, lowbyte = threes -> adition of both
-;XXX TODO setup timer prior to read sect, then after back check timer -> way more than table? discaard?
 .read_loop
-.val3e = * + 1
-			ldx #$3e
-			lda $1c01				;22333334
-			sax <.threes + 1
-			asr #$c1
-			tax
-			lda .tab11111000_hi,y			;offset 0
-.twos			eor .tab02200222_lo,x			;offset 0
-			tsx
-			pha					;$0100
-			beq .gcr_end_
-
 			eor $0101,x
 .val0103		eor $0103,x
 .gcr_entry
@@ -229,7 +217,7 @@ ___			= $ff
 
 			lax $1c01				;77788888	fifth read
 			asr #$40
-			tay
+			tay					;XXX TODO can be omitted? can this value be combensated by dd77?
 
 			lda .tab7d788888_lo,x			;offset 0
 			ldx #$07
@@ -240,28 +228,41 @@ ___			= $ff
 			and #$f8
 			tay
 
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-.bvs
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			jmp .next_header_bvs
-.gcr_end_
+			bvc *
+.val3e = * + 1
+			ldx #$3e
+
+			lda $1c01				;22333334
+			sax <.threes + 1
+			asr #$c1
+			tax
+			lda .tab11111000_hi,y			;offset 0
+.twos			eor .tab02200222_lo,x			;offset 0
+			tsx
+			pha					;$0100
+			bne .read_loop
+
 .gcr_end
-			eor $0103
+			eor (.val0103 + 1,x)			;do remaining checksum, yet same for header or sector, skip $0f in $0101, X = 0
 			eor <.chksum + 1,x
 			tax					;partial checksum in x, need to waste 2 cycles anyway
 			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 .gcr_h_or_s		jmp .back_read_sector			;will either happen or disabled for fall through
 			txa					;restore checksum
-			jmp .header_end
-
+			bne +					;header checksum check failed? reread
+			ldy #$01
+-
+			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
+			lda $0105,y				;read in sector and track from header
+			ldx #$09
+			sbx #$00
+			eor <.ser2bin,x
+			dey					;Y = 0 or 1
+			bpl -					;first byte being processed?
+			ldy #$55				;type (sector) (SP = $ff already)
+			eor <.track				;second byte is track
++
+			jmp .back_read_header			;case handling will happen there reread/continue depending on Z-flag
 .slow_tab
 			!byte (<.gcr_slow1_00) << 1
 			!byte (<.gcr_slow1_20) << 1
@@ -612,6 +613,9 @@ IZX			= $a1
 			bit $1800
 			bmi *-3
 			sta $1800				;signal busy after atn drops
+;-
+;			bit $1c0d
+;			bpl -
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -638,7 +642,12 @@ IZX			= $a1
 ;}
 			;XXX TODO make this check easier? only done here?
 			bit <.last_track_of_file		;EOF
+!if .BOGUS_READS = 1 & .DELAY_SPIN_DOWN = 1 {
+			bmi *+5
+			jmp .next_track
+} else {
 			bpl .next_track
+}
 
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
 			top
@@ -706,6 +715,17 @@ IZX			= $a1
 
 			lsr					;lda #.BUSY
 			sta $1800				;set busy bit
+
+!if .BOGUS_READS != 0 {
+			;XXX TODO A = 2 -> num reads bis $ff laufen lassen
+			;XXX TODO A = 4 -> same val as MOTOR_ON
+			asl
+			bit $1c00
+			bne +
+			lsr
+			sta <.bogus_reads
++
+}
 			lda <.filename
 
 			;----------------------------------------------------------------------------------------------------
@@ -728,6 +748,9 @@ IZX			= $a1
 			ora #.LED_ON				;only turn LED on if file is loaded
 +
 			sta $1c00
+
+			;lda #$80
+			;sta $1c0
 
 			ldy #.DIR_SECT				;second dir sector
 			lax <.filenum				;load filenum
@@ -796,9 +819,6 @@ IZX			= $a1
 
 .find_file_in_dir
 			ldx #$03
-!if .BOGUS_READS != 0 {
-			stx <.bogus_reads
-}
 -
 			ldy .directory - 1,x			;copy over dir info
 			sty <.dirinfo - 1,x			;to track is in Y after copy
@@ -939,9 +959,10 @@ IZX			= $a1
 			rts
 .set_bitrate
 			tax
-			asl
-			eor #6
-			sta <.density
+!if .SANCHECK_CYCLES = 1 {
+			stx <.density
+}
+			;stx <.density
 			lda $1c00
 			ora #$60
 			eor .bitrate,x
@@ -958,18 +979,6 @@ IZX			= $a1
 			sty <.gcr_slow1 + 0
 			sta <.gcr_slow1 + 1
 			stx <.gcr_slow1 + 2
-
-			ldx #4
--
-			lda #$70
-			cpx <.density
-			bcc +
-			lda #$80
-+
-			sta .bvs + 0,x
-			dex
-			dex
-			bpl -
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1017,7 +1026,7 @@ IZX			= $a1
 .load_wanted_blocks						;read and transfer all blocks on wishlist
 			ror <.last_track_of_file		;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
 			ldx <.is_cached_sector
-			bmi .extend				;nothing cached yet
+			bmi .next_header			;nothing cached yet
 			;maybe not necessary, but with random access loading?
 			;ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
 			;iny					;is it part of our yet loaded file?
@@ -1117,11 +1126,6 @@ IZX			= $a1
 			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT (HEADER ALREADY ON STACK)
 			;
 			;----------------------------------------------------------------------------------------------------
-;			lda $1c00
-;			ora #.LED_ON
-;			sta $1c00
-;			bne .next_header
-
 .back_read_sector
 			;XXX TODO check if we accidently fall through here and start with another sector read without checking header?!?!
 !if .SANCHECK_TRAILING_ZERO = 1 {
@@ -1130,7 +1134,7 @@ IZX			= $a1
 			sbc #2					;clear out constant (incl. carry) if anything goes wrong, offset into table will be off and checksum will fail?
 			tay
 			and #$07
-.extend			bne .next_header
+			bne .next_header
 } else {
 			arr #$f0
 			tay
@@ -1140,61 +1144,92 @@ IZX			= $a1
 			ldx <.threes + 1
 			eor <.tab00333330_hi,x			;sector checksum
 			eor $0101				;not checksummed in case of header
+			;tay
+			;ldx .density
+			;lda $1c04
+			;sta $05e0,x
+			;lda $1c05
+			;sta $05e4,x
+			;tya
 !if .BOGUS_READS != 0 {
 			bne .next_header
 			lda <.bogus_reads
-			beq .new_sector
+			bmi .new_sector
 			dec <.bogus_reads
+			top
 } else {
+	!if .SANCHECK_CYCLES = 1 {
+			bne .next_header
+			lda $1c0d
+			bmi .new_sector
+			;lda $1c00
+			;ora #.LED_ON
+			;sta $1c00
+			top
+			;lda $1c00
+			;ora #$08
+			;sta $1c00
+	} else {
 			beq .new_sector
+	}
 }
-
-.header_end
-			bne .next_header			;header checksum check failed? reread
-			ldy #$01
--
-			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
-			lda $0105,y				;read in sector and track from header
-			ldx #$09
-			sbx #$00
-			eor <.ser2bin,x
-			dey					;Y = 0 or 1
-			bpl -					;first byte being processed?
-			ldy #$55				;type (sector) (SP = $ff already)
-			eor <.track				;second byte is track
+.back_read_header
 			beq .read_sector			;always falls through if we come from sector read, else it decides if we continue with sector payload or start with a new header
-.next_header_bvs
 .next_header
 			ldy #$52				;type (header)
 .read_sector
+;-
+;			bit $1c0d
+;			bpl -
+!if .SANCHECK_CYCLES = 1 {
+			ldx <.density
+}
 -
 			bit $1c00				;wait for start of sync
 			bmi -
+
 			adc $1c01				;read mark and throw away, clear V
+			;lda #$ff
+			;sta $1c04
+			;sta $1c05
+!if .SANCHECK_CYCLES = 1 {
+			lda .time_lo,x
+			sta $1c04
+			lda .time_hi,x
+			sta $1c05
+}
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
 			bne .next_header			;start over with a new header again as check against first bits of headertype already fails
 			lax <.val0c4c - $52,y			;setup A ($0c/$4c) (lax allows for 8 bit address)
 			adc #$13				;carry is set due to preceeding cpy, adc does clv for free, set bit 5, clear bits 2 and 3 -> $0c/$4c will be $20 or $60
-			stx <.gcr_h_or_s			;setup return jump either $0c or $4c
 			bvc *
 
-			ldx #$3e				;set x to $3e and waste 1 cycle
+			stx <.gcr_h_or_s			;setup return jump either $0c or $4c
+			ldx <.val3e				;set x to $3e and waste 1 cycle
 			asl					;shift to left -> $40/$c0
 			eor (.v1c01 - $3e,x)			;read 22333334 - 2 most significant bits should be zero now, waste 2 cycles
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_header			;start over with a new header again as the check for header type failed in all bits
-			sta <.chksum + 1 - $3e,x		;init checksum
-			lda <.ser2bin - $3e,x
+			sta <.chksum + 1			;init checksum
+			lda <.ser2bin - $3e,x			;$7f, waste 2 cycles
 			ldx <.val07ff - $52,y			;will we receive 8 or 256 bytes
 			txs					;bytes to read
-			nop
 			jmp .gcr_entry				;35 cycles until entry
 
-;.timing
-;			!byte $1e,$1d,$1c,$1a
+!if .SANCHECK_CYCLES = 1 {
+.t0			= $ffff - $d7cc;$d603 ;29fc (50 / 160 * 160)	;32*2
+.t1			= $ffff - $da50;$d8a8 ;2757 (50 / 160 * 150)	;30*2
+.t2			= $ffff - $dcc8;$db3b ;24c4 (50 / 160 * 140)	;28*2
+.t3			= $ffff - $df49;$ddd7 ;2228 (50 / 160 * 130)	;26*2
+
+.time_lo
+			!byte <.t0, <.t1, <.t2, <.t3
+.time_hi
+			!byte >.t0, >.t1, >.t2, >.t3
+}
 
 !ifdef .second_pass {
 	!warn $0800 - *, " bytes remaining for drivecode, cache and directory."
@@ -1276,17 +1311,18 @@ IZX			= $a1
 			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
 			sta $1c0b
 
-			;sax $1c08				;clear counters
-			;sax $1c04
+			sax $1c08				;clear counters
+			sax $1c04
 
-			;dex					;disable all interrupts
-			;stx $180e
-			;stx $1c0e
-			;ldx $180d				;clear all IRQ flags to ack possibly pending IRQs
-			;ldx $1c0d
+			dex					;disable all interrupts
+			stx $180e
+			stx $1c0e
+			ldx $180d				;clear all IRQ flags to ack possibly pending IRQs
+			ldx $1c0d
 
 			ldx #$c0				;enable timer 1 flag
 			stx $1c0e
+			stx $180e
 
 			;cli					;now it is save to allow interrupts again, as they won't happen anymore, okay, it is a lie, timer irqs would happen, but we keep sei
 
