@@ -216,8 +216,8 @@ ___			= $ff
 			pha					;$0100
 			beq .gcr_end
 
-			eor $0102,x
-.val0103		eor $0103,x
+.v0102			eor $0102,x
+.v0103			eor $0103,x
 .gcr_entry
 			sta <.chksum2 + 1
 			lda $1c01				;44445555		third read
@@ -261,8 +261,8 @@ ___			= $ff
 			bvs .read_loop
 			jmp .read_loop
 .gcr_end
-			eor $0103
-			tax					;partial checksum in x, need to waste 2 cycles anyway
+			eor <.chksum + 1, x
+			sta <.chksum + 1
 			jmp .back_gcr
 
 !ifdef .second_pass {
@@ -966,7 +966,7 @@ ___			= $ff
 .const			= <(.read_loop - .bvs - 3 - 3 - $d*2)
 
 			tay
-;			sta .bra_slo + 1
+			sta .bra_slo + 1
 			adc #.const
 			ldx #$0d*2
 -
@@ -1144,22 +1144,27 @@ ___			= $ff
 .back_gcr
 			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 !if .SANCHECK_TRAILING_ZERO = 1 {
+;			ror					;xxxxx010 1
+;			bcc .next_header
+;			tay
+;			lda .tab4444000_lo - 2,y
 			ror					;xxxxx010 1
 			bcc .next_header			;check bit 0 of CONST1
 			sbc #2					;clear out constant (incl. carry) if anything goes wrong, offset into table will be off and checksum will fail?
 			tay
 			and #$07
 			bne .next_header
+			lda (.fours + 1),y
 } else {
 			arr #$f0
 			tay
-}
-			txa					;restore partial checksum
 			eor (.fours + 1),y
+}
+			eor (.v0103 + 1,x)
+			eor (.v0102 + 1,x)
+			eor .chksum + 1
 			ldx <.threes + 1
 			eor <.tab00333330_hi,x			;sector checksum
-			eor <.chksum + 1
-			eor $0102
 
 .gcr_h_or_s		beq .new_sector				;this is either $80 or $f0 -> dop for header oder beq for sector
 
@@ -1189,23 +1194,47 @@ ___			= $ff
 
 			cpy $1c01				;11111222 compare type
 			bne .next_header			;start over with a new header again as check against first bits of headertype already fails
+			;XXX TODO 90/f0 would result in bcc and check carry as well
 			lax <.val80f0 - $52,y			;setup A ($0c/$4c) (lax allows for 8 bit address)
 			stx .gcr_h_or_s				;setup return jump either $0c or $4c
-			clv
-			bvc *
-			ldx #$3e
 			sbc #$30
 			and #$c0
-;reduced by 3 cycles
-			eor (.v1c01 - $3e,x) 			;read 22333334 - 2 most significant bits should be zero now, waste 2 cycles
+			ldx #$3e
+.bra_slo		bne +
++
+			nop
+			nop
+			nop
+			eor (.v1c01 - $3e, x)
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_header			;start over with a new header again as the check for header type failed in all bits
-			sta <.chksum + 1			;init checksum
-			lda #.EOR_VAL
+			sta <.chksum + 1 - $3e,x 		;init checksum, waste 1 cycle
+			lda ($03 - $3e,x)
+			lda <.ser2bin - $3e,x			;$7f, waste 2 cycles
 			ldx <.val07ff - $52,y			;will we receive 8 or 256 bytes
 			txs					;bytes to read
-			jmp .gcr_entry				;33 cycles until entry
+			jmp .gcr_entry				;35 cycles until entry, 36 would be better
+
+;			clv
+;			bvc *
+;			;$40 ;$c0
+;			;
+;			;asl
+;			;
+;			ldx #$3e
+;			sbc #$30
+;			and #$c0
+;;reduced by 3 cycles
+;			eor (.v1c01 - $3e,x) 			;read 22333334 - 2 most significant bits should be zero now, waste 2 cycles
+;			sax <.threes + 1
+;			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
+;			bne .next_header			;start over with a new header again as the check for header type failed in all bits
+;			sta <.chksum + 1			;init checksum
+;			lda #.EOR_VAL
+;			ldx <.val07ff - $52,y			;will we receive 8 or 256 bytes
+;			txs					;bytes to read
+;			jmp .gcr_entry				;33 cycles until entry
 
 ;!if .BOGUS_READS != 0 {
 ;			bne .next_header
