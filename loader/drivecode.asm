@@ -99,8 +99,10 @@
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
-.val07ff		= .zp_start + $59			;DT ;current track
+.val07ff		= .zp_start + $57			;DT ;current track
 .sector			= .zp_start + $58			;DS
+;free	 		= .zp_start + $59
+;free	 		= .zp_start + $5c
 .preamble_data		= .zp_start + $60
 !if .BOGUS_READS != 0 {
 .bogus_reads		= .zp_start + $66
@@ -161,7 +163,7 @@ ___			= $ff
                         !byte .N1, .N2, .P1, .P2, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
-                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, ___, $03, ___, $0a, $ff, $0b, ___, $03	;50
+                        !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, ___, ___, $ff, $0a, ___, $0b, ___, $03	;50
                         !byte ___, ___, ___, ___, ___, $0d, $02, $05, ___, ___, ___, $00, ___, $09, ___, $01	;60
                         !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08		;70
 
@@ -1154,12 +1156,11 @@ ___			= $ff
 			tay
 			and #$07
 			bne .next_header
-			lda (.fours + 1),y
 } else {
 			arr #$f0
 			tay
-			eor (.fours + 1),y
 }
+			eor (.fours + 1),y
 			eor (.v0103 + 1,x)
 			eor (.v0102 + 1,x)
 			eor .chksum + 1
@@ -1172,7 +1173,7 @@ ___			= $ff
 			ldy #$01
 -
 			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
-			lda $0101,y				;read in sector and track from header
+			lda $0105,y				;read in sector and track from header
 			ldx #$09
 			sbx #$00
 			eor <.ser2bin,x
