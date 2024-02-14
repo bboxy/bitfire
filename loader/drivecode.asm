@@ -42,6 +42,7 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
+.SANCHECK_CYCLES        = 1   ;start a timer when reading sync + whole sector, if this took too short, discard sector, as we are prone to false positives then.
 !if CONFIG_MOTOR_ALWAYS_ON = 0 {
 .BOGUS_READS		= 0
 }
@@ -261,10 +262,12 @@ ___			= $ff
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop
 			jmp .read_loop
 .gcr_end
-			eor <.chksum + 1, x
-			sta <.chksum + 1
+			eor <.chksum + 1,x
+			tax
 			jmp .back_gcr
 
 !ifdef .second_pass {
@@ -965,12 +968,12 @@ ___			= $ff
 			dex
 			rts
 .set_bitrate
-.const			= <(.read_loop - .bvs - 3 - 3 - $d*2)
+.const			= <(.read_loop - .bvs - 3 - 3 - $f*2)
 
 			tay
 			sta .bra_slo + 1
 			adc #.const
-			ldx #$0d*2
+			ldx #$0f*2
 -
 			sta <.bvs + 1,x
 			adc #2
@@ -1160,16 +1163,16 @@ ___			= $ff
 			arr #$f0
 			tay
 }
+
+			txa
 			eor (.fours + 1),y
-			eor (.v0103 + 1,x)
-			eor (.v0102 + 1,x)
-			eor .chksum + 1
+			eor $0102
+			eor $0103
 			ldx <.threes + 1
-			eor <.tab00333330_hi,x			;sector checksum
+			eor <.tab00333330_hi,x
+			bne .next_header			;checksum check failed? reread
+.gcr_h_or_s		beq .sector_done			;this is either $80 or $f0 -> dop for header oder beq for sector
 
-.gcr_h_or_s		beq .new_sector				;this is either $80 or $f0 -> dop for header oder beq for sector
-
-			bne .next_header			;header checksum check failed? reread
 			ldy #$01
 -
 			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
@@ -1185,12 +1188,26 @@ ___			= $ff
 .next_header
 			ldy #$52				;type (header)
 .read_sector
+!if .SANCHECK_CYCLES = 1 {
+			ldx .bra_slo + 1
+}
 -
 			bit $1c00				;wait for start of sync
 			bmi -
 
 			lda $1c01				;adc $1c01 would work, if we could be sure we return with A < $80 from checksum check or lda $1c00 would be < $7f, but can be $7f if write protect is on
 			clv
+!if .SANCHECK_CYCLES = 1 {
+			;XXX TODO setup 2 vals at once? ldy #$7e inx iny bpl?
+                        lda .time_lo_s,x                        ;setup safeguard timers for sane range of rotation speeds
+                        sta $1c04
+                        lda .time_hi_s,x
+                        sta $1c05
+                        lda .time_lo_f,x
+                        sta $1804
+                        lda .time_hi_f,x
+                        sta $1805
+}
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
@@ -1206,7 +1223,8 @@ ___			= $ff
 			nop
 			nop
 			nop
-			eor (.v1c01 - $3e, x)
+			nop
+			eor $1c01
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_header			;start over with a new header again as the check for header type failed in all bits
@@ -1216,6 +1234,39 @@ ___			= $ff
 			ldx <.val07ff - $52,y			;will we receive 8 or 256 bytes
 			txs					;bytes to read
 			jmp .gcr_entry				;35 cycles until entry, 36 would be better
+.sector_done
+        !if .SANCHECK_CYCLES = 1 {
+                        lda $180d
+                        bpl .next_header                        ;read too fast?
+                        lda $1c0d				;XXX TODO we could eor here and check eored result
+                        bmi .next_header                        ;read too slow?
+			jmp .new_sector
+        }
+
+!if .SANCHECK_CYCLES = 1 {
+.t0_f                   = $ffff - $d7cc ;2833
+.t1_f                   = $ffff - $da50 ;25af
+.t2_f                   = $ffff - $dcc8 ;2337
+.t3_f                   = $ffff - $df49 ;20b6
+
+.t0_s                   = $ffff - $d603 ;29fc (50 / 160 * 160)  ;32*2
+.t1_s                   = $ffff - $d8a8 ;2757 (50 / 160 * 150)  ;30*2
+.t2_s                   = $ffff - $db3b ;24c4 (50 / 160 * 140)  ;28*2
+.t3_s                   = $ffff - $ddd7 ;2228 (50 / 160 * 130)  ;26*2
+
+.time_lo_f
+                        !byte <.t0_f, <.t1_f, <.t2_f, <.t3_f
+.time_hi_f
+                        !byte >.t0_f, >.t1_f, >.t2_f, >.t3_f
+
+.time_lo_s
+                        !byte <.t0_s, <.t1_s, <.t2_s, <.t3_s
+.time_hi_s
+                        !byte >.t0_s, >.t1_s, >.t2_s, >.t3_s
+}
+
+
+;c73a
 
 ;			clv
 ;			bvc *
