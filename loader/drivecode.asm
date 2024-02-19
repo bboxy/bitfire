@@ -102,7 +102,7 @@
 .track			= .zp_start + $56			;DT ;current track
 .val07ff		= .zp_start + $57			;DT ;current track
 .sector			= .zp_start + $58			;DS
-.bra_slo		= .zp_start + $59
+.density		= .zp_start + $59
 ;free	 		= .zp_start + $5c
 .preamble_data		= .zp_start + $60
 !if .BOGUS_READS != 0 {
@@ -401,7 +401,7 @@ ___			= $ff
 			adc .dir_load_addr_hi,y			;add load address highbyte
 			sta <.preamble_data + 2			;block address high
 			;clc					;should never overrun, or we would wrap @ $ffff?
-			bcc +
+			bcc .start_send
 
                         !byte                                         $a0, $ee, $ef, $e7, $02, $ea, $eb, $e3		;9 bytes
                         !byte $90, $29, $ed, $e5, $08, $e0, $e9, $e1, $1a, $e6, $ec, $e4, $da, $e2, $e8
@@ -501,8 +501,6 @@ ___			= $ff
 ;                        !byte $90, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___
 
 +
-.start_send
-			ldy #$06 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -510,8 +508,9 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			bne .start_send_
 			nop
+.bitrate
+			!byte $60, $40, $20, $00
 .gcr_slow1_00
 .gcr_slow1_20	= * + 6
 .tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
@@ -519,24 +518,32 @@ ___			= $ff
 .gcr_slow1_40
 			lda $1c01
 			jmp (.gcr_slow_back)			;waste 5 cycles
--
-			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
-			lda (.preamble_data_),y
-			sbx #$00
-			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
-			sta (.preamble_data_),y
-.start_send_
-			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
-			dey
-			bne -
-			beq +
 
+!if .SANCHECK_CYCLES = 1 {
+.t0_f                   = $ffff - $d7cc + 50 ;2833
+.t1_f                   = $ffff - $da50 + 50 ;25af
+.t2_f                   = $ffff - $dcc8 + 50 ;2337
+.t3_f                   = $ffff - $df49 + 50 ;20b6
+
+.t0_s                   = $ffff - $d603 ;29fc (50 / 160 * 160)  ;32*2
+.t1_s                   = $ffff - $d8a8 ;2757 (50 / 160 * 150)  ;30*2
+.t2_s                   = $ffff - $db3b ;24c4 (50 / 160 * 140)  ;28*2
+.t3_s                   = $ffff - $ddd7 ;2228 (50 / 160 * 130)  ;26*2
+
+
+.time_lo_s
+                        !byte <.t0_s, <.t1_s, <.t2_s, <.t3_s
+.time_hi_s
+                        !byte >.t0_s, >.t1_s, >.t2_s, >.t3_s
+.time_lo_f
+                        !byte <.t0_f, <.t1_f, <.t2_f, <.t3_f
+.time_hi_f
+                        !byte >.t0_f, >.t1_f, >.t2_f;, >.t3_f == $20
+}
 			;would also suit at $91, $95, $99
 .next_header_ = * + 7
                         !byte                          $20, $00, $80, ___, $20, $00, $80, $6c, $20, $00, $80
 
-.bitrate
-			!byte $60, $40, $20, $00
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -550,7 +557,18 @@ ___			= $ff
 ;			bit <.last_track_of_file		;eof?
 ;			bpl .postpone
 ;}
-+
+-
+			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
+			lda (.preamble_data_),y
+			sbx #$00
+			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
+			sta (.preamble_data_),y
+			top
+.start_send
+			ldy #$06 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
+			dey
+			bne -
 
 			lda #.preloop - .branch - 2		;be sure branch points to preloop
 .send_sector_data_setup
@@ -971,7 +989,7 @@ ___			= $ff
 .const			= <(.read_loop - .bvs - 3 - 3 - $f*2)
 
 			tay
-			sta <.bra_slo
+			sta <.density
 			adc #.const
 			ldx #$0f*2
 -
@@ -1146,14 +1164,6 @@ ___			= $ff
 			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT (HEADER ALREADY ON STACK)
 			;
 			;----------------------------------------------------------------------------------------------------
-.sector_done
-        !if .SANCHECK_CYCLES = 1 {
-                        lda $180d
-                        bpl .next_header                        ;read too fast?
-                        ;lda $1c0d				;XXX TODO we could eor here and check eored result
-                        ;bmi .next_header                        ;read too slow?
-			bmi .new_sector
-        }
 .back_gcr
 			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 !if .SANCHECK_TRAILING_ZERO = 1 {
@@ -1171,9 +1181,8 @@ ___			= $ff
 			arr #$f0
 			tay
 }
-
-			txa
-			eor (.fours + 1),y
+			txa					;fetch checksum calculated so far
+			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			ldy #$00
 			eor (.v0102 + 1),y
 			eor (.v0103 + 1),y
@@ -1197,7 +1206,7 @@ ___			= $ff
 			ldy #$52				;type (header)
 .read_sector
 !if .SANCHECK_CYCLES = 1 {
-			lax <.bra_slo
+			lax <.density
 }
 -
 			bit $1c00				;wait for start of sync
@@ -1206,10 +1215,10 @@ ___			= $ff
 !if .SANCHECK_CYCLES = 1 {
 			adc $1c01				;adc $1c01 would work, if we could be sure we return with A < $80 from checksum check or lda $1c00 would be < $7f, but can be $7f if write protect is on
 			;XXX TODO setup 2 vals at once? ldy #$7e inx iny bpl?
-                        ;lda .time_lo_s,x                        ;setup safeguard timers for sane range of rotation speeds
-                        ;sta $1c04
-                        ;lda .time_hi_s,x
-                        ;sta $1c05
+                        lda .time_lo_s,x                        ;setup safeguard timers for sane range of rotation speeds
+                        sta $1c04
+                        lda .time_hi_s,x
+                        sta $1c05
                         lda .time_lo_f,x
                         sta $1804
                         lda .time_hi_f,x
@@ -1226,7 +1235,7 @@ ___			= $ff
 			;lax <.val80f0 - $52,y
 			lax <.val0c4c - $52,y
 			stx .gcr_h_or_s				;setup return jump either $80 or $b0
-			adc #$13
+			adc #$13				;clears V-flag
 			bvc *
 			asl
 			ldx #$3e
@@ -1240,29 +1249,16 @@ ___			= $ff
 			ldx <.val07ff - $52,y			;will we receive 8 or 256 bytes
 			txs					;bytes to read
 			jmp .gcr_entry				;35 cycles until entry, 36 would be better
+.sector_done
+        !if .SANCHECK_CYCLES = 1 {
+                        lda $180d
+                        bpl .next_header                        ;read too fast?
+                        lda $1c0d				;XXX TODO we could eor here and check eored result
+                        bmi .next_header                        ;read too slow?
+			jmp .new_sector
+        }
 ;.bra_slo		bne *
 
-!if .SANCHECK_CYCLES = 1 {
-.t0_f                   = $ffff - $d7cc ;2833
-.t1_f                   = $ffff - $da50 ;25af
-.t2_f                   = $ffff - $dcc8 ;2337
-.t3_f                   = $ffff - $df49 ;20b6
-
-.t0_s                   = $ffff - $d603 ;29fc (50 / 160 * 160)  ;32*2
-.t1_s                   = $ffff - $d8a8 ;2757 (50 / 160 * 150)  ;30*2
-.t2_s                   = $ffff - $db3b ;24c4 (50 / 160 * 140)  ;28*2
-.t3_s                   = $ffff - $ddd7 ;2228 (50 / 160 * 130)  ;26*2
-
-.time_lo_f
-                        !byte <.t0_f, <.t1_f, <.t2_f, <.t3_f
-.time_hi_f
-                        !byte >.t0_f, >.t1_f, >.t2_f, >.t3_f
-
-;.time_lo_s
-;                        !byte <.t0_s, <.t1_s, <.t2_s, <.t3_s
-;.time_hi_s
-;                        !byte >.t0_s, >.t1_s, >.t2_s, >.t3_s
-}
 
 
 ;c73a
