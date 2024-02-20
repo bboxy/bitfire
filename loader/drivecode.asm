@@ -42,10 +42,8 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.SANCHECK_CYCLES        = 1   ;start a timer when reading sync + whole sector, if this took too short, discard sector, as we are prone to false positives then.
-!if CONFIG_MOTOR_ALWAYS_ON = 0 {
+.SANCHECK_CYCLES        = 0   ;start a timer when reading sync + whole sector, if this took too short, discard sector, as we are prone to false positives then.
 .BOGUS_READS		= 0
-}
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
@@ -95,7 +93,9 @@
 .next_header__		= .zp_start + $20
 .preamble_data_		= .zp_start + $22
 .ser2bin		= .zp_start + $30			;$30,$31,$38,$39
-;free	 		= .zp_start + $28
+!if CONFIG_DEBUG != 0 {
+.num_error 		= .zp_start + $28
+}
 ;free	 		= .zp_start + $29
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
@@ -105,9 +105,7 @@
 .density		= .zp_start + $59
 ;free	 		= .zp_start + $5c
 .preamble_data		= .zp_start + $60
-!if .BOGUS_READS != 0 {
 .bogus_reads		= .zp_start + $66
-}
 .block_size		= .zp_start + $68
 ;free			= .zp_start + $69
 .is_cached_sector	= .zp_start + $6a
@@ -161,7 +159,7 @@ ___			= $ff
 			;     0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f
                         !byte ___, ___, ___, ___, $f0, $60, $b0, $20, ___, $40, $80, $00, $e0, $c0, $a0, $80	;00
                         !byte .DS, ___, $f0, $1e, $70, $1f, $60, $17, ___, $80, $b0, $1a, $30, $1b, $20, $13	;10
-                        !byte .N1, .N2, .P1, .P2, $50, $1d, $40, $15, ___, ___, $80, $10, $10, $19, $00, $11	;20
+                        !byte .N1, .N2, .P1, .P2, $50, $1d, $40, $15, $00, ___, $80, $10, $10, $19, $00, $11	;20
                         !byte .S0, .S1, $e0, $16, $d0, $1c, $c0, $14, .S1, .S0, $a0, $12, $90, $18, ___, ___	;30
                         !byte ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___	;40
                         !byte ___, ___, ___, $0e, ___, $0f, .DT, $07, ___, ___, $ff, $0a, ___, $0b, ___, $03	;50
@@ -247,6 +245,7 @@ ___			= $ff
 			tay					;XXX TODO can be omitted? can this value be combensated by dd77?
 			adc .tab7d788888_lo,x			;offset 0
 .sevens			eor .tab0070dd77_hi,y			;offset $20 - clears v-flag, decodes the remaining bits of quintuple 7
+			bvs .saveguard
 .bvs
 			bvs .read_loop
 			bvs .read_loop
@@ -263,8 +262,8 @@ ___			= $ff
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-			bvs .read_loop
-			jmp .read_loop
+.saveguard
+			jmp .next_header_overshoot
 .gcr_end
 			eor <.chksum + 1,x
 			tax
@@ -295,7 +294,7 @@ ___			= $ff
 .preamble
 			sty <.block_size
 			iny					;set up num of bytes to be transferred
-			sty <.preamble_data + 0			;used also as send_end on data_send by being decremented again
+			sty <.preamble_data + 0 + CONFIG_DEBUG			;used also as send_end on data_send by being decremented again
 
 			ldy <.dir_entry_num
 
@@ -314,7 +313,7 @@ ___			= $ff
 			clc
 			adc .dir_load_addr_hi,y			;add load address highbyte to lowest blockindex
 .barr_zero
-			sta <.preamble_data + 3			;barrier, zero until set for first time, maybe rearrange and put to end?
+			sta <.preamble_data + 3 + CONFIG_DEBUG			;barrier, zero until set for first time, maybe rearrange and put to end?
 }
 			lda .dir_load_addr_lo,y			;fetch load address lowbyte
 			sec
@@ -390,8 +389,8 @@ ___			= $ff
 +
 			adc <.first_block_size			;else add first block size as offset, might change carry
 ++
-			sta <.preamble_data + 1			;block address low
-			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY	;ack/status to set load addr, signal block ready
+			sta <.preamble_data + 1 + CONFIG_DEBUG			;block address low
+			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY + CONFIG_DEBUG	;ack/status to set load addr, signal block ready
 			jmp +
 
                         !byte                                         $e0, $fe, $ff, $f7, $06, $fa, $fb, $f3		;9 bytes
@@ -399,9 +398,9 @@ ___			= $ff
 +
 			lda <.block_num				;add block num
 			adc .dir_load_addr_hi,y			;add load address highbyte
-			sta <.preamble_data + 2			;block address high
+			sta <.preamble_data + 2 + CONFIG_DEBUG			;block address high
 			;clc					;should never overrun, or we would wrap @ $ffff?
-			bcc .start_send
+			bcc +
 
                         !byte                                         $a0, $ee, $ef, $e7, $02, $ea, $eb, $e3		;9 bytes
                         !byte $90, $29, $ed, $e5, $08, $e0, $e9, $e1, $1a, $e6, $ec, $e4, $da, $e2, $e8
@@ -508,9 +507,9 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
+			ldy #$06 - CONFIG_LOADER_ONLY + CONFIG_DEBUG		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			bne .start_send
 			nop
-.bitrate
-			!byte $60, $40, $20, $00
 .gcr_slow1_00
 .gcr_slow1_20	= * + 6
 .tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
@@ -519,31 +518,24 @@ ___			= $ff
 			lda $1c01
 			jmp (.gcr_slow_back)			;waste 5 cycles
 
-!if .SANCHECK_CYCLES = 1 {
-.t0_f                   = $ffff - $d7cc + 50 ;2833
-.t1_f                   = $ffff - $da50 + 50 ;25af
-.t2_f                   = $ffff - $dcc8 + 50 ;2337
-.t3_f                   = $ffff - $df49 + 50 ;20b6
+-
+			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
+			lda (.preamble_data_),y
+			sbx #$00
+			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
+			sta (.preamble_data_),y
+.start_send
+			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
+			dey
+			bne -
+			beq +
 
-.t0_s                   = $ffff - $d603 ;29fc (50 / 160 * 160)  ;32*2
-.t1_s                   = $ffff - $d8a8 ;2757 (50 / 160 * 150)  ;30*2
-.t2_s                   = $ffff - $db3b ;24c4 (50 / 160 * 140)  ;28*2
-.t3_s                   = $ffff - $ddd7 ;2228 (50 / 160 * 130)  ;26*2
-
-
-.time_lo_s
-                        !byte <.t0_s, <.t1_s, <.t2_s, <.t3_s
-.time_hi_s
-                        !byte >.t0_s, >.t1_s, >.t2_s, >.t3_s
-.time_lo_f
-                        !byte <.t0_f, <.t1_f, <.t2_f, <.t3_f
-.time_hi_f
-                        !byte >.t0_f, >.t1_f, >.t2_f;, >.t3_f == $20
-}
 			;would also suit at $91, $95, $99
 .next_header_ = * + 7
                         !byte                          $20, $00, $80, ___, $20, $00, $80, $6c, $20, $00, $80
 
+.bitrate
+			!byte $60, $40, $20, $00
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -557,18 +549,7 @@ ___			= $ff
 ;			bit <.last_track_of_file		;eof?
 ;			bpl .postpone
 ;}
--
-			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
-			lda (.preamble_data_),y
-			sbx #$00
-			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
-			sta (.preamble_data_),y
-			top
-.start_send
-			ldy #$06 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
-			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
-			dey
-			bne -
++
 
 			lda #.preloop - .branch - 2		;be sure branch points to preloop
 .send_sector_data_setup
@@ -578,7 +559,7 @@ ___			= $ff
 			inx					;increase counter, as we go through sendloop twice, for preamble and for data
 			bcc .sendloop				;send data or preamble?
 
-			ldy #$04 - CONFIG_LOADER_ONLY		;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG	;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
 .sendloop = * + 2						;send the data block
 			lda <.preamble_data,y
@@ -748,8 +729,9 @@ ___			= $ff
 			;XXX TODO A = 2 -> num reads bis $ff laufen lassen
 			;XXX TODO A = 4 -> same val as MOTOR_ON
 			asl
-			bit $1c00
-			bne +
+			and $1c00
+			eor #$04
+			lsr
 			lsr
 			sta <.bogus_reads
 +
@@ -986,12 +968,12 @@ ___			= $ff
 			dex
 			rts
 .set_bitrate
-.const			= <(.read_loop - .bvs - 3 - 3 - $f*2)
+.const			= <(.read_loop - .bvs - 3 - 3 - $e*2)
 
 			tay
 			sta <.density
 			adc #.const
-			ldx #$0f*2
+			ldx #$0e*2
 -
 			sta <.bvs + 1,x
 			adc #2
@@ -1064,7 +1046,12 @@ ___			= $ff
 .load_wanted_blocks						;read and transfer all blocks on wishlist
 			ror <.last_track_of_file		;shift in carry for later check, easiest way to preserve eof-state, if carry is set, we reached EOF
 			ldx <.is_cached_sector
+!if CONFIG_DEBUG != 0 {
+			bpl *+5
+			jmp .next_header
+} else {
 			bmi .next_header			;nothing cached yet
+}
 			;maybe not necessary, but with random access loading?
 			;ldy <.wanted,x				;grab index from list (A with index reused later on after this call)
 			;iny					;is it part of our yet loaded file?
@@ -1157,6 +1144,13 @@ ___			= $ff
 			;
 			;----------------------------------------------------------------------------------------------------
 
+!if CONFIG_DEBUG != 0 {
+			lda <.num_error
+			sta <.preamble_data
+			lda #$00
+			sta <.num_error
+}
+
 			jmp .preamble
 
 			;----------------------------------------------------------------------------------------------------
@@ -1172,11 +1166,11 @@ ___			= $ff
 ;			tay
 ;			lda .tab4444000_lo - 2,y
 			ror					;xxxxx010 1
-			bcc .next_header			;check bit 0 of CONST1
+			bcc .next_header_trail_zero		;check bit 0 of CONST1
 			sbc #2					;clear out constant (incl. carry) if anything goes wrong, offset into table will be off and checksum will fail?
 			tay
 			and #$07
-			bne .next_header
+			bne .next_header_trail_zero
 } else {
 			arr #$f0
 			tay
@@ -1188,7 +1182,7 @@ ___			= $ff
 			eor (.v0103 + 1),y
 			ldx <.threes + 1
 			eor <.tab00333330_hi,x
-			bne .next_header			;checksum check failed? reread
+			bne .next_header_bad_chksum		;checksum check failed? reread
 .gcr_h_or_s		jmp .sector_done			;this is either $0c or $4c
 			iny					;Y = 1
 -
@@ -1202,9 +1196,21 @@ ___			= $ff
 			ldy #$55				;type (sector) (SP = $ff already)
 			eor <.track				;second byte is track
 			beq .read_sector			;always falls through if we come from sector read (negtive is alsways != 0), else it decides if we continue with sector payload or start with a new header
+!if CONFIG_DEBUG = 0 {
+.next_header_overshoot
+}
+.next_header_trail_zero
+.next_header_bad_chksum
+.next_header_wrong_type
+.next_header_cycles
+.next_header_bogus
 .next_header
 			ldy #$52				;type (header)
 .read_sector
+!if CONFIG_DEBUG != 0 {
+			lda #$0d
+			sta .preamble_data + 5
+}
 !if .SANCHECK_CYCLES = 1 {
 			lax <.density
 }
@@ -1230,7 +1236,7 @@ ___			= $ff
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
-			bne .next_header			;start over with a new header again as check against first bits of headertype already fails
+			bne .next_header_wrong_type		;start over with a new header again as check against first bits of headertype already fails
 			;XXX TODO 90/f0 would result in bcc and check carry as well
 			;lax <.val80f0 - $52,y
 			lax <.val0c4c - $52,y
@@ -1242,7 +1248,7 @@ ___			= $ff
 			eor (.v1c01 - $3e,x)
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
-			bne .next_header			;start over with a new header again as the check for header type failed in all bits
+			bne .next_header_wrong_type		;start over with a new header again as the check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x 		;init checksum, waste 1 cycle
 			;lda ($03 - $3e,x)
 			lda <.ser2bin - $3e,x			;$7f, waste 2 cycles
@@ -1250,13 +1256,46 @@ ___			= $ff
 			txs					;bytes to read
 			jmp .gcr_entry				;35 cycles until entry, 36 would be better
 .sector_done
-        !if .SANCHECK_CYCLES = 1 {
+!if .SANCHECK_CYCLES = 1 {
                         lda $180d
-                        bpl .next_header                        ;read too fast?
+                        bpl .next_header_cycles                 ;read too fast?
                         lda $1c0d				;XXX TODO we could eor here and check eored result
-                        bmi .next_header                        ;read too slow?
+                        bmi .next_header_cycles                 ;read too slow?
+}
+!if .BOGUS_READS != 0 {
+			lda <.bogus_reads
+			beq +
+			dec <.bogus_reads
+			bpl .next_header_bogus
++
+}
 			jmp .new_sector
-        }
+!if .SANCHECK_CYCLES = 1 {
+.t0_f                   = $ffff - $d7cc + 50 ;2833
+.t1_f                   = $ffff - $da50 + 50 ;25af
+.t2_f                   = $ffff - $dcc8 + 50 ;2337
+.t3_f                   = $ffff - $df49 + 50 ;20b6
+
+.t0_s                   = $ffff - $d603 ;29fc (50 / 160 * 160)  ;32*2
+.t1_s                   = $ffff - $d8a8 ;2757 (50 / 160 * 150)  ;30*2
+.t2_s                   = $ffff - $db3b ;24c4 (50 / 160 * 140)  ;28*2
+.t3_s                   = $ffff - $ddd7 ;2228 (50 / 160 * 130)  ;26*2
+
+
+.time_lo_s
+                        !byte <.t0_s, <.t1_s, <.t2_s, <.t3_s
+.time_hi_s
+                        !byte >.t0_s, >.t1_s, >.t2_s, >.t3_s
+.time_lo_f
+                        !byte <.t0_f, <.t1_f, <.t2_f, <.t3_f
+.time_hi_f
+                        !byte >.t0_f, >.t1_f, >.t2_f, >.t3_f
+}
+!if CONFIG_DEBUG != 0 {
+.next_header_overshoot
+			inc <.num_error
+			jmp .next_header
+}
 ;.bra_slo		bne *
 
 

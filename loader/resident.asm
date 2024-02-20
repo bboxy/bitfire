@@ -45,11 +45,15 @@ preamble		= CONFIG_ZP_ADDR + 6					;5 bytes
 preamble		= CONFIG_ZP_ADDR + 2					;4 bytes
 }
 
-block_length		= preamble + 0
-block_addr_lo		= preamble + 1
-block_addr_hi		= preamble + 2
-block_barrier		= preamble + 3
-block_status		= preamble + 4 - CONFIG_LOADER_ONLY
+block_length		= preamble + 0 + CONFIG_DEBUG
+block_addr_lo		= preamble + 1 + CONFIG_DEBUG
+block_addr_hi		= preamble + 2 + CONFIG_DEBUG
+block_barrier		= preamble + 3 + CONFIG_DEBUG
+block_status		= preamble + 4 - CONFIG_LOADER_ONLY + CONFIG_DEBUG
+!if CONFIG_DEBUG != 0 {
+bitfire_error		= preamble
+bitfire_error_acc	= preamble + 5 - CONFIG_LOADER_ONLY + CONFIG_DEBUG
+}
 
 filenum			= block_barrier
 
@@ -152,7 +156,7 @@ bitfire_send_byte_
 .ld_loop
 			eor #$10
 			jsr .ld_set_dd02					;waste lots of cycles upon write, so bits do not arrive too fast @floppy
-			;nop							;XXX TODO might be omitted, need to check
+			nop							;XXX TODO might be omitted, need to check
 			lsr <filenum
 			bne .ld_loop
 			;clc							;force final value to be $3f again (bcc will hit in later on)
@@ -218,11 +222,18 @@ bitfire_loadraw_
 			bne .rts						;block ready? if so, a = 0 (block ready + busy) if not -> rts
 
 			sec							;loadraw enters ld_pblock with C = 0
-			ldy #$05 - CONFIG_LOADER_ONLY				;fetch 5 bytes of preamble
+			ldy #$05 - CONFIG_LOADER_ONLY + CONFIG_DEBUG		;fetch 5 bytes of preamble
 			;lda #$00						;is already zero due to anc #$c0, that is why we favour anc #$co over asl, as we save a byte
 			ldx #<preamble						;target for received bytes
 			jsr .ld_set_block_tgt					;load 5 bytes preamble - returns with C = 1 always
 
+!if CONFIG_DEBUG != 0 {
+			lda <bitfire_error_acc
+			clc
+			adc <bitfire_error
+			sta <bitfire_error_acc
+			sec
+}
 			ldx <block_addr_lo					;block_address lo
 			lda <block_addr_hi					;block_address hi
 			ldy <block_status					;status -> first_block?
@@ -230,7 +241,6 @@ bitfire_loadraw_
 			stx bitfire_load_addr_lo				;yes, store load_address (also lz_src in case depacker is present)
 			sta bitfire_load_addr_hi
 +
-										;XXX TODO, should be a4 (ldy preamble) for normal run and a2 (ldx #imm) for preamblerun, hm
 			ldy <block_length					;load blocklength
 .ld_set_block_tgt
 			stx .ld_store + 1					;setup target for block data
