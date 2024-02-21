@@ -370,6 +370,15 @@ int main () {
 					printf("offset_1: $%02x\n", offset_1);
 					printf("offset_4: $%02x\n", offset_4);
 					printf("offset_8: $%02x\n", offset_8);
+	                                for (i = 0; i < 256; i++) table[i] = -1;
+                                	merge_table(table, tab000bbbbb, offset_8, 0, 0, 0);	//88888
+                                	//merge_table(table, tabAAA000AA, 0x00, 0, 0, 0);	//77777
+                                	merge_table(table, tab0bb00bbb, 0x00, 0, 0, 0); //22222
+                                	merge_table(table, tabbbbbb000, offset_4, 0, 0, 0);	//44444
+                                	merge_table(table, tabAAAAA000, offset_1, 0, 0, 0);	//11111
+                                	//for (i = 0; i < 256; i++) if (table[i] < 0) table[i] = i;
+                                	printf("combined\n");
+                                	print_table(table, 0, 255);
 				}
 			}
 		}

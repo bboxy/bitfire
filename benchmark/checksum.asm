@@ -27,7 +27,7 @@
 !cpu 6510
 
 CHECKSUM = 1
-CHECKSUM_CLEAR = 0
+CHECKSUM_CLEAR = 1
 REQDISC = 1
 BUSLOCK = 0
 WAIT_SPIN_DOWN = 1
@@ -50,6 +50,7 @@ prnt		= $1c
 prnt_		= $1e
 err		= $24
 endh		= $26
+endc		= $27
 
 accum		= $30
 
@@ -286,7 +287,7 @@ numb		lda #$00		;file number
 }
 
 !if WAIT_SPIN_DOWN == 1 {
-		ldy #$20
+		ldy #$1c
 -
 		bit $d011
 		bpl *-3
@@ -418,8 +419,7 @@ irq
 		;pla
 		rti
 checksum
-		lda numb+1
-		tax
+		lax numb+1
 		asl
 		tay
 		lda #$07
@@ -427,8 +427,9 @@ checksum
 
 		lda sizes + 1,y
 		sta endh
-		inc endh
-
+!if CHECKSUM_CLEAR == 1 {
+		sta endc
+}
 		lax sizes,y
 		clc
 		adc loads,y
@@ -440,9 +441,9 @@ checksum
 		eor #$ff
 		tax
 		inx
-		bne +
-		dec endh
-		sec
+		beq +
+		inc endh
+		inc endc
 +
 		lda loads + 1,y
 		sbc #$00
@@ -455,22 +456,35 @@ checksum
 		clc
 srch = * + 1
 		adc $1000,x
-!if CHECKSUM_CLEAR == 1 {
-srcd = * + 1
-		sta $1000,x	;overwrite with junk
-}
+;!if CHECKSUM_CLEAR == 1 {
+;srcd = * + 1
+;		sta $1000,x	;overwrite with junk
+;}
 		inx
 		bne -
 		inc srch + 1
-!if CHECKSUM_CLEAR == 1 {
-		inc srcd + 1
-}
+;!if CHECKSUM_CLEAR == 1 {
+;		inc srcd + 1
+;}
 		dec endh
 		bne -
+
 		ldx numb+1
 		cmp chksums,x
 		bne no
 
+!if CHECKSUM_CLEAR == 1 {
+		lda #$00
+-
+srcd = * + 1
+		sta $1000,x	;overwrite with junk
+		inx
+		bne -
+		inc srcd + 1
+		dec endc
+		bne -
+}
+		ldx numb+1
 		lda #$05
 		jmp setcol
 

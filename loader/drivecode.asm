@@ -364,6 +364,7 @@ ___			= $ff
 			bne -
 			inc .en_dis_td
 			top
+								;eor data that way, that those values give a better nop?
 			!byte $50				;bvc * + 2, will never be taken?
 			!byte $02
 			top
@@ -622,6 +623,9 @@ ___			= $ff
 			bit $1800
 			bmi *-3
 			sta $1800				;signal busy after atn drops
+
+			ldx #$ff				;reset stack pointer, could be anything and off as partial sectors can be transferred
+			txs
 ;-
 ;			bit $1c0d
 ;			bpl -
@@ -939,7 +943,7 @@ ___			= $ff
 			dex
 			bpl .step
 .seek_done
-			txs					;reset stack pointer
+			;txs					;reset stack pointer
 
 			ldy <.track				;already part of set_bitrate -> load track
 

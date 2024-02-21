@@ -156,7 +156,7 @@ bitfire_send_byte_
 .ld_loop
 			eor #$10
 			jsr .ld_set_dd02					;waste lots of cycles upon write, so bits do not arrive too fast @floppy
-			nop							;XXX TODO might be omitted, need to check
+			;nop							;XXX TODO might be omitted, need to check
 			lsr <filenum
 			bne .ld_loop
 			;clc							;force final value to be $3f again (bcc will hit in later on)
