@@ -303,7 +303,7 @@ b			= $48
 			txs
 			sty <.block_size
 			iny					;set up num of bytes to be transferred
-			sty <.preamble_data + 0 + CONFIG_DEBUG			;used also as send_end on data_send by being decremented again
+			sty <.preamble_data + 0 + CONFIG_DEBUG	;used also as send_end on data_send by being decremented again
 
 			ldy <.dir_entry_num
 
@@ -322,7 +322,7 @@ b			= $48
 			clc
 			adc .dir_load_addr_hi,y			;add load address highbyte to lowest blockindex
 .barr_zero
-			sta <.preamble_data + 3 + CONFIG_DEBUG			;barrier, zero until set for first time, maybe rearrange and put to end?
+			sta <.preamble_data + 3 + CONFIG_DEBUG	;barrier, zero until set for first time, maybe rearrange and put to end?
 }
 			sec
 			bcs .preamble__
@@ -376,11 +376,11 @@ b			= $48
 			bne -
 			dec <.blocks_on_list
 			lax <.filenum
-			;!byte $50 xor b			;do xor 48 here, filenum needs to be $18 anyway
+			;!byte $a7, $50 xor b			;do xor 48 here, filenum needs to be $18 anyway
 			inc .en_dis_td
-			!byte $0d xor a				;-> clc as we xor $15
+			!byte $0d xor a				;-> clc as we xor $15 -> more or less a nop
 			jmp .drivecode_entry
-			!byte $40 xor b
+			!byte $40 xor b				;php
 .preamble__
 			lda .dir_load_addr_lo,y			;fetch load address lowbyte
 			!byte $05 xor a				;-> bpl as we xor $15 -> with $00 as target -> fall through in any case
@@ -393,7 +393,6 @@ b			= $48
 
                         !byte                                                     $80 xor b, $0e, $0f, $07, $00 xor a, $0a, $0b, $03
                         !byte $10 xor b, $47, $0d, $05, $09 xor a, $00, $09, $01, $00 xor b, $06, $0c, $04, $01 xor a, $02, $08
-
 +
 			sta <.preamble_data + 1 + CONFIG_DEBUG				;block address low
 			stx <.preamble_data + 4 - CONFIG_LOADER_ONLY + CONFIG_DEBUG	;ack/status to set load addr, signal block ready
@@ -537,7 +536,6 @@ b			= $48
 			;would also suit at $91, $95, $99
 .next_header_ = * + 7
                         !byte                          $20, $00, $80, ___, $20, $00, $80, $6c, $20, $00, $80
-
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1081,6 +1079,7 @@ b			= $48
 			; SET UP SEND LOOP, AND DECIDE BLOCK SIZES FIRST
 			;
 			;----------------------------------------------------------------------------------------------------
+
 !if CONFIG_DEBUG != 0 {
 			lda <.num_error
 			sta <.preamble_data
@@ -1384,23 +1383,23 @@ b			= $48
 .bootstrap_run
 			;this bootstrap will upload code from $0000-$06ff, and the bootstrap @ $0700 will be overwritten when dir-sector is read later on
 			lda #.DIR_TRACK
-			sta $0a
+			sta $0c
 !if .DIR_SECT != .DIR_TRACK {
 			lda #.DIR_SECT
 }
-			sta $0b
+			sta $0d
 
 			;fetch first dir sect and by that position head at track 18 to have a relyable start point for stepping
 			ldx #$80
-			stx $02
-.poll_job		bit $02
+			stx $03
+.poll_job		bit $03
 			bmi .poll_job
-			;ends up at $0500?
+			;ends up at $0600?
 
 			;motor and LED is on after that
 
 			sei
-			lda $0503
+			lda $0603
 			pha
 
 			;$180e .. 1800
@@ -1419,6 +1418,7 @@ b			= $48
 
 			sax $1c08				;clear counters
 			sax $1c04
+			sax .dir_diskside
 
 			dex					;disable all interrupts
 			stx $180e
@@ -1465,7 +1465,6 @@ b			= $48
 .done
 			ldx #.BUSY
 			stx $1800
-			stx .dir_diskside
 
 			;wait for atn coming low
 			bit $1800				;no need to, check is done by get_byte

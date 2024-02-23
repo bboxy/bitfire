@@ -85,8 +85,8 @@
 		lda #$3f
 		sta $dd02
 
-.cnt = * + 1
-		lda #(>.drivecode_size) + 1
+;.cnt = * + 1
+;		lda #(>.drivecode_size) + 1
 
                 bit $dd00		;wait until drive bootloader is active
                 bmi *-3
@@ -95,7 +95,7 @@
 		sta $dd02
 
 		ldy #$00
-		ldx .dc_data + 2
+		ldx #$00
 .dc_loop
 .dc_data	lda .drivecode_start, y
                 sec
@@ -119,13 +119,13 @@
 		bne +
 -
 		inx
-		stx .dc_data + 2
+		inc .dc_data + 2
 ;		cpx #>(.drivecode_start + $0100)
 ;		beq -
 +
 		cpy #<(.drivecode_size)
 		bne .dc_loop
-		cpx #>(.drivecode_end)
+		cpx #>(.drivecode_size)
 		bne .dc_loop
 
 		lda #$37			;raise atn to signal end of transfer
@@ -170,7 +170,7 @@
 		beq .l2
 		bmi .l1
 		cmp #$20
-		bcs .nontsc
+		;bcs .nontsc
 
 		lda #$1d		;ora $xxxx,x
 		sta bitfire_ntsc0
