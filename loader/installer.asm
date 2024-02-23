@@ -178,7 +178,7 @@
 		lda #$3d		;and $xxxx,x
 		sta bitfire_ntsc2
 		lda #$7d		;adc $xxxx,x
-		sta bitfire_ntsc3
+		sta bitfire_ntsc3_op + 1
 
 		lda #-$3f
 		sta bitfire_ntsc1 + 1

@@ -61,7 +61,7 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR					;define that label here, as we only
 
 			* = CONFIG_RESIDENT_ADDR
 !if CONFIG_LOADER_ONLY = 0 {
-.lz_gap1
+;.lz_gap1
 			;------------------
 			;MUSIC PLAY HOOK AND FRAME COUNTER
 			;------------------
@@ -246,7 +246,7 @@ bitfire_loadraw_
 			stx .ld_store + 1					;setup target for block data
 			sta .ld_store + 2
 										;XXX TODO, change busy signal 1 = ready, 0 = eof, leave ld_pblock with carry set, also tay can be done after preamble load as last value is still in a
-			ldx #$6d						;opcode for adc	-> repair any rts being set (also accidently) by y-index-check
+bitfire_ntsc3_op	ldx #$6d						;opcode for adc	-> repair any rts being set (also accidently) by y-index-check
 .ld_set
 			stx .ld_gend
 			bcs .ld_gentry
@@ -407,14 +407,14 @@ bitfire_loadcomp_
 			;BASE IRQ/NMI
 			;------------------
 
-			!ifdef .lz_gap2 {
-				;!warn "disabling some optimizations to make gaps fit"
-				!warn .lz_gap2 - *, " bytes left until gap2 @", *
-				!if .lz_gap2 - .lz_gap1 > $0100 {
-					!warn "code on first page too big, second gap does not fit!"
-				}
-			}
-.lz_gap2
+;			!ifdef .lz_gap2 {
+;				;!warn "disabling some optimizations to make gaps fit"
+;				!warn .lz_gap2 - *, " bytes left until gap2 @", *
+;				!if .lz_gap2 - .lz_gap1 > $0100 {
+;					!warn "code on first page too big, second gap does not fit!", .lz_gap2 - .lz_gap1
+;				}
+;			}
+;.lz_gap2
 
 link_player
 			pha

@@ -106,7 +106,9 @@ screen		= $2000
 
 		lda #$7f
 		sta $dc0d
+		sta $dd0d
 		lda $dc0d
+		lda $dd0d
 		lda #$01
 		sta $d019
 		sta $d01a
@@ -197,7 +199,7 @@ reset
 		rts
 
 nmi
-		inc $d020
+		inc $d021
 		rti
 
 text3
@@ -387,6 +389,10 @@ numb		lda #$00		;file number
 		jmp next
 
 irq
+		pha
+		lda #$37
+		sta $00
+		sta $01
 		;pha
 		dec $d020
 		dec $d019
@@ -416,7 +422,9 @@ irq
 		inc cnt+1
 +
 		inc $d020
-		;pla
+		lda #$35
+		sta $01
+		pla
 		rti
 checksum
 		lax numb+1
@@ -474,7 +482,7 @@ srch = * + 1
 		bne no
 
 !if CHECKSUM_CLEAR == 1 {
-		lda #$00
+		lda #$69
 -
 srcd = * + 1
 		sta $1000,x	;overwrite with junk
