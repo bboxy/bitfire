@@ -117,11 +117,8 @@
 
 		iny
 		bne +
--
 		inx
 		inc .dc_data + 2
-;		cpx #>(.drivecode_start + $0100)
-;		beq -
 +
 		cpy #<(.drivecode_size)
 		bne .dc_loop
@@ -170,7 +167,7 @@
 		beq .l2
 		bmi .l1
 		cmp #$20
-		;bcs .nontsc
+		bcs .nontsc
 
 		lda #$1d		;ora $xxxx,x
 		sta bitfire_ntsc0

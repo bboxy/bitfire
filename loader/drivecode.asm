@@ -565,12 +565,12 @@ b			= $48
 
 			dey
 			asl					;6540213. 7
-			ora #$10;<.val10			;654+213. 7	-> ddd+2d3d
+			ora <.val10				;654+213. 7	-> ddd+2d3d
 			bit $1800
 			bpl *-3
 			sta $1800
 
-			;bit $ea
+			bit $ea
 			ror					;7654+213 .
 			asr #%11110000				;.7654... .	-> ddd54d-d
 			bit $1800
@@ -579,7 +579,7 @@ b			= $48
 
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d-d
-			cpy #$ff;<.valff				;XXX TODO could make loop faster here, by looping alread here on bne? needs a bit of code duplication then
+			cpy <.valff				;XXX TODO could make loop faster here, by looping alread here on bne? needs a bit of code duplication then
 			bit $1800
 			bpl *-3
 			sta $1800
