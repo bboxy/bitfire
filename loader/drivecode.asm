@@ -1036,9 +1036,20 @@ b			= $48
 			pha
 			iny
 			bne -
+!if .BOGUS_READS != 0 {
+			beq .entry_news
+.new_sector
+			lda <.bogus_reads
+			beq +
+			dec <.bogus_reads
+			bpl .next_header_bogus
++
+} else {
 			top
 .new_sector
+}
 			ldx <.is_loaded_sector			;initially $ff
+.entry_news
 !if .SANCHECK_MAX_SECTORS = 1 {
 			cpx <.max_sectors
 			bcs .next_header_sect_num
@@ -1164,7 +1175,7 @@ b			= $48
 			;bne = fallthrough	beq = take	d0/f0
 			;bcs = fallthrough	beq = take	b0/f0 sbc #$90
 
-!if (.SANCHECK_CYCLES | .BOGUS_READS) = 0 {
+!if (.SANCHECK_CYCLES) = 0 {
 .gcr_h_or_s		beq .new_sector				;this is either $b0 or $f0
 } else {
 .gcr_h_or_s		beq .sector_done			;this is either $b0 or $f0
@@ -1240,15 +1251,6 @@ b			= $48
                         bpl .next_header_cycles                 ;read too fast?
                         ;lda $1c0d				;XXX TODO we could eor here and check eored result
                         ;bmi .next_header_cycles                 ;read too slow?
-}
-!if .BOGUS_READS != 0 {
-			lda <.bogus_reads
-			beq +
-			dec <.bogus_reads
-			bpl .next_header_bogus
-+
-}
-!if (.SANCHECK_CYCLES | .BOGUS_READS) = 1 {
 			jmp .new_sector
 }
 !if .SANCHECK_CYCLES = 1 {
