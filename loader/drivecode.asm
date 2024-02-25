@@ -548,12 +548,8 @@ b			= $48
 ;			bit <.last_track_of_file		;eof?
 ;			bpl .postpone
 ;}
-.send_sector_data_setup
-			inc .branch + 1
-			ldy <.block_size			;blocksize + 1
 .transfer
 			inx					;increase counter, as we go through sendloop twice, for preamble and for data
-			bcc .preloop + 1
 			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG	;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
 			lda (.preamble_data_),y			;.preamble_data = $68 = pla
@@ -562,23 +558,22 @@ b			= $48
 			bmi *-3
 			sax $1800				;76540213	-> ddd-0d1d
 
-			dey
 			asl					;6540213. 7
-			ora <.val10				;654+213. 7	-> ddd+2d3d
+			ora #$10				;654+213. 7	-> ddd+2d3d
 			bit $1800
 			bpl *-3
 			sta $1800
 
+			dey
 			ror					;7654+213 .
 			asr #%11110000				;.7654... .	-> ddd54d-d
-			bit $00
 			bit $1800
 			bmi *-3
 			sta $1800
 
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d-d
-			cpy <.valff
+			cpy #$ff
 			bit $1800
 			bpl *-3
 			sta $1800
@@ -588,9 +583,13 @@ b			= $48
 !if >*-1 != >.preloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
 }
-			cpx #$0b				;check on second round, clear carry by that
-			bcc .send_sector_data_setup		;second round, send sector data now
-
+			lda .branch + 1				;check on second round, clear carry by that
+			lsr
+			bcs +
+			inc .branch + 1
+			ldy <.block_size			;blocksize + 1
+			bne .preloop + 1
++
 			lda #.BUSY				;8 cycles until poll, busy needs to be set asap
 			bit $1800
 			bmi *-3
