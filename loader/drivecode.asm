@@ -48,6 +48,7 @@
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .INTERLEAVE		= 4
+.VARIABLE_INTERLEAVE	= 1
 
 ;constants
 .STEPPING_SPEED		= $18
@@ -85,7 +86,7 @@
 .to_track		= .zp_start + $00			;DT
 .blocks_hi 		= .zp_start + $01
 .blocks_lo 		= .zp_start + $02
-;.free			= .zp_start + $03
+.interleave		= .zp_start + $03
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
@@ -548,8 +549,12 @@ b			= $48
 ;			bit <.last_track_of_file		;eof?
 ;			bpl .postpone
 ;}
+.send_sector_data_setup
+			inc .branch + 1
+			ldy <.block_size			;blocksize + 1
 .transfer
 			inx					;increase counter, as we go through sendloop twice, for preamble and for data
+			bcc .preloop + 1
 			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG	;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
 			lda (.preamble_data_),y			;.preamble_data = $68 = pla
@@ -583,13 +588,9 @@ b			= $48
 !if >*-1 != >.preloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
 }
-			lda .branch + 1				;check on second round, clear carry by that
-			lsr
-			bcs +
-			inc .branch + 1
-			ldy <.block_size			;blocksize + 1
-			bne .preloop + 1
-+
+			cpx #$0b				;check on second round, clear carry by that
+			bcc .send_sector_data_setup		;second round, send sector data now
+
 			lda #.BUSY				;8 cycles until poll, busy needs to be set asap
 			bit $1800
 			bmi *-3
@@ -958,7 +959,12 @@ b			= $48
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
 			eor .bitrate,y
 			sta $1c00
-
+!if .VARIABLE_INTERLEAVE {
+			lda #$03
+			cpy #$03
+			adc #0
+			sta <.interleave
+}
 			lda .slow_tab,y
 			ldy #$4c
 			ldx #>.gcr_slow1_00
@@ -995,6 +1001,18 @@ b			= $48
 			top
 +
 			dec <.blocks_hi
+!if .VARIABLE_INTERLEAVE = 1 {
+			adc .interleave
+			cmp <.max_sectors			;wrap around?
+			bcc +					;nope, store sector and do a BRA, bcc will always be bne
+			adc #$00				;increase
+-
+			sec					;modulo INTERLEAVE
+			sbc .interleave				;subtract some #sectors
+			bcs -					;until underflow
+			adc .interleave
+			clc					;XXX TODO should not happen and not needed?
+} else {
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc +					;nope, store sector and do a BRA, bcc will always be bne
@@ -1009,6 +1027,7 @@ b			= $48
 			bcs -					;until underflow
 			adc #.INTERLEAVE
 			clc					;XXX TODO should not happen and not needed?
+}
 }
 +
 			sta <.sector				;start next track with sector = 0
