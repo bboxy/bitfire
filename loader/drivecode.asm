@@ -122,6 +122,7 @@
 .dir_entry_num		= .zp_start + $7a
 .last_track_of_file	= .zp_start + $7c
 .val01			= .zp_start + $6f
+.bitrate		= .zp_start + $0c
 
 .DT			= 18					;dir_track
 .DS			= 18					;dir_sector
@@ -263,12 +264,12 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
+			;bvs .read_loop
+			;bvs .read_loop
+			;bvs .read_loop
+			;bvs .read_loop
+			;bvs .read_loop
+			;bvs .read_loop
 .saveguard
 			jmp .next_header_overshoot
 .gcr_end
@@ -404,7 +405,7 @@ b			= $48
 +
 			adc .dir_load_addr_hi,y						;add load address highbyte
 			sta <.preamble_data + 2 + CONFIG_DEBUG				;block address high
-			ldy #$05 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldy #$ff
 			bne .start_send
 
                         !byte                                                     $a0 xor b, $ee, $ef, $e7, $02 xor a, $ea, $eb, $e3		;9 bytes
@@ -509,10 +510,10 @@ b			= $48
 			; CODE TO SLOW DOWN GCR LOOP DEPENDING ON BITRATE
 			;
 			;----------------------------------------------------------------------------------------------------
-
-			nop
-.bitrate
-			!byte $60, $40, $20, $00
+-
+			iny
+			lda (.preamble_data_),y
+			bcs +
 .gcr_slow1_00
 .gcr_slow1_20	= * + 6
 .tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
@@ -520,18 +521,16 @@ b			= $48
 .gcr_slow1_40
 			lda $1c01
 			jmp (.gcr_slow_back)			;waste 5 cycles
-
--
-			;XXX TODO could use lda/sta ($xx),y to save bytes, this way we use 16 bit addresses despite preamble being in ZP
-			lda (.preamble_data_),y
++
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
 			sta (.preamble_data_),y
 .start_send
 			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
-			dey
-			bpl -
-			bmi .transfer
+			cpy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			sec
+			bne -
+			beq .transfer
 
 			;would also suit at $91, $95, $99
 .next_header_ = * + 7
@@ -555,7 +554,6 @@ b			= $48
 .transfer
 			inx					;increase counter, as we go through sendloop twice, for preamble and for data
 			bcc .preloop + 1
-			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG	;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 .preloop
 			lda (.preamble_data_),y			;.preamble_data = $68 = pla
 								;XXX TODO also use $1802 to send data by setting to input?
@@ -939,14 +937,14 @@ b			= $48
 			dex
 			rts
 .set_bitrate
-.const			= <(.read_loop - .bvs - 3 - 3 - $f*2)
+.const			= <(.read_loop - .bvs - 3 - 3 - $9*2)
 
 			tay
 !if .SANCHECK_CYCLES = 1 {
 			sta <.density
 }
 			adc #.const
-			ldx #$0f*2
+			ldx #$09*2
 -
 			sta <.bvs + 1,x
 			adc #2
@@ -957,7 +955,7 @@ b			= $48
 			lda $1c00
 			ora #$60
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
-			eor .bitrate,y
+			eor <.bitrate,y
 			sta $1c00
 !if .VARIABLE_INTERLEAVE {
 			lda #$03
@@ -1006,12 +1004,12 @@ b			= $48
 			cmp <.max_sectors			;wrap around?
 			bcc +					;nope, store sector and do a BRA, bcc will always be bne
 			adc #$00				;increase
+			sec
 -
-			sec					;modulo INTERLEAVE
-			sbc .interleave				;subtract some #sectors
+			tay
+			sbc <.interleave				;subtract some #sectors
 			bcs -					;until underflow
-			adc .interleave
-			clc					;XXX TODO should not happen and not needed?
+			tya
 } else {
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
@@ -1021,12 +1019,12 @@ b			= $48
 			and #$03				;modulo 4
 } else {
 			adc #$00				;increase
+			sec
 -
-			sec					;modulo INTERLEAVE
+			tay					;modulo INTERLEAVE
 			sbc #.INTERLEAVE			;subtract some #sectors
 			bcs -					;until underflow
-			adc #.INTERLEAVE
-			clc					;XXX TODO should not happen and not needed?
+			tya
 }
 }
 +

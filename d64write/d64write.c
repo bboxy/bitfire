@@ -1171,7 +1171,7 @@ int main(int argc, char *argv[]) {
         printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
         printf("-B, --boot <file> [line]		Writes a standard file into the dirtrack. All PRG entries from dirart are linked to that file. Optionally it is linked to given line number only.\n");
         printf("-a, --art <num> <dirart.prg/.png>	A dirart can be provided, it extracts <num> lines of a petscii or .png screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
-        printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
+        //printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("-F, --40				Enable 40 track support.\n");
         printf("-f, --free <num>			Set blocks free to num.\n");
         printf("-v, --verbose				Verbose output.\n");
@@ -1201,15 +1201,15 @@ int main(int argc, char *argv[]) {
                 fatal_message("value for %s must be in the range from 0 to 9180\n", argv[c]);
             }
         }
-        else if(!strcmp(argv[c], "--interleave") || !strcmp(argv[c], "-I")) {
-            if (argc - c > 1) interleave = strtoul(argv[++c], NULL, 10);
-            else {
-                fatal_message("missing value for option '%s'\n", argv[c]);
-            }
-            if (interleave < 1 || interleave > 16) {
-                fatal_message("value for %s must be in the range from 1 to 16\n", argv[c]);
-            }
-        }
+        //else if(!strcmp(argv[c], "--interleave") || !strcmp(argv[c], "-I")) {
+        //    if (argc - c > 1) interleave = strtoul(argv[++c], NULL, 10);
+        //    else {
+        //        fatal_message("missing value for option '%s'\n", argv[c]);
+        //    }
+        //    if (interleave < 1 || interleave > 16) {
+        //        fatal_message("value for %s must be in the range from 1 to 16\n", argv[c]);
+        //    }
+        //}
         else if(!strcmp(argv[c], "--side") || !strcmp(argv[c], "-S")) {
             if (argc -c > 1) side = strtoul(argv[++c], NULL, 10);
             else {
