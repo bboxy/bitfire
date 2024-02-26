@@ -47,10 +47,10 @@
 .BOGUS_READS		= 1
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
-.INTERLEAVE		= 4
 .VARIABLE_INTERLEAVE	= 1
 
 ;constants
+.INTERLEAVE		= 4
 .STEPPING_SPEED		= $18
 .EOR_VAL		= $7f
 .DIR_SECT		= 18
@@ -511,9 +511,10 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 -
-			iny
-			lda (.preamble_data_),y
-			bcs +
+.start_send
+			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
+			bne +
+			nop
 .gcr_slow1_00
 .gcr_slow1_20	= * + 6
 .tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
@@ -522,15 +523,14 @@ b			= $48
 			lda $1c01
 			jmp (.gcr_slow_back)			;waste 5 cycles
 +
+			cpy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			beq .transfer
+			iny
+			lda (.preamble_data_),y
 			sbx #$00
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
 			sta (.preamble_data_),y
-.start_send
-			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
-			cpy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
-			sec
-			bne -
-			beq .transfer
+			bcs -
 
 			;would also suit at $91, $95, $99
 .next_header_ = * + 7
@@ -953,7 +953,7 @@ b			= $48
 			bpl -
 
 			lda $1c00
-			ora #$60
+			ora #$e0
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
 			eor <.bitrate,y
 			sta $1c00
@@ -1191,7 +1191,7 @@ b			= $48
 			;bne = fallthrough	beq = take	d0/f0
 			;bcs = fallthrough	beq = take	b0/f0 sbc #$90
 
-!if (.SANCHECK_CYCLES) = 0 {
+!if .SANCHECK_CYCLES = 0 {
 .gcr_h_or_s		beq .new_sector				;this is either $b0 or $f0
 } else {
 .gcr_h_or_s		beq .sector_done			;this is either $b0 or $f0

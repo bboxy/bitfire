@@ -451,8 +451,12 @@ checksum
 		inx
 		beq +
 		inc endh
+!if CHECKSUM_CLEAR == 1 {
 		inc endc
+}
+		dop
 +
+		sec
 		lda loads + 1,y
 		sbc #$00
 		sta srch + 1
