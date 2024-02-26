@@ -273,8 +273,19 @@ b			= $48
 .saveguard
 			jmp .next_header_overshoot
 .gcr_end
-			eor <.chksum + 1,x
+			eor <.chksum + 1
+			eor $0102
 			tax
+			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
+!if .SANCHECK_TRAILING_ZERO = 1 {
+			ror					;xxxxx010 1
+			bcc .saveguard				;check bit 0 of CONST1
+			sbc #2					;clear out constant (incl. carry) if anything goes wrong, offset into table will be off and checksum will fail?
+} else {
+			and #$f0
+			ror					;C = 0
+}
+			tay
 			jmp .back_gcr
 
 !ifdef .second_pass {
@@ -1000,25 +1011,24 @@ b			= $48
 +
 			dec <.blocks_hi
 !if .VARIABLE_INTERLEAVE = 1 {
-			adc .interleave
+			adc <.interleave
 			cmp <.max_sectors			;wrap around?
 			bcc +					;nope, store sector and do a BRA, bcc will always be bne
 			adc #$00				;increase
 			sec
 -
 			tay
-			sbc <.interleave				;subtract some #sectors
+			sbc <.interleave			;subtract some #sectors
 			bcs -					;until underflow
 			tya
 } else {
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc +					;nope, store sector and do a BRA, bcc will always be bne
-!if .INTERLEAVE = 4 {
 			adc #$00				;increase
+!if .INTERLEAVE = 4 {
 			and #$03				;modulo 4
 } else {
-			adc #$00				;increase
 			sec
 -
 			tay					;modulo INTERLEAVE
@@ -1163,28 +1173,17 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
-			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 !if .SANCHECK_TRAILING_ZERO = 1 {
 ;			ror					;xxxxx010 1
 ;			bcc .next_header
 ;			tay
 ;			lda .tab4444000_lo - 2,y
-			ror					;xxxxx010 1
-			bcc .next_header_trail_zero		;check bit 0 of CONST1
-			sbc #2					;clear out constant (incl. carry) if anything goes wrong, offset into table will be off and checksum will fail?
-			tay
 			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
 			bne .next_header_trail_zero
-} else {
-			and #$f0
-			ror					;C = 0
-			tay
 }
 			txa					;fetch checksum calculated so far
 			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
-			ldy #$00
-			eor (.v0102 + 1),y
-			eor (.v0103 + 1),y
+			eor $0103
 			ldx <.threes + 1
 			eor <.tab00333330_hi,x
 			bne .next_header_bad_chksum		;checksum check failed? reread
@@ -1196,7 +1195,7 @@ b			= $48
 } else {
 .gcr_h_or_s		beq .sector_done			;this is either $b0 or $f0
 }
-			iny					;Y = 1
+			ldy #$01
 -
 			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
 			lda $0105,y				;extract sector and track from header
