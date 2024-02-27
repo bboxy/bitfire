@@ -137,6 +137,7 @@ ___			= $ff
 
 .valff			= $5a
 .val10			= $2b
+.val04			= $77
 
 a			= $15
 b			= $48
@@ -386,8 +387,8 @@ b			= $48
 			sta .directory,y
 			bne -
 			dec <.blocks_on_list
-			lax <.filenum
-			;!byte $a7, $50 xor b			;do xor 48 here, filenum needs to be $18 anyway
+			lda <.filenum
+			;!byte $a5, $50 xor b			;do xor 48 here, filenum needs to be $18 anyway
 			inc .en_dis_td
 			!byte $0d xor a				;-> clc as we xor $15 -> more or less a nop
 			jmp .drivecode_entry
@@ -521,10 +522,10 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 -
-.start_send
-			ldx #$09				;greatness, just the value we need for masking with sax $1800 and for preamble encoding \o/
-			bne +
-			nop
+			lda (.preamble_data_),y
+			dex
+			bne +					;BRA
+
 .gcr_slow1_00
 .gcr_slow1_20	= * + 6
 .tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
@@ -533,14 +534,15 @@ b			= $48
 			lda $1c01
 			jmp (.gcr_slow_back)			;waste 5 cycles
 +
-			cpy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
-			beq .transfer
-			iny
-			lda (.preamble_data_),y
-			sbx #$00
+			sbx #$00				;sets C, always
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
 			sta (.preamble_data_),y
-			bcs -
+.start_send
+			ldx #$0a				;greatness, just the value we need for masking with sax $1800 and for preamble encoding (-1, dex) \o/
+			cpy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			beq .preloop
+			iny
+			bpl -					;BRA
 
 			;would also suit at $91, $95, $99
 .next_header_ = * + 7
@@ -558,12 +560,11 @@ b			= $48
 ;			bit <.last_track_of_file		;eof?
 ;			bpl .postpone
 ;}
-.send_sector_data_setup
+.dataloop
+			inx					;increase counter, as we go through sendloop twice, for preamble and for data, so mask is $0a and then $0b
 			inc .branch + 1
 			ldy <.block_size			;blocksize + 1
-.transfer
-			inx					;increase counter, as we go through sendloop twice, for preamble and for data
-			bcc .preloop + 1
+			dop
 .preloop
 			lda (.preamble_data_),y			;.preamble_data = $68 = pla
 								;XXX TODO also use $1802 to send data by setting to input?
@@ -596,14 +597,16 @@ b			= $48
 !if >*-1 != >.preloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
 }
-			cpx #$0b				;check on second round, clear carry by that
-			bcc .send_sector_data_setup		;second round, send sector data now
+			txa					;$0a/$0b
+			lsr					;$05 and C = 0/1
+			bcc .dataloop				;second round, send sector data now
 
-			lda #.BUSY				;8 cycles until poll, busy needs to be set asap
+			lsr					;$02 and C = 1
 			bit $1800
 			bmi *-3
 			sta $1800				;signal busy after atn drops
-			dec .branch + 1
+
+			dec .branch + 1				;fix branch
 !if CONFIG_DEBUG != 0 {
 			lda #$0d
 			sta .preamble_data + 5
@@ -637,13 +640,8 @@ b			= $48
 ;}
 			;XXX TODO make this check easier? only done here?
 			bit <.last_track_of_file		;EOF
-!if .BOGUS_READS = 1 & .DELAY_SPIN_DOWN = 1 {
-			bmi *+5
-			jmp .next_track
-} else {
 			bpl .next_track
-}
-
+.eof
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
 			top
 
@@ -713,37 +711,26 @@ b			= $48
 
 			lda <.filename
 
+			bne .do_command				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
+
+.reset			jmp (.reset_drive)
+
 			;----------------------------------------------------------------------------------------------------
 			;
-			; LOAD FILE / EXECUTE COMMAND, $00..$7f, $ef, $f0..$fe, $ff
-			; XXX TODO files up to $ee would be possible in theory, but more dir sectors would be needed
+			; INCREMENT TRACK
 			;
 			;----------------------------------------------------------------------------------------------------
 
-			beq .reset				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
-			eor #$ff				;invert bits, saves a byte in resident code, and makes reset detection easier
-.drivecode_entry
-			cmp #BITFIRE_LOAD_NEXT			;carry clear = load normal file, carry set = request disk
-			beq .clc				;clear carry and skip sta <.filenum by that, filenum = $18 == clc
-.clc = * + 1
-			sta <.filenum				;set new filenum
-			lax $1c00
-			ora #.MOTOR_ON				;always turn motor on
-			bcs +
-			ora #.LED_ON				;only turn LED on if file is loaded
-+
-			sta $1c00
-!if .BOGUS_READS != 0 {
-			txa
-			and #.MOTOR_ON
-			bne +
-			inc <.bogus_reads
-+
-}
-
-			ldy #.DIR_SECT				;second dir sector
-			lax <.filenum				;load filenum
-			bcc .load_file
+			;XXX TODO two ways to increment track, can we make this code common?
+.next_track
+			lda #.DIR_TRACK
+;!if .POSTPONED_XFER = 1 {
+;			sec					;set by send_block and also set if beq
+;}
+-
+			isc <.to_track
+			beq -					;skip dirtrack however
+			jmp .load_track
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -766,22 +753,33 @@ b			= $48
 
 			;----------------------------------------------------------------------------------------------------
 			;
-			; INCREMENT TRACK
+			; LOAD FILE / EXECUTE COMMAND, $00..$7f, $ef, $f0..$fe, $ff
+			; XXX TODO files up to $ee would be possible in theory, but more dir sectors would be needed
 			;
 			;----------------------------------------------------------------------------------------------------
-
-			;XXX TODO two ways to increment track, can we make this code common?
-.next_track
-			lda #.DIR_TRACK
-;!if .POSTPONED_XFER = 1 {
-;			sec					;set by send_block and also set if beq
-;}
--
-			isc <.to_track
-			beq -					;skip dirtrack however
-			bne .load_track
-
-.reset			jmp (.reset_drive)
+.do_command
+			eor #$ff				;invert bits, saves a byte in resident code, and makes reset detection easier
+								;XXX TODO could even be omitted if we store directory inverted?
+.drivecode_entry
+			cmp #BITFIRE_LOAD_NEXT			;carry clear = load normal file, carry set = request disk
+			beq .clc				;clear carry and skip sta <.filenum by that, filenum = $18 == clc
+.clc = * + 1
+			sta <.filenum				;set new filenum
+			lda $1c00
+!if .BOGUS_READS != 0 {
+			bit .val04				;check if MOTOR_ON
+			bne +
+			inc <.bogus_reads			;motor was off, so better be save than sorry on spin up
++
+}								;A and C still untouched \o/
+			ora #.MOTOR_ON				;always turn motor on
+			bcs +
+			ora #.LED_ON				;only turn LED on if file is loaded
++
+			sta $1c00
+			ldy #.DIR_SECT				;second dir sector
+			lax <.filenum				;load filenum
+			bcs .turn_disc				;turn disc command received
 
 			;----------------------------------------------------------------------------------------------------
 			;
