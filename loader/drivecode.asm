@@ -42,7 +42,6 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.SANCHECK_CYCLES        = 0   ;start a timer when reading sync + whole sector, if this took too short, discard sector, as we are prone to false positives then.
 .SANCHECK_MAX_SECTORS	= 0
 .BOGUS_READS		= 1
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
@@ -171,7 +170,7 @@ b			= $48
                         !byte .S0, .S1, $e0 xor a, $16, $d0 xor a, $1c, $c0 xor a, $14, .S1, .S0, $a0 xor a, $12, $90 xor a, $18, ___      , ___	;30
                         !byte ___, ___, ___      , ___, ___      , ___, ___      , ___, ___, ___, ___      , ___, ___      , ___, ___      , ___	;40
                         !byte ___, ___, ___      , $0e, ___      , $0f, .DT      , $07, ___, ___, $ff      , $0a, ___      , $0b, ___      , $03	;50
-                        !byte ___, ___, ___      , ___, ___      , $0d, $02      , $05, .P1, .P2, ___      , $00, ___      , $09, ___      , $01	;60
+                        !byte ___, ___, ___      , ___, ___      , $0d, $00      , $05, .P1, .P2, ___      , $00, ___      , $09, ___      , $01	;60
                         !byte ___, ___, ___      , $06, ___      , $0c, $b0      , $04, ___, $f0, ___      , $02, ___      , $08			;70
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
@@ -738,8 +737,7 @@ b			= $48
 			txa
 			and #.MOTOR_ON
 			bne +
-			lda #$01
-			sta <.bogus_reads
+			inc <.bogus_reads
 +
 }
 
@@ -948,32 +946,30 @@ b			= $48
 			dex
 			rts
 .set_bitrate
-.const			= <(.read_loop - .bvs - 3 - 3 - $9*2)
+.const			= <(.read_loop - .bvs - 3 - 1 - $a*2)
 
 			tay
-!if .SANCHECK_CYCLES = 1 {
-			sta <.density
-}
 			adc #.const
-			ldx #$09*2
+			ldx #$0a*2
 -
-			sta <.bvs + 1,x
+			sta <.bvs - 1,x
 			adc #2
 			dex
 			dex
-			bpl -
+			bne -
 
+!if .VARIABLE_INTERLEAVE {
+			txa
+			cpy #$03
+			adc #3
+			sta <.interleave
+}
 			lda $1c00
 			ora #$e0
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
 			eor <.bitrate,y
 			sta $1c00
-!if .VARIABLE_INTERLEAVE {
-			lda #$03
-			cpy #$03
-			adc #0
-			sta <.interleave
-}
+
 			lda .slow_tab,y
 			ldy #$4c
 			ldx #>.gcr_slow1_00
@@ -1062,20 +1058,18 @@ b			= $48
 			pha
 			iny
 			bne -
-!if .BOGUS_READS != 0 {
-			beq .entry_news
-.new_sector
-			lda <.bogus_reads
-			beq +
-			dec <.bogus_reads
-			bpl .next_header_bogus
-+
-} else {
+!if .BOGUS_READS = 0 {
 			top
 .new_sector
+} else {
+			beq .skip + 2
+.new_sector
+			dec <.bogus_reads
+			bpl .next_header_bogus
+			inc <.bogus_reads
+.skip
 }
 			ldx <.is_loaded_sector			;initially $ff
-.entry_news
 !if .SANCHECK_MAX_SECTORS = 1 {
 			cpx <.max_sectors
 			bcs .next_header_sect_num
@@ -1165,8 +1159,6 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 
-
-
 			;----------------------------------------------------------------------------------------------------
 			;
 			; READ A SECTOR WITH HEADER AND DO VARIOUS SANITY CHECKS ON IT (HEADER ALREADY ON STACK)
@@ -1174,10 +1166,6 @@ b			= $48
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
 !if .SANCHECK_TRAILING_ZERO = 1 {
-;			ror					;xxxxx010 1
-;			bcc .next_header
-;			tay
-;			lda .tab4444000_lo - 2,y
 			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
 			bne .next_header_trail_zero
 }
@@ -1187,14 +1175,10 @@ b			= $48
 			ldx <.threes + 1
 			eor <.tab00333330_hi,x
 			bne .next_header_bad_chksum		;checksum check failed? reread
+
 			;bne = fallthrough	beq = take	d0/f0
 			;bcs = fallthrough	beq = take	b0/f0 sbc #$90
-
-!if .SANCHECK_CYCLES = 0 {
 .gcr_h_or_s		beq .new_sector				;this is either $b0 or $f0
-} else {
-.gcr_h_or_s		beq .sector_done			;this is either $b0 or $f0
-}
 			ldy #$01
 -
 			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
@@ -1208,10 +1192,10 @@ b			= $48
 			eor <.track				;second byte is track
 			beq .read_sector			;always falls through if we come from sector read (negtive is alsways != 0), else it decides if we continue with sector payload or start with a new header
 !if CONFIG_DEBUG = 0 {
-.next_header_overshoot
-}
-.next_header_sect_num
 .next_header_trail_zero
+}
+.next_header_overshoot
+.next_header_sect_num
 .next_header_bad_chksum
 .next_header_wrong_type
 .next_header_cycles
@@ -1219,28 +1203,12 @@ b			= $48
 .next_header
 			ldy #$52				;type (header)
 .read_sector
-!if .SANCHECK_CYCLES = 1 {
-			lax <.density
-}
 -
 			bit $1c00				;wait for start of sync
 			bmi -
 
-!if .SANCHECK_CYCLES = 1 {
-			adc $1c01				;adc $1c01 would work, if we could be sure we return with A < $80 from checksum check or lda $1c00 would be < $7f, but can be $7f if write protect is on
-			;XXX TODO setup 2 vals at once? ldy #$7e inx iny bpl?
-                        ;lda .time_lo_s,x                        ;setup safeguard timers for sane range of rotation speeds
-                        ;sta $1c04
-                        ;lda .time_hi_s,x
-                        ;sta $1c05
-                        lda .time_lo_f,x
-                        sta $1804
-                        lda .time_hi_f,x
-                        sta $1805
-} else {
 			adc $1c01
 			;clv
-}
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
@@ -1260,37 +1228,8 @@ b			= $48
 			ldx <.val07ff - $52,y			;will we receive 8 or 256 bytes
 			txs					;bytes to read
 			jmp .gcr_entry				;35 cycles until entry, 36 would be better
-.sector_done
-!if .SANCHECK_CYCLES = 1 {
-                        lda $180d
-                        bpl .next_header_cycles                 ;read too fast?
-                        ;lda $1c0d				;XXX TODO we could eor here and check eored result
-                        ;bmi .next_header_cycles                 ;read too slow?
-			jmp .new_sector
-}
-!if .SANCHECK_CYCLES = 1 {
-.t0_f                   = $ffff - $d7cc + 50 ;2833
-.t1_f                   = $ffff - $da50 + 50 ;25af
-.t2_f                   = $ffff - $dcc8 + 50 ;2337
-.t3_f                   = $ffff - $df49 + 50 ;20b6
-
-.t0_s                   = $ffff - $d603 ;29fc (50 / 160 * 160)  ;32*2
-.t1_s                   = $ffff - $d8a8 ;2757 (50 / 160 * 150)  ;30*2
-.t2_s                   = $ffff - $db3b ;24c4 (50 / 160 * 140)  ;28*2
-.t3_s                   = $ffff - $ddd7 ;2228 (50 / 160 * 130)  ;26*2
-
-
-;.time_lo_s
-;                        !byte <.t0_s, <.t1_s, <.t2_s, <.t3_s
-;.time_hi_s
-;                        !byte >.t0_s, >.t1_s, >.t2_s, >.t3_s
-.time_lo_f
-                        !byte <.t0_f, <.t1_f, <.t2_f, <.t3_f
-.time_hi_f
-                        !byte >.t0_f, >.t1_f, >.t2_f, >.t3_f
-}
 !if CONFIG_DEBUG != 0 {
-.next_header_overshoot
+.next_header_trail_zero
 			inc <.num_error
 			jmp .next_header
 }
@@ -1354,20 +1293,14 @@ b			= $48
 			sax .dir_diskside
 
 			dex					;disable all interrupts
-;!if .SANCHECK_CYCLES = 1 {
 			stx $180e
-;}
 			stx $1c0e
-;!if .SANCHECK_CYCLES = 1 {
 			ldx $180d				;clear all IRQ flags to ack possibly pending IRQs
-;}
 			ldx $1c0d
 
 			ldx #$c0				;enable timer 1 flag
 			stx $1c0e
-;!if .SANCHECK_CYCLES = 1 {
 			stx $180e
-;}
 			;cli					;now it is save to allow interrupts again, as they won't happen anymore, okay, it is a lie, timer irqs would happen, but we keep sei
 
 			asl;ldx #.BUSY				;signal that we are ready for transfer
