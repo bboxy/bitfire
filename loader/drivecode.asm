@@ -518,10 +518,11 @@ b			= $48
 
 			;----------------------------------------------------------------------------------------------------
 			;
-			; CODE TO SLOW DOWN GCR LOOP DEPENDING ON BITRATE
+			; CODE TO ENCODE PREAMBLE, PART 1
 			;
 			;----------------------------------------------------------------------------------------------------
 -
+
 			lda (.preamble_data_),y
 			dex
 			bne +					;BRA
@@ -530,9 +531,21 @@ b			= $48
 .gcr_slow1_20	= * + 6
 .tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
                         !byte                     $80, $b0, $80, $a0, $80, $b0, $80, $a0, $80, $b0, $80, $a0
+
+			;----------------------------------------------------------------------------------------------------
+			;
+			; CODE TO SLOW DOWN GCR LOOP DEPENDING ON BITRATE
+			;
+			;----------------------------------------------------------------------------------------------------
 .gcr_slow1_40
 			lda $1c01
 			jmp (.gcr_slow_back)			;waste 5 cycles
+
+			;----------------------------------------------------------------------------------------------------
+			;
+			; CODE TO ENCODE PREAMBLE, PART 2
+			;
+			;----------------------------------------------------------------------------------------------------
 +
 			sbx #$00				;sets C, always
 			eor <.ser2bin,x				;swap bits 3 and 0 if they differ, table is 4 bytes only
@@ -564,7 +577,7 @@ b			= $48
 			inx					;increase counter, as we go through sendloop twice, for preamble and for data, so mask is $0a and then $0b
 			inc .branch + 1
 			ldy <.block_size			;blocksize + 1
-			dop
+			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
 .preloop
 			lda (.preamble_data_),y			;.preamble_data = $68 = pla
 								;XXX TODO also use $1802 to send data by setting to input?
@@ -609,7 +622,7 @@ b			= $48
 			dec .branch + 1				;fix branch
 !if CONFIG_DEBUG != 0 {
 			lda #$0d
-			sta .preamble_data + 5
+			sta <.preamble_data + 5
 }
 ;-
 ;			bit $1c0d
@@ -717,42 +730,6 @@ b			= $48
 
 			;----------------------------------------------------------------------------------------------------
 			;
-			; INCREMENT TRACK
-			;
-			;----------------------------------------------------------------------------------------------------
-
-			;XXX TODO two ways to increment track, can we make this code common?
-.next_track
-			lda #.DIR_TRACK
-;!if .POSTPONED_XFER = 1 {
-;			sec					;set by send_block and also set if beq
-;}
--
-			isc <.to_track
-			beq -					;skip dirtrack however
-			jmp .load_track
-
-			;----------------------------------------------------------------------------------------------------
-			;
-			; TURN DISC / LOAD NEW DIR SECTOR
-			;
-			;----------------------------------------------------------------------------------------------------
-.turn_disc
-			eor .dir_diskside			;compare side info
-			beq .idle_
-.load_dir_sect
-			ldx #.DIR_TRACK				;set target track to 18
-			stx <.to_track
-			sty <.dir_sector
-			tya
-			dec .en_dis_td				;enable jump back
-			ldy #$00
-			sty <.blocks_hi
-			sty <.is_cached_sector			;invalidate cached sector (must be != DIR_SECT)
-			beq .turn_disc_entry			;BRA a = sector, y = 0 = index
-
-			;----------------------------------------------------------------------------------------------------
-			;
 			; LOAD FILE / EXECUTE COMMAND, $00..$7f, $ef, $f0..$fe, $ff
 			; XXX TODO files up to $ee would be possible in theory, but more dir sectors would be needed
 			;
@@ -779,7 +756,41 @@ b			= $48
 			sta $1c00
 			ldy #.DIR_SECT				;second dir sector
 			lax <.filenum				;load filenum
-			bcs .turn_disc				;turn disc command received
+			bcc .load_file				;turn disc command received
+
+			;----------------------------------------------------------------------------------------------------
+			;
+			; TURN DISC / LOAD NEW DIR SECTOR
+			;
+			;----------------------------------------------------------------------------------------------------
+.turn_disc
+			eor .dir_diskside			;compare side info
+			beq .idle_
+.load_dir_sect
+			ldx #.DIR_TRACK				;set target track to 18
+			stx <.to_track
+			sty <.dir_sector
+			tya
+			dec .en_dis_td				;enable jump back
+			ldy #$00
+			sty <.blocks_hi
+			sty <.is_cached_sector			;invalidate cached sector (must be != DIR_SECT)
+			beq .turn_disc_entry			;BRA a = sector, y = 0 = index
+
+			;----------------------------------------------------------------------------------------------------
+			;
+			; INCREMENT TRACK
+			;
+			;----------------------------------------------------------------------------------------------------
+.next_track
+			lda #.DIR_TRACK
+;!if .POSTPONED_XFER = 1 {
+;			sec					;set by send_block and also set if beq
+;}
+-
+			isc <.to_track
+			beq -					;skip dirtrack however
+			bne .load_track
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -794,7 +805,6 @@ b			= $48
 +
 			cpy <.dir_sector			;is this dir sector loaded?
 			bne .load_dir_sect
-
 			sta <.dir_entry_num			;and save
 
 			;----------------------------------------------------------------------------------------------------
@@ -1351,107 +1361,3 @@ b			= $48
 }
 
 .second_pass
-
-;table_start
-;>C:15d2  0e 0a f0 00  06 02 e1 4e  4f 47 d2 4a  4b 43 c3 b4   .......NOG.JKC..
-;>C:15e2  4d 45 a5 40  49 41 96 46  4c 44 87 42  48 78 69 5a   ME.@IA.FLD.BHxiZ
-;>C:15f2  0f 0b 0d 09  0c 08 f0 3e  3f 37 0e 3a  3b 33 70 4b   .......>?7.:;3pK
-;>C:1602  3d 35 0f 30  39 31 60 36  3c 34 07 32  38 3c 2d 1e   =5.091`6<4.28<-.
-;>C:1612  07 03 05 01  04 0f b0 2e  2f 27 0a 2a  2b 23 30 e1   ......../'.*+#0.
-;>C:1622  2d 25 0b 20  29 21 20 26  2c 24 03 22  28
-
-;.C:152e  EA          NOP
-;.C:152f  EA          NOP
-;.C:1530  EA          NOP
-;.C:1531  48          PHA
-;.C:1532  49 00       EOR #$00
-;.C:1534  49 00       EOR #$00
-;.C:1536  85 83       STA $83
-;.C:1538  AD 01 1C    LDA $1C01
-;.C:153b  A2 07       LDX #$07
-;.C:153d  87 A0       SAX $A0
-;.C:153f  29 F8       AND #$F8
-;.C:1541  A8          TAY
-;.C:1542  A2 3E       LDX #$3E
-;.C:1544  AD 01 1C    LDA $1C01
-;.C:1547  87 B9       SAX $B9
-;.C:1549  4B C1       ASR #$C1
-;.C:154b  AA          TAX
-;.C:154c  B9 00 02    LDA $0200,Y
-;.C:154f  5D 00 02    EOR $0200,X
-;.C:1552  BA          TSX
-;.C:1553  48          PHA
-;.C:1554  F0 54       BEQ $15AA
-;.C:1556  5D 02 01    EOR $0102,X
-;.C:1559  5D 03 01    EOR $0103,X
-;.C:155c  85 85       STA $85
-;.C:155e  AD 01 1C    LDA $1C01
-;.C:1561  A2 0F       LDX #$0F
-;.C:1563  87 C7       SAX $C7
-;.C:1565  6B F0       ARR #$F0
-;.C:1567  A8          TAY
-;.C:1568  A5 00       LDA $00
-;.C:156a  59 04 02    EOR $0204,Y
-;.C:156d  48          PHA
-;.C:156e  AD 01 1C    LDA $1C01
-;.C:1571  87 D5       SAX $D5
-;.C:1573  4B FC       ASR #$FC
-;.C:1575  AA          TAX
-;.C:1576  A5 00       LDA $00
-;.C:1578  75 01       ADC $01,X
-;.C:157a  48          PHA
-;.C:157b  AF 01 1C    LAX $1C01
-;.C:157e  4B 40       ASR #$40
-;.C:1580  A8          TAY
-;.C:1581  7D 00 02    ADC $0200,X
-;.C:1584  59 05 03    EOR $0305,Y
-;.C:1587  70 A8       BVS $1531
-;.C:1589  70 A6       BVS $1531
-;.C:158b  70 A4       BVS $1531
-;.C:158d  70 A2       BVS $1531
-;.C:158f  70 A0       BVS $1531
-;.C:1591  70 9E       BVS $1531
-;.C:1593  70 9C       BVS $1531
-;.C:1595  70 9A       BVS $1531
-;.C:1597  70 98       BVS $1531
-;.C:1599  70 96       BVS $1531
-;.C:159b  70 94       BVS $1531
-;.C:159d  70 92       BVS $1531
-;.C:159f  70 90       BVS $1531
-;.C:15a1  70 8E       BVS $1531
-;.C:15a3  70 8C       BVS $1531
-;.C:15a5  70 8A       BVS $1531
-;.C:15a7  4C 81 00    JMP $0081
-;.C:15aa  4C 77 05    JMP $0577
-;.C:15ad  4C CE 05    JMP $05CE
-
-
-;.C:1948  A0 52       LDY #$52
-;.C:194a  2C 00 1C    BIT $1C00
-;.C:194d  30 FB       BMI $194A
-;.C:194f  6D 01 1C    ADC $1C01
-;.C:1952  50 FE       BVC $1952
-;.C:1954  CC 01 1C    CPY $1C01
-;.C:1957  D0 EF       BNE $1948
-;.C:1959  B7 23       LAX $23,Y
-;.C:195b  86 FA       STX $FA
-;.C:195d  CB EC       SBX #$EC
-;.C:195f  8A          TXA
-;.C:1960  0A          ASL A
-;.C:1961  A6 93       LDX $93
-;.C:1963  D0 03       BNE $1968
-;.C:1965  EA          NOP
-;.C:1966  EA          NOP
-;.C:1967  EA          NOP
-;.C:1968  4D 01 1C    EOR $1C01
-;.C:196b  87 B9       SAX $B9
-;.C:196d  4B C1       ASR #$C1
-;.C:196f  D0 D7       BNE $1948
-;.C:1971  85 83       STA $83
-;.C:1973  A1 00       LDA ($00,X)
-;.C:1975  A5 30       LDA $30
-;.C:1977  B6 05       LDX $05,Y
-;.C:1979  9A          TXS
-;.C:197a  EA          NOP
-;.C:197b  4C AC 00    JMP $00AC
-
