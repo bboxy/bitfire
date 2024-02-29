@@ -43,7 +43,7 @@
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .SANCHECK_MAX_SECTORS	= 0
-.BOGUS_READS		= 1
+.BOGUS_READS		= 0
 ;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
@@ -182,11 +182,11 @@ b			= $48
 ;           cycle
 ;bit rate   0         10        20        30        40        50        60        70        80        90        100       110       120       130       140       150       160
 ;0          2222222222222222222222222222222233333333333333333333333333333333444444444444444444444444444444445555555555555555555555555555555511111111111111111111111111111111
-;           bbbgggggg   ccccccc   1              2                      ccccccccccc   3                   ggggggggggggggg   4ggg                    5       v    bbbbbbbbbbb
+;           bbbgggggg   ccccccc   1              2                      ccccccccccc   3                   ggggggggggggggg   4ggggg                    5       v    bbbbbbbbb
 ;1          222222222222222222222222222222333333333333333333333333333333444444444444444444444444444444555555555555555555555555555555111111111111111111111111111111
-;           bbbgggg   ccccccc   1              2                      ccccccccccc   3                   ggggggggg   4ggg                    5       v    bbbbbbbbb
+;           bbbgggg   ccccccc   1              2                      ccccccccccc   3                   ggggggggg   4ggggg                    5       v    bbbbbbb
 ;2          22222222222222222222222222223333333333333333333333333333444444444444444444444444444455555555555555555555555555551111111111111111111111111111
-;           bbbgg   ccccccc   1              2                      ccccccccccc   3                   ggg   4ggg                    5       v    bbbbbbb
+;           bbbgg   ccccccc   1              2                      ccccccccccc   3                   ggg   4ggggg                    5       v    bbbbb
 ;3          2222222222222222222222222233333333333333333333333333444444444444444444444444445555555555555555555555555511111111111111111111111111
 ;           bbb   ccccccc   1              2                      ccccccccccc   3                      4                    5       v    bbbbb
 ;b = bvc *
@@ -259,8 +259,9 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-			bvs .read_loop
-			bvs .read_loop
+			;bvs .read_loop
+			;bvs .read_loop
+.bvs2
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
@@ -286,6 +287,10 @@ b			= $48
 			ror					;C = 0
 }
 			tay
+!if .SANCHECK_TRAILING_ZERO = 1 {
+			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
+			bne .saveguard
+}
 			jmp .back_gcr
 
 !ifdef .second_pass {
@@ -321,7 +326,7 @@ b			= $48
 
 !if CONFIG_LOADER_ONLY = 0 {					;no barriers needed with standalone loadraw
 			ldx #$14				;walk through list of sectors to be loaded
-			lda <.index
+			lda <.index				;max index in track
 .min_loop
 			cmp <.wanted,x				;compare
 			bcc .is_bigger				;bigger index, next please
@@ -705,14 +710,20 @@ b			= $48
 }
 			bit $1800				;check for clk toggle
 			bmi .lock
+			;bit $1800				;check for clk toggle
 			beq .wait_bit1
 .got_bit1
 			ldy $1800				;now read again
 			cpy #5					;won't destroy A
 			ror <.filename
+			;lda $1800				;now read again
+			;lsr
+			;ror <.filename
+			;asl
 .wait_bit2
 			bit $1800
 			bmi .lock
+			;bit $1800				;check for clk toggle
 			bne .wait_bit2				;do we have clk == 0?
 
 			lsr $1800				;XXX TODO can do lsr $1800 here
@@ -954,17 +965,24 @@ b			= $48
 			dex
 			rts
 .set_bitrate
-.const			= <(.read_loop - .bvs - 3 - 1 - $a*2)
+.num_bvs		= 8
+.const			= <(.read_loop - .bvs - 3 - 1 - .num_bvs*2)
 
-			tay
+			;tay
+			ldy #$70
 			adc #.const
-			ldx #$0a*2
+			ldx #.num_bvs*2
 -
 			sta <.bvs - 1,x
+			sty <.bvs - 2,x
 			adc #2
 			dex
 			dex
 			bne -
+
+			sbc #.const + .num_bvs* 2
+			tay
+
 
 !if .VARIABLE_INTERLEAVE {
 			txa
@@ -977,6 +995,16 @@ b			= $48
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
 			eor <.bitrate,y
 			sta $1c00
+
+			tya
+			asl
+			eor #$06
+			sta .br + 1
+			lda #$80
+.br			bne *
+			sta .bvs2 + 0
+			sta .bvs2 + 2
+			sta .bvs2 + 4
 
 			lda .slow_tab,y
 			ldy #$4c
@@ -1173,10 +1201,6 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
-!if .SANCHECK_TRAILING_ZERO = 1 {
-			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
-			bne .next_header_trail_zero
-}
 			txa					;fetch checksum calculated so far
 			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			eor $0103
