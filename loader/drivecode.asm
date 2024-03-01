@@ -840,9 +840,10 @@ b			= $48
 			inx
 .inc_track
 			sta <.blocks_hi
-			jsr .set_max_sectors			;setup max_sectors, expects track in Y, returns with carry set
+			jsr .set_max_sectors			;setup max_sectors, expects track in Y
 			lda <.blocks_hi
 
+			sec
 			sbc <.max_sectors			;reduce blockcount track by track
 			bcc .next_dir_entry
 -
@@ -934,7 +935,7 @@ b			= $48
 
 			;----------------------------------------------------------------------------------------------------
 			;
-			; SET UP BITRATE, DETERMIN #SECTORS ON TRACK, MODIFY GCR LOOP IN ZEROPAGE
+			; SET UP BITRATE, DETERMINE #SECTORS ON TRACK, MODIFY GCR LOOP IN ZEROPAGE
 			;
 			;----------------------------------------------------------------------------------------------------
 .set_max_sectors
@@ -950,7 +951,7 @@ b			= $48
 			adc #2					;or $15 if < track 18
 +
 			sta <.max_sectors
-			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
+			;sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
 			inx
 			beq .set_bitrate			;check on X == $ff? and preserve carry
@@ -958,11 +959,11 @@ b			= $48
 			rts
 .set_bitrate
 .num_bvs		= 8
-.const			= <(.read_loop - .bvs - 3 - 1 - .num_bvs * 2)
+.const			= <(.read_loop - .bvs - 4 - .num_bvs * 2)
 
 			;tay
 			ldy #$70
-			adc #.const
+			adc #.const - $11
 			ldx #.num_bvs * 2
 -
 			sta <.bvs - 1,x
@@ -972,21 +973,20 @@ b			= $48
 			dex
 			bne -
 
-			sbc #.const + .num_bvs * 2
-			tay
+			sbc #.const + .num_bvs * 2		;restory density (0..3)
+			tay					;save for later lookup
 			asl
-			eor #$06
+			eor #$06				;by two and invert
 			sta .br + 1
-
 
 !if .VARIABLE_INTERLEAVE {
 			txa
 			cpy #$03
 			adc #3
-			sta <.interleave
+			sta <.interleave			;interleave is 4 for zone 3, 3 for other zones
 }
-			lda #$e0
-.br			bne *
+			lda #$e0				;cpx will be like a nop to break out of bvs-chain, also used later as ora val
+.br			bne *					;place 0-3 cpx
 			sta .bvs2 + 0
 			sta .bvs2 + 2
 			sta .bvs2 + 4
@@ -995,7 +995,6 @@ b			= $48
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
 			eor <.bitrate,y
 			sta $1c00
-
 
 			lda .slow_tab,y
 			ldy #$4c
