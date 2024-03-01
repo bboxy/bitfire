@@ -1229,8 +1229,8 @@ b			= $48
 			bit $1c00				;wait for start of sync
 			bmi -
 
-			adc $1c01
-			;clv
+			lda $1c01
+			clv					;better be save, else we could hang endlessly?
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
