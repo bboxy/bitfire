@@ -259,18 +259,10 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-			;bvs .read_loop
-			;bvs .read_loop
 .bvs2
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-			;bvs .read_loop
-			;bvs .read_loop
-			;bvs .read_loop
-			;bvs .read_loop
-			;bvs .read_loop
-			;bvs .read_loop
 .saveguard
 			jmp .next_header_overshoot
 .gcr_end
@@ -966,12 +958,12 @@ b			= $48
 			rts
 .set_bitrate
 .num_bvs		= 8
-.const			= <(.read_loop - .bvs - 3 - 1 - .num_bvs*2)
+.const			= <(.read_loop - .bvs - 3 - 1 - .num_bvs * 2)
 
 			;tay
 			ldy #$70
 			adc #.const
-			ldx #.num_bvs*2
+			ldx #.num_bvs * 2
 -
 			sta <.bvs - 1,x
 			sty <.bvs - 2,x
@@ -980,8 +972,11 @@ b			= $48
 			dex
 			bne -
 
-			sbc #.const + .num_bvs* 2
+			sbc #.const + .num_bvs * 2
 			tay
+			asl
+			eor #$06
+			sta .br + 1
 
 
 !if .VARIABLE_INTERLEAVE {
@@ -990,21 +985,17 @@ b			= $48
 			adc #3
 			sta <.interleave
 }
-			lda $1c00
-			ora #$e0
-			;eor .bitrate - .const - $14,y in case of tay after adc #.const
-			eor <.bitrate,y
-			sta $1c00
-
-			tya
-			asl
-			eor #$06
-			sta .br + 1
-			lda #$80
+			lda #$e0
 .br			bne *
 			sta .bvs2 + 0
 			sta .bvs2 + 2
 			sta .bvs2 + 4
+
+			ora $1c00
+			;eor .bitrate - .const - $14,y in case of tay after adc #.const
+			eor <.bitrate,y
+			sta $1c00
+
 
 			lda .slow_tab,y
 			ldy #$4c
