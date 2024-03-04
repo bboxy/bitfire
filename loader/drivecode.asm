@@ -44,7 +44,7 @@
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .SANCHECK_MAX_SECTORS	= 0
 .BOGUS_READS		= 0
-;.POSTPONED_XFER	= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
 
@@ -117,7 +117,7 @@
 .last_block_size	= .zp_start + $72
 .first_block_pos	= .zp_start + $74
 .valb0f0		= .zp_start + $76
-;free			= .zp_start + $78
+.postpone		= .zp_start + $78
 .dir_entry_num		= .zp_start + $7a
 .last_track_of_file	= .zp_start + $7c
 .val01			= .zp_start + $6f
@@ -240,6 +240,7 @@ b			= $48
 			pha					;$0103
 .gcr_slow1
 			lda $1c01				;56666677		fourth read
+			;XXX TODO would be nice to have ldx #$07 here but would require to use y only on upcoming bytes, okay for 5666660,y, but what to do with 7d788888?
 			sax <.sevens + 1			;----6677
 			asr #$fc				;-566666-
 			tax
@@ -249,18 +250,23 @@ b			= $48
 			pha					;$0102
 
 			lax $1c01				;77788888	fifth read
-			asr #$40
-			tay					;XXX TODO can be omitted? can this value be combensated by dd77?
-			adc .tab7d788888_lo,x			;offset 0
-.sevens			eor .tab0070dd77_hi,y			;offset $20 - clears v-flag, decodes the remaining bits of quintuple 7
+			asr #$40				;arr would also work, sadly it does not clear V as bit 6 is set after and portion of arr
+			tay
+			adc .tab7d788888_lo,x			;offset 0, clears V-flag, adds either two positive numbers that do not result in a negative number, or postive ($00/$20) + negative number -> V = 0
+.sevens			eor .tab0070dd77_hi,y			;decodes the remaining bits of quintuple 7
+;			lax $1c01				;77788888	fifth read
+;			lda .tab7d788888_lo,x			;offset 0, clears V-flag, adds either two positive numbers that do not result in a negative number, or postive ($00/$20) + negative number -> V = 0
+;			ldx #$20
+;			sbx #$xx
+;.sevens		adc .tab0070dd77_hi,x			;decodes the remaining bits of quintuple 7
 .bvs
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-.bvs2
 			bvs .read_loop
+.bvs2
 			bvs .read_loop
 			bvs .read_loop
 .saveguard
@@ -311,8 +317,8 @@ b			= $48
 			dex					;a bit anoying, but SP is SP--/++SP on push/pull
 			txs
 			sty <.block_size
-			iny					;set up num of bytes to be transferred
-			sty <.preamble_data + 0 + CONFIG_DEBUG	;used also as send_end on data_send by being decremented again
+			iny					;set up num of bytes to be transferred on c64 side
+			sty <.preamble_data + 0 + CONFIG_DEBUG
 
 			ldy <.dir_entry_num
 
@@ -343,7 +349,7 @@ b			= $48
 .G2			= >.gcr_slow1 + 3
 
 .table_start		;combined tables, gaps filled with junk
-			!byte                 $0e xor b, $0a xor b, $f0      , $00 xor b, $06 xor b, $02 xor b, $e1 xor b, $4e, $4f, $47, $d2      , $4a, $4b, $43
+			!byte                 $0e xor b, $0a xor b, $f0      , $00 xor b, $06 xor b, $02 xor b, $e1      , $4e, $4f, $47, $d2      , $4a, $4b, $43
 .gcr_slow_back		!byte .G1      , .G2, $4d      , $45      , $a5      , $40      , $49      , $41      , $96      , $46, $4c, $44, $87      , $42, $48
 .slow_tab
 			!byte (<.gcr_slow1_00) << 1
@@ -395,7 +401,7 @@ b			= $48
 			!byte $05 xor a				;-> bpl as we xor $15 -> with $00 as target -> fall through in any case
 			!byte $00
 			ldx <.block_num				;first block? -> send load address, neutralize sbc later on, carry is set
-			beq +
+			beq +					;carry is set, basically additions ends in load address now
 			adc <.first_block_size			;else add first block size as offset, might change carry
 			ldx #$80
 			bne +
@@ -414,8 +420,11 @@ b			= $48
 			adc .dir_load_addr_hi,y						;add load address highbyte
 			sta <.preamble_data + 2 + CONFIG_DEBUG				;block address high
 			ldy #$ff
+!if .POSTPONED_XFER = 1 {
+			bne .postpone_test
+} else {
 			bne .start_send
-
+}
                         !byte                                                     $a0 xor b, $ee, $ef, $e7, $02 xor a, $ea, $eb, $e3		;9 bytes
                         !byte $90 xor b, $29, $ed, $e5, $08 xor a, $e0, $e9, $e1, $1a xor b, $e6, $ec, $e4, $da      , $e2, $e8
 
@@ -519,11 +528,9 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 -
-
 			lda (.preamble_data_),y
-			dex
+			dex					;now we have #9, perfect for swapping bits later on
 			bne +					;BRA
-
 .gcr_slow1_00
 .gcr_slow1_20	= * + 6
 .tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
@@ -554,7 +561,6 @@ b			= $48
 			iny
 			bpl -					;BRA
 
-			;would also suit at $91, $95, $99
 .next_header_ = * + 7
                         !byte                          $20, $00, $80, ___, $20, $00, $80, $6c, $20, $00, $80
 
@@ -563,16 +569,39 @@ b			= $48
 			; SEND PREAMBLE AND DATA
 			;
 			;----------------------------------------------------------------------------------------------------
-;!if .POSTPONED_XFER = 1 {
-;			;ldy <.blocks_on_list
-;			dec <.blocks_on_list			;nope, so check for last block on track (step will happen afterwards)?
-;			bpl +
-;			bit <.last_track_of_file		;eof?
-;			bpl .postpone
-;}
+
+			;XXX TODO spend a table for lookup to avoid swapped bits 0 and 3? possible? would save so much code?
+;branch
+			;txa
+			;asr #$f0		;.7654...
+			;sta $1800
+			;lsr			;..7654..
+			;lsr			;...7654.
+			;ldx data,y		;76543210
+			;sta $1800
+			;txa
+			;asl			;6543210.
+			;asl			;543210..
+			;asl			;43210...
+			;sta $1800
+			;lsr			;.43210..
+			;lsr			;..43210.
+			;dey
+			;sta $1800
+			;bne branch
+
+!if .POSTPONED_XFER = 1 {
+.postpone_test
+			lda <.last_track_of_file
+			and #$80
+			ora <.blocks_on_list
+			bne .start_send
+			sta <.postpone
+			beq .skip_send
+}
 .dataloop
 			inx					;increase counter, as we go through sendloop twice, for preamble and for data, so mask is $0a and then $0b
-			inc .branch + 1
+			inc .branch + 1				;branch now points to pla
 			ldy <.block_size			;blocksize + 1
 			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
 .preloop
@@ -616,38 +645,27 @@ b			= $48
 			bmi *-3
 			sta $1800				;signal busy after atn drops
 
-			dec .branch + 1				;fix branch
+			dec .branch + 1				;restore branch when done
 !if CONFIG_DEBUG != 0 {
 			lda #$0d
 			sta <.preamble_data + 5
 }
-;-
-;			bit $1c0d
-;			bpl -
-
+!if .POSTPONED_XFER = 1 {
+			lax <.postpone
+			bne .skip_send
+			dec <.postpone
+			jmp .finish_seek
+.skip_send
+			sec
+}
 			;----------------------------------------------------------------------------------------------------
 			;
 			; BLOCK OF TRACK LOADED AND SENT
 			;
 			;----------------------------------------------------------------------------------------------------
 
-;!if .POSTPONED_XFER = 1 {
-;			bit <.en_dis_seek
-;			bmi +
-;			ldx #$00				;we return with X = $ff from send -> X = 0
-;			inc <.en_dis_seek			;disable_jmp
-;			jmp .send_back
-;+
-;			lda <.blocks_on_list			;just read again, was decreased before
-;} else {
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
-;}
 			bpl .next_header_
-;!if .POSTPONED_XFER = 1 {
-;.postpone
-;			dec <.en_dis_seek			;enable jmp, skip send of data for now
-;			jmp .next_track
-;}
 			;XXX TODO make this check easier? only done here?
 			bit <.last_track_of_file		;EOF
 			bpl .next_track
@@ -726,10 +744,7 @@ b			= $48
 			sta $1800				;set busy bit
 
 			lda <.filename
-
-			bne .do_command				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
-
-.reset			jmp (.reset_drive)
+			beq .reset				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -787,13 +802,11 @@ b			= $48
 			;----------------------------------------------------------------------------------------------------
 .next_track
 			lda #.DIR_TRACK
-;!if .POSTPONED_XFER = 1 {
-;			sec					;set by send_block and also set if beq
-;}
 -
 			isc <.to_track
 			beq -					;skip dirtrack however
 			bne .load_track
+.reset			jmp (.reset_drive)
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -862,7 +875,7 @@ b			= $48
 
 			lda .dir_file_size_lo,x
 			cmp <.first_block_size
-			ldy .dir_file_size_hi,x			;load file_size + 1
+			ldy .dir_file_size_hi,x			;load file_size - 1
 			bne .is_big				;filesize < $100 ? is_big if not
 			bcs .is_big				;it is < $0100 but does not fit in remaining space? -> is_big
 			sta <.first_block_size			;fits in, correct size, this will cause overflow on next subtraction and last_block_num will be zero, last_block_size will be $ff
@@ -915,13 +928,14 @@ b			= $48
 			sta $1c00
 
 			;XXX TODO postpone after second halfstep, then while waiting
-;!if .POSTPONED_XFER = 1 {
-;			txa
-;			adc <.en_dis_seek			;$7f/$80
-;			bmi .send_back				;nope, continue
-;			jmp .start_send				;send data now
-;.send_back
-;}
+!if .POSTPONED_XFER = 1 {
+			txa
+			ora <.postpone
+			bne .finish_seek
+			dey
+			jmp .start_send
+.finish_seek
+}
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
 			bpl *-3
 			sta <.is_cached_sector			;invalidate chached sector upon track change
@@ -951,33 +965,34 @@ b			= $48
 			adc #2					;or $15 if < track 18
 +
 			sta <.max_sectors
-			;sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
+			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
 			inx
 			beq .set_bitrate			;check on X == $ff? and preserve carry
 			dex
 			rts
 .set_bitrate
-.num_bvs		= 8
+.num_bvs		= 7
 .const			= <(.read_loop - .bvs - 4 - .num_bvs * 2)
 
-			;tay
-			ldy #$70
-			adc #.const - $11
+			tay
+;			ldy #$70
+;			adc #.const - $11
+			adc #.const
 			ldx #.num_bvs * 2
 -
 			sta <.bvs - 1,x
-			sty <.bvs - 2,x
+;			sty <.bvs - 2,x
 			adc #2
 			dex
 			dex
 			bne -
 
-			sbc #.const + .num_bvs * 2		;restory density (0..3)
-			tay					;save for later lookup
-			asl
-			eor #$06				;by two and invert
-			sta .br + 1
+;			sbc #.const + .num_bvs * 2		;restory density (0..3)
+;			tay					;save for later lookup
+;			asl
+;			eor #$06				;by two and invert
+;			sta .br + 1
 
 !if .VARIABLE_INTERLEAVE {
 			txa
@@ -985,11 +1000,19 @@ b			= $48
 			adc #3
 			sta <.interleave			;interleave is 4 for zone 3, 3 for other zones
 }
+			ldx #$70
+			tya
+			beq +
+			ldx #$80
++
+			stx .bvs2 + 0
+			stx .bvs2 + 2
+
 			lda #$e0				;cpx will be like a nop to break out of bvs-chain, also used later as ora val
-.br			bne *					;place 0-3 cpx
-			sta .bvs2 + 0
-			sta .bvs2 + 2
-			sta .bvs2 + 4
+;.br			bne *					;place 0-3 cpx
+;			bit .bvs2 + 0
+;			bit .bvs2 + 2
+;			bit .bvs2 + 4
 
 			ora $1c00
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
@@ -1085,7 +1108,7 @@ b			= $48
 			iny
 			bne -
 !if .BOGUS_READS = 0 {
-			top
+			top					;skip upcoming ldx, as cached sector is in x and this index is used
 .new_sector
 } else {
 			beq .skip + 2
@@ -1192,9 +1215,9 @@ b			= $48
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
 			txa					;fetch checksum calculated so far
-			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			eor $0103
 			ldx <.threes + 1
+			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			eor <.tab00333330_hi,x
 			bne .next_header_bad_chksum		;checksum check failed? reread
 
@@ -1229,15 +1252,16 @@ b			= $48
 			bit $1c00				;wait for start of sync
 			bmi -
 
+			;adc $1c01
 			lda $1c01
-			clv					;better be save, else we could hang endlessly?
+			clv					;better be save, else we could hang endlessly if adc results in another set of V-flag?
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
 			bne .next_header_wrong_type		;start over with a new header again as check against first bits of headertype already fails
 			lax <.valb0f0 - $52,y
 			stx .gcr_h_or_s				;setup return jump either $b0 or $f0
-			sbc #$90				;a = $20/$60, clears V-flag
+			sbc #$90				;a = $20/$60, clears V-flag, as we subtract two negative numbers (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html)
 			bvc *
 			asl					;$40/$c0
 			ldx #$3e
