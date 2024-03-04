@@ -43,8 +43,8 @@
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .SANCHECK_MAX_SECTORS	= 0
-.BOGUS_READS		= 0
-.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.BOGUS_READS		= 1
+.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
 
@@ -265,8 +265,8 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-			bvs .read_loop
 .bvs2
+			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
 .saveguard
@@ -285,10 +285,6 @@ b			= $48
 			ror					;C = 0
 }
 			tay
-!if .SANCHECK_TRAILING_ZERO = 1 {
-			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
-			bne .saveguard
-}
 			jmp .back_gcr
 
 !ifdef .second_pass {
@@ -420,11 +416,8 @@ b			= $48
 			adc .dir_load_addr_hi,y						;add load address highbyte
 			sta <.preamble_data + 2 + CONFIG_DEBUG				;block address high
 			ldy #$ff
-!if .POSTPONED_XFER = 1 {
-			bne .postpone_test
-} else {
 			bne .start_send
-}
+
                         !byte                                                     $a0 xor b, $ee, $ef, $e7, $02 xor a, $ea, $eb, $e3		;9 bytes
                         !byte $90 xor b, $29, $ed, $e5, $08 xor a, $e0, $e9, $e1, $1a xor b, $e6, $ec, $e4, $da      , $e2, $e8
 
@@ -557,7 +550,11 @@ b			= $48
 .start_send
 			ldx #$0a				;greatness, just the value we need for masking with sax $1800 and for preamble encoding (-1, dex) \o/
 			cpy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+!if .POSTPONED_XFER = 1 {
+			beq .postpone_test
+} else {
 			beq .preloop
+}
 			iny
 			bpl -					;BRA
 
@@ -590,15 +587,6 @@ b			= $48
 			;sta $1800
 			;bne branch
 
-!if .POSTPONED_XFER = 1 {
-.postpone_test
-			lda <.last_track_of_file
-			and #$80
-			ora <.blocks_on_list
-			bne .start_send
-			sta <.postpone
-			beq .skip_send
-}
 .dataloop
 			inx					;increase counter, as we go through sendloop twice, for preamble and for data, so mask is $0a and then $0b
 			inc .branch + 1				;branch now points to pla
@@ -655,8 +643,13 @@ b			= $48
 			bne .skip_send
 			dec <.postpone
 			jmp .finish_seek
+.postpone_test
+			lda <.last_track_of_file		;last block of file? send now, as eof happens afterwards
+			bmi .preloop				;EOF, continue
+			lda <.blocks_on_list			;last block on list, so step is happening after this sent block
+			bne .preloop				;still blocks to be loaded from current track, so continue
+			sta <.postpone				;inc postpone $ff -> $00
 .skip_send
-			sec
 }
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -664,11 +657,16 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 
+			;XXX same check as before with POSTPONED XFER, can we aggregate?
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
-			bpl .next_header_
-			;XXX TODO make this check easier? only done here?
-			bit <.last_track_of_file		;EOF
+			bpl .next_header_			;fetch a new block
+			bit <.last_track_of_file		;EOF? Nope, no advance track
+!if (.DELAY_SPIN_DOWN | .BOGUS_READS = 1) {
+			bmi *+5
+			jmp .next_track
+} else {
 			bpl .next_track
+}
 .eof
 			inc <.filenum				;autoinc always, so thet load_next will also load next file after a load with filenum
 			top
@@ -762,7 +760,7 @@ b			= $48
 			sta <.filenum				;set new filenum
 			lda $1c00
 !if .BOGUS_READS != 0 {
-			bit .val04				;check if MOTOR_ON
+			bit <.val04				;check if MOTOR_ON
 			bne +
 			inc <.bogus_reads			;motor was off, so better be save than sorry on spin up
 +
@@ -931,8 +929,8 @@ b			= $48
 !if .POSTPONED_XFER = 1 {
 			txa
 			ora <.postpone
-			bne .finish_seek
-			dey
+			bne .finish_seek			;x == 0 and postpone == 0
+			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
 			jmp .start_send
 .finish_seek
 }
@@ -965,34 +963,34 @@ b			= $48
 			adc #2					;or $15 if < track 18
 +
 			sta <.max_sectors
-			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
+;			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
 			inx
 			beq .set_bitrate			;check on X == $ff? and preserve carry
 			dex
 			rts
 .set_bitrate
-.num_bvs		= 7
+.num_bvs		= 8
 .const			= <(.read_loop - .bvs - 4 - .num_bvs * 2)
 
-			tay
-;			ldy #$70
-;			adc #.const - $11
-			adc #.const
+;			tay
+			ldy #$70
+			adc #.const - $11
+;			adc #.const
 			ldx #.num_bvs * 2
 -
 			sta <.bvs - 1,x
-;			sty <.bvs - 2,x
+			sty <.bvs - 2,x
 			adc #2
 			dex
 			dex
 			bne -
 
-;			sbc #.const + .num_bvs * 2		;restory density (0..3)
-;			tay					;save for later lookup
-;			asl
-;			eor #$06				;by two and invert
-;			sta .br + 1
+			sbc #.const + .num_bvs * 2		;restory density (0..3)
+			tay					;save for later lookup
+			asl
+			eor #$06				;by two and invert
+			sta .br + 1
 
 !if .VARIABLE_INTERLEAVE {
 			txa
@@ -1000,19 +998,11 @@ b			= $48
 			adc #3
 			sta <.interleave			;interleave is 4 for zone 3, 3 for other zones
 }
-			ldx #$70
-			tya
-			beq +
-			ldx #$80
-+
-			stx .bvs2 + 0
-			stx .bvs2 + 2
-
 			lda #$e0				;cpx will be like a nop to break out of bvs-chain, also used later as ora val
-;.br			bne *					;place 0-3 cpx
-;			bit .bvs2 + 0
-;			bit .bvs2 + 2
-;			bit .bvs2 + 4
+.br			bne *					;place 0-3 cpx
+			bit .bvs2 + 0
+			bit .bvs2 + 2
+			bit .bvs2 + 4
 
 			ora $1c00
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
@@ -1214,6 +1204,10 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
+!if .SANCHECK_TRAILING_ZERO = 1 {
+			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
+			bne .next_header_trail_zero
+}
 			txa					;fetch checksum calculated so far
 			eor $0103
 			ldx <.threes + 1
@@ -1249,7 +1243,7 @@ b			= $48
 			ldy #$52				;type (header)
 .read_sector
 -
-			bit $1c00				;wait for start of sync
+			lda $1c00				;wait for start of sync
 			bmi -
 
 			;adc $1c01
