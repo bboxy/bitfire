@@ -206,6 +206,8 @@ bitfire_send_byte_
 ;			bpl .ld_loop
 ;			rts
 
+;.jam
+;			jam
 link_load_next_raw
 			lda #BITFIRE_LOAD_NEXT
 link_load_raw
@@ -221,7 +223,6 @@ bitfire_loadraw_
 			and #$c0						;focus on bit 7 and 6 and copy bit 7 to carry (set if floppy is idle/eof is reached)
 			bne .rts						;block ready? if so, a = 0 (block ready + busy) if not -> rts
 
-			sec							;loadraw enters ld_pblock with C = 0
 			ldy #$05 - CONFIG_LOADER_ONLY + CONFIG_DEBUG		;fetch 5 bytes of preamble
 			;lda #$00						;is already zero due to anc #$c0, that is why we favour anc #$co over asl, as we save a byte
 			ldx #<preamble						;target for received bytes
@@ -236,6 +237,7 @@ bitfire_loadraw_
 }
 			ldx <block_addr_lo					;block_address lo
 			lda <block_addr_hi					;block_address hi
+			;beq .jam
 			ldy <block_status					;status -> first_block?
 			bmi +
 			stx bitfire_load_addr_lo				;yes, store load_address (also lz_src in case depacker is present)
@@ -245,7 +247,7 @@ bitfire_loadraw_
 .ld_set_block_tgt
 			stx .ld_store + 1					;setup target for block data
 			sta .ld_store + 2
-										;XXX TODO, change busy signal 1 = ready, 0 = eof, leave ld_pblock with carry set, also tay can be done after preamble load as last value is still in a
+			sec							;loadraw enters ld_pblock with C = 0
 bitfire_ntsc3_op	ldx #$6d						;opcode for adc	-> repair any rts being set (also accidently) by y-index-check
 .ld_set
 			stx .ld_gend

@@ -42,9 +42,9 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.SANCHECK_MAX_SECTORS	= 0
+.SANCHECK_MAX_SECTORS	= 1
 .BOGUS_READS		= 1
-.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
 
@@ -90,7 +90,7 @@
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
-.en_dis_seek		= .zp_start + $19
+;free			= .zp_start + $19
 .next_header__		= .zp_start + $20
 ;free	 		= .zp_start + $22
 ;free			= .zp_start + $23
@@ -129,6 +129,10 @@ ___			= $ff
 .S0			= $00 xor .EOR_VAL			;ser2bin value 0/9
 .S1			= $09 xor .EOR_VAL			;ser2bin value 1/8
 
+.PP			= $ff					;initial value of postpone
+.BR			= $00					;initial value of bogus_reads
+.ER			= $00					;initial value of error counter
+
 .P1			= <(.preamble_data)
 .P2			= >(.preamble_data)
 
@@ -166,13 +170,13 @@ b			= $48
 
 			;     0    1    2          3    4          5    6          7    8    9    a          b    c          d    e          f
                         !byte ___, ___, ___      , ___, $f0      , $60, $b0      , $20, ___, $40, $80      , $00, $e0      , $c0, $a0      , $80	;00
-                        !byte .DS, ___, $f0 xor a, $1e, $70 xor a, $1f, $60 xor a, $17, ___, $80, $b0 xor a, $1a, $30 xor a, $1b, $20 xor a, $13	;10
-                        !byte .N1, .N2, ___      , ___, $50 xor a, $1d, $40 xor a, $15, $00, ___, $80 xor a, $10, $10 xor a, $19, $00 xor a, $11	;20
+                        !byte .DS, ___, $f0 xor a, $1e, $70 xor a, $1f, $60 xor a, $17, ___, ___, $b0 xor a, $1a, $30 xor a, $1b, $20 xor a, $13	;10
+                        !byte .N1, .N2, ___      , ___, $50 xor a, $1d, $40 xor a, $15, .ER, ___, $80 xor a, $10, $10 xor a, $19, $00 xor a, $11	;20
                         !byte .S0, .S1, $e0 xor a, $16, $d0 xor a, $1c, $c0 xor a, $14, .S1, .S0, $a0 xor a, $12, $90 xor a, $18, ___      , ___	;30
                         !byte ___, ___, ___      , ___, ___      , ___, ___      , ___, ___, ___, ___      , ___, ___      , ___, ___      , ___	;40
                         !byte ___, ___, ___      , $0e, ___      , $0f, .DT      , $07, ___, ___, $ff      , $0a, ___      , $0b, ___      , $03	;50
-                        !byte ___, ___, ___      , ___, ___      , $0d, $00      , $05, .P1, .P2, ___      , $00, ___      , $09, ___      , $01	;60
-                        !byte ___, ___, ___      , $06, ___      , $0c, $b0      , $04, ___, $f0, ___      , $02, ___      , $08			;70
+                        !byte ___, ___, ___      , ___, ___      , $0d, .BR      , $05, .P1, .P2, ___      , $00, ___      , $09, ___      , $01	;60
+                        !byte ___, ___, ___      , $06, ___      , $0c, $b0      , $04, .PP, $f0, ___      , $02, ___      , $08			;70
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
 
@@ -269,6 +273,7 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
+.bvs_end
 .saveguard
 			jmp .next_header_overshoot
 .gcr_end
@@ -639,10 +644,10 @@ b			= $48
 			sta <.preamble_data + 5
 }
 !if .POSTPONED_XFER = 1 {
-			lax <.postpone
-			bne .skip_send
-			dec <.postpone
-			jmp .finish_seek
+			lax <.postpone				;check if blockwas sent postponed or regular
+			bne .skip_send				;normal operation
+			dec <.postpone				;drop flag
+			jmp .finish_seek			;block sent postponed, now finish last halfstep
 .postpone_test
 			lda <.last_track_of_file		;last block of file? send now, as eof happens afterwards
 			bmi .preloop				;EOF, continue
@@ -660,7 +665,7 @@ b			= $48
 			;XXX same check as before with POSTPONED XFER, can we aggregate?
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
 			bpl .next_header_			;fetch a new block
-			bit <.last_track_of_file		;EOF? Nope, no advance track
+			lda <.last_track_of_file		;EOF? Nope, no advance track
 !if (.DELAY_SPIN_DOWN | .BOGUS_READS = 1) {
 			bmi *+5
 			jmp .next_track
@@ -931,7 +936,8 @@ b			= $48
 			ora <.postpone
 			bne .finish_seek			;x == 0 and postpone == 0
 			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
-			jmp .start_send
+			ldx #$0a
+			jmp .preloop
 .finish_seek
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
@@ -970,8 +976,8 @@ b			= $48
 			dex
 			rts
 .set_bitrate
-.num_bvs		= 8
-.const			= <(.read_loop - .bvs - 4 - .num_bvs * 2)
+.num_bvs		= (.bvs_end - .bvs) / 2
+.const			= <(.read_loop - .bvs - 4 - (.num_bvs * 2))
 
 ;			tay
 			ldy #$70
@@ -986,7 +992,7 @@ b			= $48
 			dex
 			bne -
 
-			sbc #.const + .num_bvs * 2		;restory density (0..3)
+			sbc #.const + (.num_bvs * 2)		;restory density (0..3)
 			tay					;save for later lookup
 			asl
 			eor #$06				;by two and invert
@@ -1000,9 +1006,9 @@ b			= $48
 }
 			lda #$e0				;cpx will be like a nop to break out of bvs-chain, also used later as ora val
 .br			bne *					;place 0-3 cpx
-			bit .bvs2 + 0
-			bit .bvs2 + 2
-			bit .bvs2 + 4
+			sta .bvs2 + 0
+			sta .bvs2 + 2
+			sta .bvs2 + 4
 
 			ora $1c00
 			;eor .bitrate - .const - $14,y in case of tay after adc #.const
@@ -1243,12 +1249,11 @@ b			= $48
 			ldy #$52				;type (header)
 .read_sector
 -
-			lda $1c00				;wait for start of sync
+			lda $1c00				;wait until a sync is in action
 			bmi -
-
-			;adc $1c01
-			lda $1c01
-			clv					;better be save, else we could hang endlessly if adc results in another set of V-flag?
+								;sync started
+			sbc $1c01				;both numbers (A and $1c01) are positive, so V-flag should be cleared
+			;clv
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
