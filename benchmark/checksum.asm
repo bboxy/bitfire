@@ -110,8 +110,8 @@ screen		= $2000
 		lda $dc0d
 		lda $dd0d
 		lda #$01
-		sta $d019
 		sta $d01a
+		sta $d019
 		lda #$ff
 		sta $d012
 		lda $d011
@@ -462,6 +462,7 @@ checksum
 		sta srch + 1
 !if CHECKSUM_CLEAR == 1 {
 		sta srcd + 1
+		stx endx + 1
 }
 		lda #$00
 -
@@ -486,6 +487,7 @@ srch = * + 1
 		bne no
 
 !if CHECKSUM_CLEAR == 1 {
+endx		ldx #$00
 		lda #$69
 -
 srcd = * + 1
