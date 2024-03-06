@@ -247,6 +247,7 @@ bitfire_loadraw_
 .ld_set_block_tgt
 			stx .ld_store + 1					;setup target for block data
 			sta .ld_store + 2
+
 			sec							;loadraw enters ld_pblock with C = 0
 bitfire_ntsc3_op	ldx #$6d						;opcode for adc	-> repair any rts being set (also accidently) by y-index-check
 .ld_set
@@ -273,11 +274,11 @@ bitfire_ntsc2		and $dd00						;%ddxxxxxx might loose some lower bits, but will b
 bitfire_ntsc3		adc $dd00						;%dd1110xx will be like #$38 (A = $37 + carry) be added
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
 
-			ldx #$3f
 			lsr							;%0dd111xx
 			lsr							;%00dd111x
 			dey
 			cpy #$01						;check on 0 in carry, too bad we can't use that result with direct bail out, still some bits to transfer
+			ldx #$3f
 bitfire_ntsc1		ora $dd00						;%dddd111x, ora to preserve the 3 set bits
 			stx $dd02
 

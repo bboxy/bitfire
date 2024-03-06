@@ -42,9 +42,9 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.SANCHECK_MAX_SECTORS	= 1
-.BOGUS_READS		= 1
-.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.SANCHECK_MAX_SECTORS	= 0
+.BOGUS_READS		= 0
+.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
 
@@ -60,7 +60,7 @@
 .MOTOR_OFF		= $fb
 .MOTOR_ON		= $04
 
-;adresses
+;addresses
 .reset_drive		= $fffc	;eaa0
 .zeropage		= $0000
 .drivecode		= $0200
@@ -229,8 +229,8 @@ b			= $48
 			pha					;$0100
 			beq .gcr_end
 
-.v0102			eor $0102,x
-.v0103			eor $0103,x
+			eor $0102,x
+			eor $0103,x
 .gcr_entry
 			sta <.chksum2 + 1
 			lda $1c01				;44445555		third read
@@ -268,7 +268,6 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-			bvs .read_loop
 .bvs2
 			bvs .read_loop
 			bvs .read_loop
@@ -290,6 +289,10 @@ b			= $48
 			ror					;C = 0
 }
 			tay
+!if .SANCHECK_TRAILING_ZERO = 1 {
+			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
+			bne .saveguard
+}
 			jmp .back_gcr
 
 !ifdef .second_pass {
@@ -598,6 +601,7 @@ b			= $48
 			ldy <.block_size			;blocksize + 1
 			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
 .preloop
+			;lda preamble,y or pla needs change then + adapt branch -> sta preloop + 1
 			lda (.preamble_data_),y			;.preamble_data = $68 = pla
 								;XXX TODO also use $1802 to send data by setting to input?
 			bit $1800
@@ -665,7 +669,7 @@ b			= $48
 			;XXX same check as before with POSTPONED XFER, can we aggregate?
 			dec <.blocks_on_list			;decrease block count, last block on wishlist?
 			bpl .next_header_			;fetch a new block
-			lda <.last_track_of_file		;EOF? Nope, no advance track
+			bit <.last_track_of_file		;EOF? Nope, no advance track
 !if (.DELAY_SPIN_DOWN | .BOGUS_READS = 1) {
 			bmi *+5
 			jmp .next_track
@@ -935,9 +939,9 @@ b			= $48
 			txa
 			ora <.postpone
 			bne .finish_seek			;x == 0 and postpone == 0
-			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG			;num of preamble bytes to xfer. With or without barrier, depending on stand-alone loader or not
+			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG
 			ldx #$0a
-			jmp .preloop
+			jmp .preloop				;now xfer block, we should return to finish_seek then
 .finish_seek
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
@@ -976,14 +980,14 @@ b			= $48
 			dex
 			rts
 .set_bitrate
-.num_bvs		= (.bvs_end - .bvs) / 2
-.const			= <(.read_loop - .bvs - 4 - (.num_bvs * 2))
+.num_bvs		= .bvs_end - .bvs
+.const			= <(.read_loop - .bvs - 4 - .num_bvs)
 
 ;			tay
 			ldy #$70
 			adc #.const - $11
 ;			adc #.const
-			ldx #.num_bvs * 2
+			ldx #.num_bvs
 -
 			sta <.bvs - 1,x
 			sty <.bvs - 2,x
@@ -992,7 +996,7 @@ b			= $48
 			dex
 			bne -
 
-			sbc #.const + (.num_bvs * 2)		;restory density (0..3)
+			sbc #.const + .num_bvs			;restory density (0..3)
 			tay					;save for later lookup
 			asl
 			eor #$06				;by two and invert
@@ -1006,8 +1010,8 @@ b			= $48
 }
 			lda #$e0				;cpx will be like a nop to break out of bvs-chain, also used later as ora val
 .br			bne *					;place 0-3 cpx
-			sta .bvs2 + 0
 			sta .bvs2 + 2
+			sta .bvs2 + 4
 			sta .bvs2 + 4
 
 			ora $1c00
@@ -1114,12 +1118,8 @@ b			= $48
 			inc <.bogus_reads
 .skip
 }
-			ldx <.is_loaded_sector			;initially $ff
-!if .SANCHECK_MAX_SECTORS = 1 {
-			cpx <.max_sectors
-			bcs .next_header_sect_num
-}
-			;bmi .next_header			;initial call on a new track? Load content first
+			ldx <.is_loaded_sector			;skipped if we have a cached sector and then set, else it is set by read of first header
+;			;bmi .next_header			;initial call on a new track? Load content first
 			ldy <.wanted,x				;grab index from list
 			sty <.block_num
 			cpy <.last_block_num			;current block is last block on list? comparision sets carry and is needed later on on setup_send
@@ -1210,14 +1210,10 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
-!if .SANCHECK_TRAILING_ZERO = 1 {
-			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
-			bne .next_header_trail_zero
-}
 			txa					;fetch checksum calculated so far
+			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			eor $0103
 			ldx <.threes + 1
-			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			eor <.tab00333330_hi,x
 			bne .next_header_bad_chksum		;checksum check failed? reread
 
@@ -1227,6 +1223,10 @@ b			= $48
 			ldy #$01
 -
 			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
+!if .SANCHECK_MAX_SECTORS = 1 {
+			cmp <.max_sectors
+			bcs .next_header_sect_num
+}
 			lda $0105,y				;extract sector and track from header
 			ldx #$09
 			sbx #$00
@@ -1249,11 +1249,11 @@ b			= $48
 			ldy #$52				;type (header)
 .read_sector
 -
-			lda $1c00				;wait until a sync is in action
+			bit $1c00				;wait until a sync is in action
 			bmi -
 								;sync started
-			sbc $1c01				;both numbers (A and $1c01) are positive, so V-flag should be cleared
-			;clv
+			lda $1c01				;both numbers (A and $1c01) are positive, so V-flag should be cleared
+			clv
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
