@@ -43,7 +43,7 @@
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .SANCHECK_MAX_SECTORS	= 1
-.BOGUS_READS		= 0
+.BOGUS_READS		= 1
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
@@ -735,7 +735,7 @@ b			= $48
 			beq .wait_bit1
 .got_bit1
 			ldy $1800				;now read again
-			cpy #5					;won't destroy A
+			cpy #5					;won't destroy A, but Y, so countdown for spindown is reduced to approx $8xx cycles, we hopefully are done with filename xfer until then
 			ror <.filename
 			;lda $1800				;now read again
 			;lsr
@@ -944,8 +944,7 @@ b			= $48
 			ora <.postpone
 			bne .finish_seek			;x == 0 and postpone == 0
 			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG
-			ldx #$0a
-			jmp .preloop				;now xfer block, we should return to finish_seek then
+			jmp .start_send				;now xfer block, we should return to finish_seek then, sets x to $0a
 .finish_seek
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
