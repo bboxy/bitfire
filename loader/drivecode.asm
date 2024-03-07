@@ -42,9 +42,9 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.SANCHECK_MAX_SECTORS	= 0
+.SANCHECK_MAX_SECTORS	= 1
 .BOGUS_READS		= 0
-.POSTPONED_XFER		= 0   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
+.POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
 
@@ -85,12 +85,13 @@
 .to_track		= .zp_start + $00			;DT
 .blocks_hi 		= .zp_start + $01
 .blocks_lo 		= .zp_start + $02
-.interleave		= .zp_start + $03
+.val30b0		= .zp_start + $03
 .max_sectors		= .zp_start + $08			;maximum sectors on current track
+.val00			= .zp_start + $0b
 .dir_sector		= .zp_start + $10
 .blocks_on_list		= .zp_start + $11			;blocks tagged on wanted list
 .filenum		= .zp_start + $18			;needs to be $18 for all means, as $18 is used as opcode clc /!\
-;free			= .zp_start + $19
+.interleave		= .zp_start + $19
 .next_header__		= .zp_start + $20
 ;free	 		= .zp_start + $22
 ;free			= .zp_start + $23
@@ -102,9 +103,9 @@
 .wanted			= .zp_start + $3e			;21 bytes
 .index			= .zp_start + $54			;current blockindex
 .track			= .zp_start + $56			;DT ;current track
-.val07ff		= .zp_start + $57			;DT ;current track
 .sector			= .zp_start + $58			;DS
 .density		= .zp_start + $59
+;free			= .zp_start + $5a
 .block_num		= .zp_start + $5c
 .preamble_data		= .zp_start + $60
 .bogus_reads		= .zp_start + $66
@@ -115,9 +116,10 @@
 .filename		= .zp_start + $70
 .last_block_num		= .zp_start + $71
 .last_block_size	= .zp_start + $72
+;free	 		= .zp_start + $76
 .first_block_pos	= .zp_start + $74
-.valb0f0		= .zp_start + $76
 .postpone		= .zp_start + $78
+;free	 		= .zp_start + $79
 .dir_entry_num		= .zp_start + $7a
 .last_track_of_file	= .zp_start + $7c
 .val01			= .zp_start + $6f
@@ -169,14 +171,14 @@ b			= $48
 ;                        !byte ___, ___, ___, $06, ___, $0c, ___, $04, ___, ___, ___, $02, ___, $08, ___, ___
 
 			;     0    1    2          3    4          5    6          7    8    9    a          b    c          d    e          f
-                        !byte ___, ___, ___      , ___, $f0      , $60, $b0      , $20, ___, $40, $80      , $00, $e0      , $c0, $a0      , $80	;00
+                        !byte ___, ___, ___      , $30, $f0      , $60, $b0      , $20, ___, $40, $80      , $00, $e0      , $c0, $a0      , $80	;00
                         !byte .DS, ___, $f0 xor a, $1e, $70 xor a, $1f, $60 xor a, $17, ___, ___, $b0 xor a, $1a, $30 xor a, $1b, $20 xor a, $13	;10
                         !byte .N1, .N2, ___      , ___, $50 xor a, $1d, $40 xor a, $15, .ER, ___, $80 xor a, $10, $10 xor a, $19, $00 xor a, $11	;20
                         !byte .S0, .S1, $e0 xor a, $16, $d0 xor a, $1c, $c0 xor a, $14, .S1, .S0, $a0 xor a, $12, $90 xor a, $18, ___      , ___	;30
                         !byte ___, ___, ___      , ___, ___      , ___, ___      , ___, ___, ___, ___      , ___, ___      , ___, ___      , ___	;40
-                        !byte ___, ___, ___      , $0e, ___      , $0f, .DT      , $07, ___, ___, $ff      , $0a, ___      , $0b, ___      , $03	;50
+                        !byte ___, ___, ___      , $0e, ___      , $0f, .DT      , $07, ___, ___, ___      , $0a, ___      , $0b, ___      , $03	;50
                         !byte ___, ___, ___      , ___, ___      , $0d, .BR      , $05, .P1, .P2, ___      , $00, ___      , $09, ___      , $01	;60
-                        !byte ___, ___, ___      , $06, ___      , $0c, $b0      , $04, .PP, $f0, ___      , $02, ___      , $08			;70
+                        !byte ___, ___, ___      , $06, ___      , $0c, ___      , $04, .PP, ___, ___      , $02, ___      , $08			;70
 
 			;XXX TODO /!\ if making changes to gcr_read_loop also the partly decoding in read_sector should be double-checked, same goes for timing changes
 
@@ -279,19 +281,20 @@ b			= $48
 			eor <.chksum + 1
 			eor $0102
 			tax
-			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 !if .SANCHECK_TRAILING_ZERO = 1 {
-			ror					;xxxxx010 1
-			bcc .saveguard				;check bit 0 of CONST1
-			sbc #2					;clear out constant (incl. carry) if anything goes wrong, offset into table will be off and checksum will fail?
-} else {
-			and #$f0
-			ror					;C = 0
-}
-			tay
-!if .SANCHECK_TRAILING_ZERO = 1 {
-			anc #$07				;should work on 1541U1 too, as it should result in 0 + clc?
+			ldy $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
+			tya
+			and #$0f
+			eor #$05
 			bne .saveguard
+			tya
+			ror
+			and #$f8
+			tay
+} else {
+			lda $1c01
+			arr #$f0
+			sec
 }
 			jmp .back_gcr
 
@@ -310,6 +313,7 @@ b			= $48
 .tab11111000_hi		= .tables + $00
 .tab44444000_lo 	= .tables + $04
 .tab7d788888_lo		= .tables + $00
+.tab0070dd77_hi		= .tables + $100
 
 ;table wth no offset
 .tab02200222_lo		= .tables + $00
@@ -534,7 +538,7 @@ b			= $48
 			bne +					;BRA
 .gcr_slow1_00
 .gcr_slow1_20	= * + 6
-.tab0070dd77_hi                                  ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
+                                                 ;dop #$b0  dop #$a0  dop #$b0  dop #$a0  dop #$b0  dop #$a0
                         !byte                     $80, $b0, $80, $a0, $80, $b0, $80, $a0, $80, $b0, $80, $a0
 
 			;----------------------------------------------------------------------------------------------------
@@ -602,7 +606,7 @@ b			= $48
 			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
 .preloop
 			;lda preamble,y or pla needs change then + adapt branch -> sta preloop + 1
-			lda (.preamble_data_),y			;.preamble_data = $68 = pla
+			lda (.preamble_data_),y			;.preamble_data_ = $68 = pla
 								;XXX TODO also use $1802 to send data by setting to input?
 			bit $1800
 			bmi *-3
@@ -751,7 +755,8 @@ b			= $48
 			sta $1800				;set busy bit
 
 			lda <.filename
-			beq .reset				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
+			bne .do_command				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
+.reset			jmp (.reset_drive)
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -813,7 +818,6 @@ b			= $48
 			isc <.to_track
 			beq -					;skip dirtrack however
 			bne .load_track
-.reset			jmp (.reset_drive)
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1211,21 +1215,20 @@ b			= $48
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
 			txa					;fetch checksum calculated so far
-			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			eor $0103
 			ldx <.threes + 1
-			eor <.tab00333330_hi,x
+			eor <.tab00333330_hi,x			;in case of header reads back as $55 -> zero
+			eor (.fours + 1),y			;XXX TODO store chksum beforehand and read this val first and check against bmi? should have all upper bits 0?
 			bne .next_header_bad_chksum		;checksum check failed? reread
 
-			;bne = fallthrough	beq = take	d0/f0
-			;bcs = fallthrough	beq = take	b0/f0 sbc #$90
-.gcr_h_or_s		beq .new_sector				;this is either $b0 or $f0
+			;bcs = take, bmi = fallthrough
+.gcr_h_or_s		bmi .new_sector				;this is either $30 or $b0
 			ldy #$01
 -
 			sta <.is_loaded_sector			;cleared on first round, but correct value will be set on next round
 !if .SANCHECK_MAX_SECTORS = 1 {
-			cmp <.max_sectors
-			bcs .next_header_sect_num
+			cmp <.max_sectors			;A is zero on first round
+			bcs .next_header_sect_num		;be save to not write out of bounds in wanted-list
 }
 			lda $0105,y				;extract sector and track from header
 			ldx #$09
@@ -1246,6 +1249,8 @@ b			= $48
 .next_header_cycles
 .next_header_bogus
 .next_header
+			ldx #7					;fetch 8 bytes (+ trailing zero of header $55)
+			txs
 			ldy #$52				;type (header)
 .read_sector
 -
@@ -1258,21 +1263,27 @@ b			= $48
 
 			cpy $1c01				;11111222 compare type
 			bne .next_header_wrong_type		;start over with a new header again as check against first bits of headertype already fails
-			lax <.valb0f0 - $52,y
-			stx .gcr_h_or_s				;setup return jump either $b0 or $f0
-			sbc #$90				;a = $20/$60, clears V-flag, as we subtract two negative numbers (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html)
+			lax <.val30b0 - $52,y			;can also choose bmi = fallthrough, bcs take branch, A = 0, C = 1
+			stx .gcr_h_or_s				;setup return jump either $30 or $b0
+			;adc #$0f				;a = $40/$c0, clears V-flag, as we subtract two negative numbers (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+			;asl
+			clv
 			bvc *
-			asl					;$40/$c0
 			ldx #$3e
+			;tya
+			;ror
+			;arr #$80
 			eor (.v1c01 - $3e,x)
+			eor <.bvs				;waste 1 cycle
+			pha
+			pla
+			;asl <.val00 - $3e,x			;waste 6 cycles, shifts a zero in ZP, stays a zero
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_header_wrong_type		;start over with a new header again as the check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x 		;init checksum, waste 1 cycle
 			lda <.ser2bin - $3e,x			;$7f, waste 2 cycles
-			ldx <.val07ff - $52,y			;will we receive 8 or 256 bytes
-			txs					;bytes to read
-			jmp .gcr_entry				;35 cycles until entry, 36 would be better
+			jmp .gcr_entry				;34 cycles until enter
 !if CONFIG_DEBUG != 0 {
 .next_header_trail_zero
 			inc <.num_error
