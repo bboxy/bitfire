@@ -27,7 +27,8 @@
 !cpu 6510
 
 CHECKSUM = 1
-CHECKSUM_CLEAR = 1
+CHECKSUM_CLEAR = 0
+CHECKSUM_CLEAR_FAST = 1
 REQDISC = 0
 BUSLOCK = 0
 WAIT_SPIN_DOWN = 0
@@ -445,6 +446,9 @@ checksum
 !if CHECKSUM_CLEAR == 1 {
 		sta srcd
 }
+!if CHECKSUM_CLEAR_FAST == 1 {
+		sta srcd
+}
 		txa
 		eor #$ff
 		tax
@@ -464,21 +468,24 @@ checksum
 		sta srcd + 1
 		stx endx + 1
 }
+!if CHECKSUM_CLEAR_FAST == 1 {
+		sta srcd + 1
+}
 		lda #$00
 -
 		clc
 srch = * + 1
 		adc $1000,x
-;!if CHECKSUM_CLEAR == 1 {
-;srcd = * + 1
-;		sta $1000,x	;overwrite with junk
-;}
+!if CHECKSUM_CLEAR_FAST == 1 {
+srcd = * + 1
+		sta $1000,x	;overwrite with junk
+}
 		inx
 		bne -
 		inc srch + 1
-;!if CHECKSUM_CLEAR == 1 {
-;		inc srcd + 1
-;}
+!if CHECKSUM_CLEAR_FAST == 1 {
+		inc srcd + 1
+}
 		dec endh
 		bne -
 

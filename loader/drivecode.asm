@@ -42,11 +42,11 @@
 
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
-.SANCHECK_MAX_SECTORS	= 1
-.BOGUS_READS		= 1
+.SANCHECK_MAX_SECTORS	= 1   ;check integrity of sector num in header, to not write out of bounds later on on wanted-list
+.BOGUS_READS		= 1   ;discard the first successfully read sector when spinning up, it has potential to be false positive in checksum
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
-.VARIABLE_INTERLEAVE	= 1
+.VARIABLE_INTERLEAVE	= 1   ;use interleave 4 in zone 3 and interleave 3 in remaining speed zones
 
 ;constants
 .INTERLEAVE		= 4
