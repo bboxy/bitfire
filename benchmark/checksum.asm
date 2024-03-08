@@ -27,11 +27,11 @@
 !cpu 6510
 
 CHECKSUM = 1
-CHECKSUM_CLEAR = 0
-CHECKSUM_CLEAR_FAST = 1
+CHECKSUM_CLEAR = 1
+CHECKSUM_CLEAR_FAST = 0
 REQDISC = 0
 BUSLOCK = 0
-WAIT_SPIN_DOWN = 0
+WAIT_SPIN_DOWN = 1
 
 TIME_RAW = 1
 TIME_LOADCOMP = 0
@@ -281,10 +281,8 @@ numb		lda #$00		;file number
 		bit $ea
 		dey
 		bne -
-}
 		lda #$03
 		sta $dd00
-!if BUSLOCK == 1 {
 		+bus_unlock
 		;jmp next
 }

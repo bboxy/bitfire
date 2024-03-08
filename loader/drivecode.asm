@@ -45,7 +45,7 @@
 .SANCHECK_MAX_SECTORS	= 1   ;check integrity of sector num in header, to not write out of bounds later on on wanted-list
 .BOGUS_READS		= 1   ;discard the first successfully read sector when spinning up, it has potential to be false positive in checksum
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
-.DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
+.DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1   ;use interleave 4 in zone 3 and interleave 3 in remaining speed zones
 
 ;constants
@@ -270,6 +270,7 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
+			bvs .read_loop
 .bvs2
 			bvs .read_loop
 			bvs .read_loop
@@ -282,15 +283,13 @@ b			= $48
 			eor $0102
 			tax
 !if .SANCHECK_TRAILING_ZERO = 1 {
-			ldy $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
-			tya
-			and #$0f
-			eor #$05
-			bne .saveguard
-			tya
+			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 			ror
-			and #$f8
+			bcc .saveguard
+			sbc #2
 			tay
+			and #$07
+			bne .saveguard
 } else {
 			lda $1c01
 			arr #$f0
@@ -655,7 +654,7 @@ b			= $48
 			lax <.postpone				;check if blockwas sent postponed or regular
 			bne .skip_send				;normal operation
 			dec <.postpone				;drop flag
-			jmp .finish_seek			;block sent postponed, now finish last halfstep
+			jmp .finish_seek			;block sent postponed, now finish last halfstep and done
 .postpone_test
 			lda <.last_track_of_file		;last block of file? send now, as eof happens afterwards
 			bmi .preloop				;EOF, continue
@@ -675,7 +674,7 @@ b			= $48
 			bpl .next_header_			;fetch a new block
 			bit <.last_track_of_file		;EOF? Nope, no advance track
 !if (.DELAY_SPIN_DOWN | .BOGUS_READS = 1) {
-			bmi *+5
+			bmi .eof
 			jmp .next_track
 } else {
 			bpl .next_track
@@ -774,7 +773,7 @@ b			= $48
 			sta <.filenum				;set new filenum
 			lda $1c00
 !if .BOGUS_READS != 0 {
-			bit <.val04				;check if MOTOR_ON
+			bit <.val04				;check if MOTOR_ON, while not destroying A \o/
 			bne +
 			inc <.bogus_reads			;motor was off, so better be save than sorry on spin up
 +
@@ -867,7 +866,6 @@ b			= $48
 			jsr .set_max_sectors			;setup max_sectors, expects track in Y
 			lda <.blocks_hi
 
-			sec
 			sbc <.max_sectors			;reduce blockcount track by track
 			bcc .next_dir_entry
 -
@@ -929,8 +927,8 @@ b			= $48
 			lda #.STEPPING_SPEED
 .step_
 			sta $1c05				;clears irq flag in $1c0d
+			;XXX TODO could simply step up/down by inc/dec + and #$03 + ora LED/MOTOR, bitrate is straight set after
 			tya
-.halftrack
 			eor $1c00
 			and #$01				;same as and #3 afterwards + clc after rol
 			sec
@@ -944,7 +942,8 @@ b			= $48
 			ora <.postpone
 			bne .finish_seek			;x == 0 and postpone == 0
 			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG
-			jmp .start_send				;now xfer block, we should return to finish_seek then, sets x to $0a
+			ldx #$0a
+			jmp .preloop				;now xfer block, we should return to finish_seek then, sets x to $0a
 .finish_seek
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
@@ -976,7 +975,7 @@ b			= $48
 			adc #2					;or $15 if < track 18
 +
 			sta <.max_sectors
-;			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
+			sbc #$11				;carry still set depending on cpy #18 -> 0, 1, 2, 3
 
 			inx
 			beq .set_bitrate			;check on X == $ff? and preserve carry
@@ -984,26 +983,22 @@ b			= $48
 			rts
 .set_bitrate
 .num_bvs		= .bvs_end - .bvs
-.const			= <(.read_loop - .bvs - 4 - .num_bvs)
+.const			= <(.read_loop - .bvs - 3 - .num_bvs)
 
-;			tay
-			ldy #$70
-			adc #.const - $11
-;			adc #.const
+			tay					;save for later lookup
+			asl
+			eor #$06
+			sta <.gcr_slow1				;use as temp var, is set again later on
+
+			tya
+			adc #.const
 			ldx #.num_bvs
 -
 			sta <.bvs - 1,x
-			sty <.bvs - 2,x
 			adc #2
 			dex
 			dex
 			bne -
-
-			sbc #.const + .num_bvs			;restory density (0..3)
-			tay					;save for later lookup
-			asl
-			eor #$06				;by two and invert
-			sta .br + 1
 
 !if .VARIABLE_INTERLEAVE {
 			txa
@@ -1011,14 +1006,19 @@ b			= $48
 			adc #3
 			sta <.interleave			;interleave is 4 for zone 3, 3 for other zones
 }
-			lda #$e0				;cpx will be like a nop to break out of bvs-chain, also used later as ora val
-.br			bne *					;place 0-3 cpx
-			sta .bvs2 + 2
-			sta .bvs2 + 4
-			sta .bvs2 + 4
+			lda #$70
+-
+			cpx <.gcr_slow1
+			bne +
+			asl
++
+			sta <.bvs2,x
+			inx
+			inx
+			cpx #$06
+			bne -
 
 			ora $1c00
-			;eor .bitrate - .const - $14,y in case of tay after adc #.const
 			eor <.bitrate,y
 			sta $1c00
 
@@ -1326,7 +1326,7 @@ b			= $48
 			;motor and LED is on after that
 
 			sei
-			lda $0603
+			lda .dir_diskside
 			pha
 
 			;$180e .. 1800
@@ -1338,8 +1338,12 @@ b			= $48
 			;PCR					 111                            0        111                                  0
 			lda #%11101110				;CB2 manual output high (read), CB1 low, CA2 manual output high (byte ready), CA1 low (NC)
 			sta $1c0c
+			;sta $180c				;disable IRQ sources for ATN?
 
 			;ACR
+			;try ot latch $1800?
+			;lda #%00000010				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
+			;sta $180b
 			lda #%00000001				;shift-register disabled, PB disable latching, PA enable latching (content for $1c01 is then latched)
 			sta $1c0b
 
