@@ -45,7 +45,7 @@
 .SANCHECK_MAX_SECTORS	= 1
 .BOGUS_READS		= 1
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
-.DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
+.DELAY_SPIN_DOWN	= 1   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1
 
 ;constants
@@ -81,8 +81,8 @@
 !pseudopc .zeropage {
 .zp_start
 
-.dirinfo		= .zp_start + $00
-.to_track		= .zp_start + $00			;DT
+.dirinfo		= .zp_start + $00			;struct with 3 bytes containing initial startpos info for dirtrack, usually 1,0,0 for first dir track
+.to_track		= .zp_start + $00
 .blocks_hi 		= .zp_start + $01
 .blocks_lo 		= .zp_start + $02
 .val30b0		= .zp_start + $03

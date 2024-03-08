@@ -257,6 +257,7 @@ bitfire_ntsc3_op	ldx #$6d						;opcode for adc	-> repair any rts being set (also
 			lsr							;%0dddd111
 			lsr							;%00dddd11 1
 			ldx <CONFIG_LAX_ADDR					;waste one cycle
+			;nop
 bitfire_ntsc0		ora $dd00						;%dddddd11 1, ora again to preserve
 			stx $dd02
 
@@ -264,12 +265,14 @@ bitfire_ntsc0		ora $dd00						;%dddddd11 1, ora again to preserve
 			ror							;%11dddddd 1
 			ldx #$3f
 			sax .ld_nibble + 1
+			;nop
 bitfire_ntsc2		and $dd00						;%ddxxxxxx might loose some lower bits, but will be repaired later on ora
 			stx $dd02
 
 .ld_nibble		ora #$00						;%dddddddd -> merge in lower bits again and heal bits being dropped by previous and
 .ld_store		sta $b00b,y
 .ld_gentry		lax <CONFIG_LAX_ADDR
+			;nop
 .ld_gend
 bitfire_ntsc3		adc $dd00						;%dd1110xx will be like #$38 (A = $37 + carry) be added
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
@@ -279,6 +282,7 @@ bitfire_ntsc3		adc $dd00						;%dd1110xx will be like #$38 (A = $37 + carry) be 
 			dey
 			cpy #$01						;check on 0 in carry, too bad we can't use that result with direct bail out, still some bits to transfer
 			ldx #$3f
+			;nop
 bitfire_ntsc1		ora $dd00						;%dddd111x, ora to preserve the 3 set bits
 			stx $dd02
 
