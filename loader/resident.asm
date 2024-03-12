@@ -276,10 +276,13 @@ bitfire_ntsc2		and $dd00						;%ddxxxxxx might loose some lower bits, but will b
 .ld_gend
 bitfire_ntsc3		adc $dd00						;%dd1110xx will be like #$38 (A = $37 + carry) be added
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
+			;XXX TODO could let this happen and have atn set on begin, drop onfirst sent bit of filename? end filename with atn lo?, busy signal must be inverted then?
+			;could save a lot of handling here, but requires increment on xfer, no pla possible but lda $0100/0068,y? iny cpy pos
 
 			lsr							;%0dd111xx
 			lsr							;%00dd111x
 			dey
+			;branch out at == 0? would then start with atn set, would be verycool, just preamble would end same way, what would suck? :-( would need to drop level before we enter loop at all? or between preamble and data?
 			cpy #$01						;check on 0 in carry, too bad we can't use that result with direct bail out, still some bits to transfer
 			ldx #$3f
 			;nop

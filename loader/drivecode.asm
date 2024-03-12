@@ -271,6 +271,8 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
+			bvs .read_loop
+			bvs .read_loop
 .bvs2
 			bvs .read_loop
 			bvs .read_loop
@@ -288,8 +290,6 @@ b			= $48
 			bcc .saveguard
 			sbc #2
 			tay
-			and #$07
-			bne .saveguard
 } else {
 			lda $1c01
 			arr #$f0
@@ -599,10 +599,16 @@ b			= $48
 			;bne branch
 
 .dataloop
-			inx					;increase counter, as we go through sendloop twice, for preamble and for data, so mask is $0a and then $0b
 			inc .branch + 1				;branch now points to pla
 			ldy <.block_size			;blocksize + 1
+			;bit $1800				;needed if we exit beforehand? 
+			;bpl *-3
 			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
+
+
+
+			;23 -> 3 -> $0f 0011 -> 00001111
+			;ends with $00 as data, means, eof?
 .preloop
 			;lda preamble,y or pla needs change then + adapt branch -> sta preloop + 1
 			lda (.preamble_data_),y			;.preamble_data_ = $68 = pla
@@ -612,12 +618,13 @@ b			= $48
 			sax $1800				;76540213	-> ddd-0d1d
 
 			asl					;6540213. 7
-			ora #$10				;654+213. 7	-> ddd+2d3d
+			ora .val10				;654+213. 7	-> ddd+2d3d	XXX TODO slowed down for now, neccessary?
+			dey
 			bit $1800
 			bpl *-3
 			sta $1800
 
-			dey
+			bit $ea					;XXX TODO slowed down for now, neccessary?
 			ror					;7654+213 .
 			asr #%11110000				;.7654... .	-> ddd54d-d
 			bit $1800
@@ -626,7 +633,7 @@ b			= $48
 
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d-d
-			cpy #$ff
+			cpy .valff				;XXX TODO slowed down for now, neccessary?
 			bit $1800
 			bpl *-3
 			sta $1800
@@ -636,11 +643,10 @@ b			= $48
 !if >*-1 != >.preloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
 }
-			txa					;$0a/$0b
-			lsr					;$05 and C = 0/1
+			lda .branch + 1
+			asr #$05				;A = $02 and C = 0/1
 			bcc .dataloop				;second round, send sector data now
 
-			lsr					;$02 and C = 1
 			bit $1800
 			bmi *-3
 			sta $1800				;signal busy after atn drops
@@ -1006,6 +1012,8 @@ b			= $48
 			adc #3
 			sta <.interleave			;interleave is 4 for zone 3, 3 for other zones
 }
+
+			;XXX TODO version with one bvs less and 2 to 0 skips seems to work better?
 			lda #$70
 -
 			cpx <.gcr_slow1
@@ -1213,6 +1221,8 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 .back_gcr
+			and #$07
+			bne .next_header
 			txa					;fetch checksum calculated so far
 			eor $0103
 			ldx <.threes + 1
@@ -1264,16 +1274,17 @@ b			= $48
 			bne .next_header_wrong_type		;start over with a new header again as check against first bits of headertype already fails
 			lax <.val30b0 - $52,y			;can also choose bmi = fallthrough, bcs take branch, A = 0, C = 1
 			stx .gcr_h_or_s				;setup return jump either $30 or $b0
-			;adc #$0f				;a = $40/$c0, clears V-flag, as we subtract two negative numbers (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+			adc #$0f				;a = $40/$c0, clears V-flag, as we subtract two negative numbers (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
 			;asl
-			clv
+			;clv
 			bvc *
-			ldx #$3e
+			;XXX TODO maybe even reduce? check on my floppy -> reason for more bvs in the end?!
+			ldx <.val3e
 			;tya
 			;ror
 			;arr #$80
 			eor (.v1c01 - $3e,x)
-			eor <.bvs				;waste 1 cycle
+			;eor <.bvs				;waste 1 cycle
 			pha
 			pla
 			;asl <.val00 - $3e,x			;waste 6 cycles, shifts a zero in ZP, stays a zero
