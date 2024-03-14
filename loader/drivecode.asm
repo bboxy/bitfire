@@ -273,8 +273,8 @@ b			= $48
 			bvs .read_loop
 			bvs .read_loop
 			bvs .read_loop
-.bvs2
 			bvs .read_loop
+.bvs2
 			bvs .read_loop
 			bvs .read_loop
 .bvs_end
@@ -601,8 +601,6 @@ b			= $48
 .dataloop
 			inc .branch + 1				;branch now points to pla
 			ldy <.block_size			;blocksize + 1
-			;bit $1800				;needed if we exit beforehand? 
-			;bpl *-3
 			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
 
 
@@ -618,7 +616,7 @@ b			= $48
 			sax $1800				;76540213	-> ddd-0d1d
 
 			asl					;6540213. 7
-			ora .val10				;654+213. 7	-> ddd+2d3d	XXX TODO slowed down for now, neccessary?
+			ora <.val10				;654+213. 7	-> ddd+2d3d	XXX TODO slowed down for now, neccessary?
 			dey
 			bit $1800
 			bpl *-3
@@ -633,7 +631,7 @@ b			= $48
 
 			lsr					;..7654..
 			asr #%00110000				;...76...	-> ddd76d-d
-			cpy .valff				;XXX TODO slowed down for now, neccessary?
+			cpy <.valff				;XXX TODO slowed down for now, neccessary?
 			bit $1800
 			bpl *-3
 			sta $1800
@@ -647,6 +645,7 @@ b			= $48
 			asr #$05				;A = $02 and C = 0/1
 			bcc .dataloop				;second round, send sector data now
 
+			;lda #.BUSY
 			bit $1800
 			bmi *-3
 			sta $1800				;signal busy after atn drops
@@ -657,7 +656,7 @@ b			= $48
 			sta <.preamble_data + 5
 }
 !if .POSTPONED_XFER = 1 {
-			lax <.postpone				;check if blockwas sent postponed or regular
+			lax <.postpone				;check if block was sent postponed or regular
 			bne .skip_send				;normal operation
 			dec <.postpone				;drop flag
 			jmp .finish_seek			;block sent postponed, now finish last halfstep and done
@@ -950,6 +949,7 @@ b			= $48
 			ldy #$04 - CONFIG_LOADER_ONLY + CONFIG_DEBUG
 			ldx #$0a
 			jmp .preloop				;now xfer block, we should return to finish_seek then, sets x to $0a
+			;jmp .start_send			;can ommit ldx #$0a then
 .finish_seek
 }
 			lda $1c0d				;wait for timer to elapse, just in case xfer does not take enough cycles (can be 1-256 bytes)
@@ -989,14 +989,9 @@ b			= $48
 			rts
 .set_bitrate
 .num_bvs		= .bvs_end - .bvs
-.const			= <(.read_loop - .bvs - 3 - .num_bvs)
+.const			= <(.read_loop - .bvs - 4 - .num_bvs)
 
 			tay					;save for later lookup
-			asl
-			eor #$06
-			sta <.gcr_slow1				;use as temp var, is set again later on
-
-			tya
 			adc #.const
 			ldx #.num_bvs
 -
@@ -1015,21 +1010,19 @@ b			= $48
 
 			;XXX TODO version with one bvs less and 2 to 0 skips seems to work better?
 			lda #$70
--
-			cpx <.gcr_slow1
-			bne +
+			sta .bvs2 + 0
+			sta .bvs2 + 2
 			asl
-+
-			sta <.bvs2,x
-			inx
-			inx
-			cpx #$06
-			bne -
-
 			ora $1c00
 			eor <.bitrate,y
 			sta $1c00
 
+			cpy #2
+			bcc +
+			lda #$80
+			sta .bvs2 + 0
+			sta .bvs2 + 2
++
 			lda .slow_tab,y
 			ldy #$4c
 			ldx #>.gcr_slow1_00
@@ -1275,24 +1268,17 @@ b			= $48
 			lax <.val30b0 - $52,y			;can also choose bmi = fallthrough, bcs take branch, A = 0, C = 1
 			stx .gcr_h_or_s				;setup return jump either $30 or $b0
 			adc #$0f				;a = $40/$c0, clears V-flag, as we subtract two negative numbers (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
-			;asl
-			;clv
 			bvc *
-			;XXX TODO maybe even reduce? check on my floppy -> reason for more bvs in the end?!
 			ldx <.val3e
-			;tya
-			;ror
-			;arr #$80
 			eor (.v1c01 - $3e,x)
-			;eor <.bvs				;waste 1 cycle
 			pha
 			pla
-			;asl <.val00 - $3e,x			;waste 6 cycles, shifts a zero in ZP, stays a zero
 			sax <.threes + 1
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_header_wrong_type		;start over with a new header again as the check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x 		;init checksum, waste 1 cycle
 			lda <.ser2bin - $3e,x			;$7f, waste 2 cycles
+			;XXX TODO reduce to 32 cycles and try on alps
 			jmp .gcr_entry				;34 cycles until enter
 !if CONFIG_DEBUG != 0 {
 .next_header_trail_zero
