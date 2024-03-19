@@ -43,7 +43,7 @@
 ;config params
 .SANCHECK_TRAILING_ZERO = 1   ;check if 4 bits of 0 follow up the checksum. This might fail or lead into partially hanging floppy due to massive rereads.
 .SANCHECK_MAX_SECTORS	= 1   ;check integrity of sector num in header, to not write out of bounds later on on wanted-list
-.BOGUS_READS		= 1   ;discard the first successfully read sector when spinning up, it has potential to be false positive in checksum
+.BOGUS_READS		= 0   ;discard the first successfully read sector when spinning up, it has potential to be false positive in checksum
 .POSTPONED_XFER		= 1   ;postpone xfer of block until first halfstep to cover settle time for head transport, turns out to load slower in the end?
 .DELAY_SPIN_DOWN	= 0   ;wait for app. 4s until spin down in idle mode
 .VARIABLE_INTERLEAVE	= 1   ;use interleave 4 in zone 3 and interleave 3 in remaining speed zones
@@ -287,7 +287,7 @@ b			= $48
 !if .SANCHECK_TRAILING_ZERO = 1 {
 			lda $1c01				;xxxx0101 least significant 4 bits are CONST1/trailing zero in case of sector checksum
 			ror
-			bcc .saveguard
+			bcc .saveguard				;really needed? yes, if carry == 0 and a & 7 == 3, this would still result in 0 and pass the check (xxxx1110) (should be xxxx0101)
 			sbc #2
 			tay
 } else {
@@ -323,7 +323,7 @@ b			= $48
 .preamble
 			dex					;a bit anoying, but SP is SP--/++SP on push/pull
 			txs
-			sty <.block_size
+			sty <.block_size			;store size prior to encoding preamble for later use on send data
 			iny					;set up num of bytes to be transferred on c64 side
 			sty <.preamble_data + 0 + CONFIG_DEBUG
 
@@ -547,6 +547,7 @@ b			= $48
 			;----------------------------------------------------------------------------------------------------
 .gcr_slow1_40
 			lda $1c01
+			;jmp .gcr_slow1 + 3
 			jmp (.gcr_slow_back)			;waste 5 cycles
 
 			;----------------------------------------------------------------------------------------------------
@@ -580,33 +581,38 @@ b			= $48
 
 			;XXX TODO spend a table for lookup to avoid swapped bits 0 and 3? possible? would save so much code?
 ;branch
+;loop
+			;bit $1800
+			;bpl *-3
+			;sta $1800
+			;iny
+			;beq end
 			;txa
 			;asr #$f0		;.7654...
+			;bit $1800
+			;bmi *-3
 			;sta $1800
-			;lsr			;..7654..
-			;lsr			;...7654.
+			;asr #%00011000		;..76....
+			;lsr			;...76...
 			;ldx data,y		;76543210
+			;bit $1800
+			;bpl *-3
 			;sta $1800
 			;txa
 			;asl			;6543210.
 			;asl			;543210..
 			;asl			;43210...
+			;bit $1800
+			;bmi *-3
 			;sta $1800
-			;lsr			;.43210..
-			;lsr			;..43210.
-			;dey
-			;sta $1800
-			;bne branch
+			;asr #%01100000		;..32....
+			;lsr			;...32...
+			;jmp loop
 
 .dataloop
 			inc .branch + 1				;branch now points to pla
 			ldy <.block_size			;blocksize + 1
 			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
-
-
-
-			;23 -> 3 -> $0f 0011 -> 00001111
-			;ends with $00 as data, means, eof?
 .preloop
 			;lda preamble,y or pla needs change then + adapt branch -> sta preloop + 1
 			lda (.preamble_data_),y			;.preamble_data_ = $68 = pla
@@ -636,19 +642,19 @@ b			= $48
 			bpl *-3
 			sta $1800
 
-.branch			bcc .preloop
-
 !if >*-1 != >.preloop {
 	!error "sendloop not in one page! Overlapping bytes: ", * & 255
 }
+.branch			bcc .preloop
+
 			lda .branch + 1
-			asr #$05				;A = $02 and C = 0/1
+			lsr					;bit1 = 1 and C = 0/1
 			bcc .dataloop				;second round, send sector data now
 
 			;lda #.BUSY
 			bit $1800
 			bmi *-3
-			sta $1800				;signal busy after atn drops
+			sax $1800				;signal busy after atn drops -> $67 & $0a -> $02
 
 			dec .branch + 1				;restore branch when done
 !if CONFIG_DEBUG != 0 {
@@ -1009,20 +1015,18 @@ b			= $48
 }
 
 			;XXX TODO version with one bvs less and 2 to 0 skips seems to work better?
-			lda #$70
+			lda #$e0
+			cpy #2
+			bcs +
+			lsr
++
 			sta .bvs2 + 0
 			sta .bvs2 + 2
-			asl
+
 			ora $1c00
 			eor <.bitrate,y
 			sta $1c00
 
-			cpy #2
-			bcc +
-			lda #$80
-			sta .bvs2 + 0
-			sta .bvs2 + 2
-+
 			lda .slow_tab,y
 			ldy #$4c
 			ldx #>.gcr_slow1_00
@@ -1063,22 +1067,21 @@ b			= $48
 			adc <.interleave
 			cmp <.max_sectors			;wrap around?
 			bcc +					;nope, store sector and do a BRA, bcc will always be bne
-			adc #$00				;increase
-			sec
+			adc #$01				;increase (one too much, as one too much will be subtracted in next sbc turn too)
 -
 			tay
 			sbc <.interleave			;subtract some #sectors
 			bcs -					;until underflow
-			tya
+			tya					;keep carry = 0 so that EOF is not set on exit of loop
 } else {
 			adc #.INTERLEAVE
 			cmp <.max_sectors			;wrap around?
 			bcc +					;nope, store sector and do a BRA, bcc will always be bne
-			adc #$00				;increase
 !if .INTERLEAVE = 4 {
+			adc #$00				;increase
 			and #$03				;modulo 4
 } else {
-			sec
+			adc #$01				;increase
 -
 			tay					;modulo INTERLEAVE
 			sbc #.INTERLEAVE			;subtract some #sectors
@@ -1240,7 +1243,7 @@ b			= $48
 			bpl -					;first byte being processed?
 			ldy #$55				;type (sector) (SP = $ff already)
 			eor <.track				;second byte is track
-			beq .read_sector			;always falls through if we come from sector read (negtive is alsways != 0), else it decides if we continue with sector payload or start with a new header
+			beq .read_sector			;we continue with sector payload or start with a new header
 !if CONFIG_DEBUG = 0 {
 .next_header_trail_zero
 }
@@ -1259,15 +1262,15 @@ b			= $48
 			bit $1c00				;wait until a sync is in action
 			bmi -
 								;sync started
-			lda $1c01				;both numbers (A and $1c01) are positive, so V-flag should be cleared
+			lda $1c01				;both numbers (A and $1c01) are positive, so V-flag should be cleared on an adc $1c01, should, better be save than sorry and do a clv
 			clv
 			bvc *					;wait for first byte after sync
 
 			cpy $1c01				;11111222 compare type
 			bne .next_header_wrong_type		;start over with a new header again as check against first bits of headertype already fails
 			lax <.val30b0 - $52,y			;can also choose bmi = fallthrough, bcs take branch, A = 0, C = 1
-			stx .gcr_h_or_s				;setup return jump either $30 or $b0
-			adc #$0f				;a = $40/$c0, clears V-flag, as we subtract two negative numbers (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
+			stx .gcr_h_or_s				;setup return jump either $30 or $b0 to select either header or sector handling after gcr decode
+			adc #$0f				;a = $40/$c0, clears V-flag, as we add a positive to a negative number, or two positive numbers that do not overflow in bit 6 (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
 			bvc *
 			ldx <.val3e
 			eor (.v1c01 - $3e,x)
