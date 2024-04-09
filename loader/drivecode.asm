@@ -385,7 +385,6 @@ b			= $48
 			; TURN DISK OR READ IN NEW DIRECTORY BLOCK
 			;
 			;----------------------------------------------------------------------------------------------------
-+
 .turn_disc_back
 			iny
 -
@@ -610,7 +609,6 @@ b			= $48
 			;jmp loop
 
 .dataloop
-			inc .branch + 1				;branch now points to pla
 			ldy <.block_size			;blocksize + 1
 			dop					;skip lda (zp),y mnemonic, ends up in pla to read data from stack
 .preloop
@@ -648,15 +646,16 @@ b			= $48
 .branch			bcc .preloop
 
 			lda .branch + 1
+			eor #$01
+			sta .branch + 1
 			lsr					;bit1 = 1 and C = 0/1
-			bcc .dataloop				;second round, send sector data now
+			bcs .dataloop				;second round, send sector data now
 
 			;lda #.BUSY
 			bit $1800
 			bmi *-3
 			sax $1800				;signal busy after atn drops -> $67 & $0a -> $02
 
-			dec .branch + 1				;restore branch when done
 !if CONFIG_DEBUG != 0 {
 			lda #$0d
 			sta <.preamble_data + 5
@@ -1013,7 +1012,6 @@ b			= $48
 			adc #3
 			sta <.interleave			;interleave is 4 for zone 3, 3 for other zones
 }
-
 			;XXX TODO version with one bvs less and 2 to 0 skips seems to work better?
 			lda #$e0
 			cpy #2
@@ -1048,8 +1046,7 @@ b			= $48
 
 			;A = 0
 			asr #$00
-			;clc
-								;XXX TODO could also use anc #0 here, but might fail on 1541 U1
+			;clc					;XXX TODO could also use anc #0 here, but might fail on 1541 U1
 .wanted_loop
 			ldy <.blocks_hi
 			bne +
@@ -1272,11 +1269,11 @@ b			= $48
 			stx .gcr_h_or_s				;setup return jump either $30 or $b0 to select either header or sector handling after gcr decode
 			adc #$0f				;a = $40/$c0, clears V-flag, as we add a positive to a negative number, or two positive numbers that do not overflow in bit 6 (see http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
 			bvc *
-			ldx <.val3e
-			eor (.v1c01 - $3e,x)
-			pha
+			ldx <.val3e				;fetch mask
+			eor (.v1c01 - $3e,x)			;check remaining bits of first byte while generously wasting cycles
+			pha					;waste more cycles
 			pla
-			sax <.threes + 1
+			sax <.threes + 1			;mask out hinibble of next byte
 			asr #$c1				;shift out LSB and mask two most significant bits (should be zero now depending on type)
 			bne .next_header_wrong_type		;start over with a new header again as the check for header type failed in all bits
 			sta <.chksum + 1 - $3e,x 		;init checksum, waste 1 cycle
