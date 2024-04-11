@@ -37,13 +37,13 @@
 		;LITERAL
 		;------------------
 .lz_start_over
-		lda #$01
 		asl <.lz_bits
 		bcs .lz_new_offset
 .lz_literal
+		lda #$01
 		jsr .lz_get_len
 		sta .lz_y + 1
-		and #$ff                        ;annoying, but flags are not set corresponding to A
+		cmp #$00                        ;annoying, but flags are not set corresponding to A
 		beq .lz_l_page_
 .lz_cp_literal
 .lz_src1 = * + 2
@@ -71,10 +71,10 @@
 		;NEW OR OLD OFFSET
 		;------------------
 
-		lda #$01
 		asl <.lz_bits
 		bcs .lz_new_offset		;either match with new offset or old offset
 .lz_match_repeat
+		lda #$01
 		jsr .lz_get_len
 ;!if ZX0_INPLACE == 0 {
 ;}
@@ -90,7 +90,7 @@
 		sta <.lz_dst + 0
 		bcs .lz_clc			;/!\ branch happens very seldom
 		dec <.lz_dst + 1
-.lz_clc_back
+.lz_clc
 		clc
 .lz_offset_lo	adc #$ff			;carry is cleared, subtract (offset + 1)
 		sta .lz_msrcr + 0
@@ -127,9 +127,6 @@
 .lz_dcp
 		dcp .lz_len_hi
 		bcs .lz_match_
-.lz_clc
-		clc
-		bcc .lz_clc_back
 .lz_l_page
 		sec				;only needs to be set for consecutive rounds of literals, happens very seldom
 		ldy #$00
