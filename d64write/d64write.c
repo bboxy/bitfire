@@ -56,7 +56,7 @@ typedef struct ctx {
 //        va_end(args);
 //        exit(2);
 //}
-
+ 
 static unsigned char s2p[] = {
     0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
     0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x5b,0x5c,0x5d,0x5e,0x5f,
@@ -631,7 +631,7 @@ static int d64_readdir(d64* d64, dirent64* d) {
     return 1;
 }
 
-static int d64_create_direntry(d64* d64, char* name, int start_track, int start_sector, int filetype, int blocks, int locked, int link_to_num) {
+static int d64_create_direntry(d64* d64, char* name, int start_track, int start_sector, int filetype, int blocks, int locked, int link_to_num, int dirart_raw) {
     dirent64 d;
     int status;
     int line = 0;
@@ -680,7 +680,9 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
     debug_message("free dir-entry found at t/s='%d/%d' @$%02x\n", d.d_detrack, d.d_desector, d.d_desectpos);
 
     /* ...and create it on disc */
-    //ascii2petscii(name);
+    if (!dirart_raw) {
+        ascii2petscii(name);
+    }
     d64_update_direntry(d64, name, start_track, start_sector, d.d_detrack, d.d_desector, d.d_desectpos, filetype, blocks, locked, link_to_num >= 0);
     return 0;
 }
@@ -803,7 +805,7 @@ void d64_scramble_buffer(unsigned char* buf) {
     }
 }
 
-int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose, int link_to_num) {
+int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose, int link_to_num, int dirart_raw) {
     FILE* file;
     int start_track;
     int start_sector;
@@ -989,8 +991,10 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             pname = basename(path);
 #endif
 
-            ascii2petscii(pname);
-            d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size, 0, link_to_num);
+            if (!dirart_raw){
+                ascii2petscii(pname);
+            }
+            d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size, 0, link_to_num, dirart_raw);
         }
     } else {
         if (d64_create_bitfire_direntry(d64, start_track, d64->sector_link, loadaddr, length, startpos, sectnum, verbose) != 0) {
@@ -1044,7 +1048,7 @@ int get_line(ctx* ctx, FILE* file, char* art, int type, int head) {
     return 1;
 }
 
-void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector, int lines, int link_boot) {
+void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector, int lines, int link_boot, int dirart_raw) {
     char art[41] = { 0 };
     char header[17] = { 0 };
     char id[6] = { 0 };
@@ -1085,13 +1089,17 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
             //for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
             memcpy(header, art + 3, 16);
             memcpy(id, art + 21, 5);
-            screen2petscii(header, 16);
-            screen2petscii(id, 5);
+            if (!dirart_raw) {
+                screen2petscii(header, 16);
+                screen2petscii(id, 5);
+            }
             d64_set_header(d64, header, id);
             head++;
         } else {
             memcpy(filename, art + 6, 16);
-            screen2petscii(filename, 16);
+            if (!dirart_raw) {
+                screen2petscii(filename, 16);
+            }
             blocks = strtoul(art, NULL, 10);
             locked = art[27] == 0x3c;
             switch (art[24]) {
@@ -1117,8 +1125,8 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
             if (link_boot == line && filetype != FILETYPE_PRG) {
                 fatal_message("bootfile is linked against a non PRG direntry!\n");
             }
-            if (filetype == FILETYPE_PRG && (link_boot < 0 || link_boot == line)) d64_create_direntry(d64, filename, boot_track, boot_sector, filetype, blocks, locked, link_boot);
-            else d64_create_direntry(d64, filename, 0, 0, filetype, blocks, locked, -1);
+            if (filetype == FILETYPE_PRG && (link_boot < 0 || link_boot == line)) d64_create_direntry(d64, filename, boot_track, boot_sector, filetype, blocks, locked, link_boot, dirart_raw);
+            else d64_create_direntry(d64, filename, 0, 0, filetype, blocks, locked, -1, dirart_raw);
             lines--;
             line++;
         }
@@ -1146,6 +1154,7 @@ int main(int argc, char *argv[]) {
 
     int lines = 0;
     int dir_art = 0;
+    int dir_art_raw = 0;
     int interleave = FILE_INTERLEAVE;
     int format = 0;
     int verbose = 0;
@@ -1171,6 +1180,7 @@ int main(int argc, char *argv[]) {
         printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
         printf("-B, --boot <file> [line]		Writes a standard file into the dirtrack. All PRG entries from dirart are linked to that file. Optionally it is linked to given line number only.\n");
         printf("-a, --art <num> <dirart.prg/.png>	A dirart can be provided, it extracts <num> lines of a petscii or .png screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
+        printf("-r, --raw				    Do not pre-process dirart.\n");
         //printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("-F, --40				Enable 40 track support.\n");
         printf("-f, --free <num>			Set blocks free to num.\n");
@@ -1266,6 +1276,9 @@ int main(int argc, char *argv[]) {
         else if(!strcmp(argv[c], "-v") || !strcmp(argv[c], "--verbose")) {
             verbose = 1;
         }
+        else if(!strcmp(argv[c], "-r") || !strcmp(argv[c], "--raw")) {
+            dir_art_raw = 1;
+        }
         else if(!strcmp(argv[c], "-a") || !strcmp(argv[c], "--art")) {
             if (argc -c > 1) lines = strtoul(argv[++c], NULL, 10);
             else {
@@ -1313,17 +1326,17 @@ int main(int argc, char *argv[]) {
             if (!format) {
                 fatal_message("bitfire files will only be written to a fresh disc, to avoid loss of standard files, use the -c option!\n");
             }
-            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave, verbose, -1);
+            d64_write_file(&d64, argv[++c], FILETYPE_BITFIRE, 1, interleave, verbose, -1, 0);
         }
     }
 
     //write the boot file first to have position on disk
     if(boot_file) {
-        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, verbose, -1);
+        d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, verbose, -1, 0);
     }
 
     //and a dir art linked to that now as we have track/sector info for the bootfile
-    if(dir_art) d64_apply_dirart(&d64, art_path, d64.track_link, d64.sector_link, lines, link_to_num);
+    if(dir_art) d64_apply_dirart(&d64, art_path, d64.track_link, d64.sector_link, lines, link_to_num, dir_art_raw);
 
     //finally add the standard files
     c = 0;
@@ -1340,7 +1353,7 @@ int main(int argc, char *argv[]) {
                 printf("ignoring linenumber for standard-file '%s', as no dir-art ist used.\n", filename);
                 link_to_num = -1;
             }
-            d64_write_file(&d64, filename, FILETYPE_STANDARD, 1, interleave, verbose, link_to_num);
+            d64_write_file(&d64, filename, FILETYPE_STANDARD, 1, interleave, verbose, link_to_num, dir_art_raw);
         }
     }
 
