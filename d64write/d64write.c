@@ -680,9 +680,9 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
     debug_message("free dir-entry found at t/s='%d/%d' @$%02x\n", d.d_detrack, d.d_desector, d.d_desectpos);
 
     /* ...and create it on disc */
-    if (!dirart_raw) {
-        ascii2petscii(name);
-    }
+    //if (!dirart_raw) {
+    //    ascii2petscii(name);
+    //}
     d64_update_direntry(d64, name, start_track, start_sector, d.d_detrack, d.d_desector, d.d_desectpos, filetype, blocks, locked, link_to_num >= 0);
     return 0;
 }
@@ -789,13 +789,13 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
                     }
                 }
                 d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
-                return 0;
+                return (dirsect < BITFIRE_DIRSECT) * 63 + dir_pos;
             }
             dir_pos++;
         }
         dirsect--;
     }
-    return 1;
+    return -1;
 }
 
 void d64_scramble_buffer(unsigned char* buf) {
@@ -821,6 +821,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     //int t_dbg = -1;
     int filepos;
     int blocksize = 0;
+    int bitfire_filenum = -1;
     //int i;
 
     //for (i = 0; i < 32; i++) s_dbg[i] = 0;
@@ -997,7 +998,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size, 0, link_to_num, dirart_raw);
         }
     } else {
-        if (d64_create_bitfire_direntry(d64, start_track, d64->sector_link, loadaddr, length, startpos, sectnum, verbose) != 0) {
+        if ((bitfire_filenum = d64_create_bitfire_direntry(d64, start_track, d64->sector_link, loadaddr, length, startpos, sectnum, verbose)) < 0) {
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
     }
@@ -1012,7 +1013,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
                 printf("\n");
             break;
             case FILETYPE_BITFIRE:
-                printf("type: bitfire   mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, d64->sectpos, path);
+                printf("type: bitfire file#: %03d  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03x  path: \"%s\"\n", bitfire_filenum, loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, d64->sectpos, path);
             break;
         }
     }
@@ -1154,7 +1155,7 @@ int main(int argc, char *argv[]) {
 
     int lines = 0;
     int dir_art = 0;
-    int dir_art_raw = 0;
+    int dirart_raw = 0;
     int interleave = FILE_INTERLEAVE;
     int format = 0;
     int verbose = 0;
@@ -1277,7 +1278,7 @@ int main(int argc, char *argv[]) {
             verbose = 1;
         }
         else if(!strcmp(argv[c], "-r") || !strcmp(argv[c], "--raw")) {
-            dir_art_raw = 1;
+            dirart_raw = 1;
         }
         else if(!strcmp(argv[c], "-a") || !strcmp(argv[c], "--art")) {
             if (argc -c > 1) lines = strtoul(argv[++c], NULL, 10);
@@ -1336,7 +1337,7 @@ int main(int argc, char *argv[]) {
     }
 
     //and a dir art linked to that now as we have track/sector info for the bootfile
-    if(dir_art) d64_apply_dirart(&d64, art_path, d64.track_link, d64.sector_link, lines, link_to_num, dir_art_raw);
+    if(dir_art) d64_apply_dirart(&d64, art_path, d64.track_link, d64.sector_link, lines, link_to_num, dirart_raw);
 
     //finally add the standard files
     c = 0;
@@ -1353,7 +1354,7 @@ int main(int argc, char *argv[]) {
                 printf("ignoring linenumber for standard-file '%s', as no dir-art ist used.\n", filename);
                 link_to_num = -1;
             }
-            d64_write_file(&d64, filename, FILETYPE_STANDARD, 1, interleave, verbose, link_to_num, dir_art_raw);
+            d64_write_file(&d64, filename, FILETYPE_STANDARD, 1, interleave, verbose, link_to_num, dirart_raw);
         }
     }
 
