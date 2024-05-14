@@ -257,6 +257,11 @@
 .e
 		}
 
+		!macro skip_file {
+			lda #BITFIRE_SKIP_FILE
+			jsr bitfire_loadraw_
+		}
+
 ;		!macro gaps_setup {
 ;			ldx #$09
 ;.l

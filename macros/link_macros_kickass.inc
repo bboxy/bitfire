@@ -129,20 +129,20 @@ l:
 
 		.macro to_nmi () {
 			lda #$ad
-			sta link_ack_interrupt + 0
+			sta link_player + 7
 			lda #$0d
-			sta link_ack_interrupt + 1
+			sta link_player + 8
 			lda #$dd
-			sta link_ack_interrupt + 2
+			sta link_player + 9
 		}
 
 		.macro to_irq () {
 			lda #$ce
-			sta link_ack_interrupt + 0
+			sta link_player + 7
 			lda #$19
-			sta link_ack_interrupt + 1
+			sta link_player + 8
 			lda #$d0
-			sta link_ack_interrupt + 2
+			sta link_player + 9
 		}
 
 		.macro switch_to_nmi () {
@@ -217,6 +217,49 @@ l:
 			sta link_music_addr + 0
 			lda #>arg
 			sta link_music_addr + 1
+		}
+
+		.macro wait_space () {
+			lda #$7f
+			sta $dc00
+			lda #$10
+l:
+
+			bit $dc01
+			bne l
+		}
+
+		.macro wait_shift_lock () {
+			lda #$fd
+			sta $dc00
+l:
+			lda $dc01
+			bpl l
+		}
+
+		.macro crt_request_disk (arg) {
+			:setup_sync() arg
+l:
+			lda #$7f			//space pressed?
+			sta $dc00
+			lda $dc01
+			and #$10
+			beq .e				//yes, exit
+			lda link_frame_count + 1	//check counter
+			bpl +
+			sta .f + 1
+:()
+			lda #$fd			//shift lock pressed?
+			sta $dc00
+			lda $dc01
+.f			and #$00
+			bpl l				//shift lock pressed or not expired
+.e
+		}
+
+		.macro skip_file () {
+			lda #BITFIRE_SKIP_FILE
+			jsr bitfire_loadraw_
 		}
 
 //		!macro gaps_setup {

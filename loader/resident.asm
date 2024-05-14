@@ -502,8 +502,8 @@ link_ack_interrupt
 .lz_clc
 			clc
 			bcc .lz_clc_back
-.lz_cp_page									;if we enter from a literal, we take care that x = 0 (given after loop run, after length fetch, we force it to zero by tax here), so that we can distinguish the code path later on. If we enter from a match x = $b0 (elias fetch) or >lz_dst_hi + 1, so never zero.
-			txa
+.lz_cp_page
+			txa							;if we enter from a literal, we take care that x = 0 (given after loop run, after length fetch, we force it to zero by tax here), so that we can distinguish the code path later on. If we enter from a match x = $b0 (elias fetch) or >lz_dst_hi + 1, so never zero.
 .lz_cp_page_									;a is already 0 if entered here
 			dec <lz_len_hi
 			bne +
@@ -534,7 +534,7 @@ link_ack_interrupt
 			lda #$01						;restore initial length val
 		}
 			asl <lz_bits
-			bcs .lz_match						;after each match check for another match or literal?
+.lz_redirect2		bcs .lz_match						;either match with new offset or old offset
 
 			;------------------
 			;LITERAL
@@ -569,7 +569,7 @@ link_ack_interrupt
 			bne .lz_cp_lit
 .lz_set1
 		!if OPT_FULL_SET = 0 {						;if optimization is enabled, the lda #$01 is modified to a bcs .lz_cp_page/lda #$01
-			bcc .lz_cp_page						;next page to copy, either enabled or disabled (bcc/nop #imm/bcs)
+			bcc .lz_cp_page						;next page to copy, either enabled or disabled (beq/lda #$01)
                 }
 			;------------------
 			;NEW OR OLD OFFSET
@@ -578,7 +578,7 @@ link_ack_interrupt
 										;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
 			lda #$01
 			asl <lz_bits
-			bcs .lz_match						;either match with new offset or old offset
+.lz_redirect1		bcs .lz_match						;either match with new offset or old offset
 
 			;------------------
 			;REPEAT LAST OFFSET
