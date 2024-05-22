@@ -1172,7 +1172,7 @@ int main(int argc, char *argv[]) {
     if (argc <= 1) {
         printf("Usage: d64write (-c|-d) diskimage.d64 -h header -i id -s standard_format.prg -b bitfire_format.prg --boot bootloader.prg --side 1 -a 12 dirart.prg\n");
         printf("A multiple of files can be given as argument using -s or -b multiple times.\n");
-        printf("-c, --create <d64-image>		Select imgae to write to and create/format it.\n");
+        printf("-c, --create <d64-image>		Select image to write to and create/format it.\n");
         printf("-d, --d64 <d64-image>			Select an existing image. Files will be added.\n");
         printf("-h, --header <name>			Sets the header of the diskimage to <name>.\n");
         printf("-i, --id <name>				Sets the disk-id of the diskimage to <name>.\n");
@@ -1181,7 +1181,7 @@ int main(int argc, char *argv[]) {
         printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
         printf("-B, --boot <file> [line]		Writes a standard file into the dirtrack. All PRG entries from dirart are linked to that file. Optionally it is linked to given line number only.\n");
         printf("-a, --art <num> <dirart.prg/.png>	A dirart can be provided, it extracts <num> lines of a petscii or .png screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
-        printf("-r, --raw				    Do not pre-process dirart.\n");
+        printf("-r, --raw				Do not pre-process dirart.\n");
         //printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("-F, --40				Enable 40 track support.\n");
         printf("-f, --free <num>			Set blocks free to num.\n");
