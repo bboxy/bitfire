@@ -151,4 +151,6 @@ v1.2
 - bootfile can be linked to a single line of dirart
 - variable interleave per speedzone
 - dirart can be loaded raw, use at your own risk
+- files can be skipped when using load_next mechanism with a skip skip_file macro
 - filenumbers are shown for bitfire files in the summary
+- avoid linking standard or bootfile to other filetypes than prg
