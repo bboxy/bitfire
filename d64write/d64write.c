@@ -657,6 +657,9 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
     if (link_to_num >= 0 && line != link_to_num) {
         fatal_message("can't link '%s' to line %d, dir entry does not exist (range is 1 .. %d)!\n", name, link_to_num, line);
     }
+    if (link_to_num >= 0 && line == link_to_num && d.d_type != FILETYPE_PRG) {
+        fatal_message("standard file '%s' is linked against a non PRG direntry (line %d), file is not loadable this way!\n", name, link_to_num);
+    }
     /* nothing free? */
     if(status == 0) {
         debug_message("last block of dir reached, need to extend dir from t/s='%d/%d' on\n", d64->track, d64->sector);
@@ -1124,7 +1127,7 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
                 break;
             }
             if (link_boot == line && filetype != FILETYPE_PRG) {
-                fatal_message("bootfile is linked against a non PRG direntry!\n");
+                fatal_message("bootfile is linked against a non PRG direntry, disk won't boot!\n");
             }
             if (filetype == FILETYPE_PRG && (link_boot < 0 || link_boot == line)) d64_create_direntry(d64, filename, boot_track, boot_sector, filetype, blocks, locked, link_boot, dirart_raw);
             else d64_create_direntry(d64, filename, 0, 0, filetype, blocks, locked, -1, dirart_raw);
