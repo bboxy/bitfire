@@ -572,6 +572,7 @@ static int d64_readdir(d64* d64, dirent64* d) {
     if (!d64->sectsize) {
         if(!d64_read_sector(d64, d64->track, d64->sector, d64->sectbuf)) return -1;
         d64->sectpos  = 0;
+        d64->sectsize = SECTOR_SIZE;
     }
     /* still data to process on current sector? */
     if(d64->sectpos >= d64->sectsize) {
@@ -588,7 +589,7 @@ static int d64_readdir(d64* d64, dirent64* d) {
             /* start at pos 0, to have 8 blocks with $20 bytes size, first two bytes (tslink on first entry) will be ignored anyway, but counting is easier */
             d64->sectpos  = 0;
             /* ignore size set by read_sector() always walk through whole block, as we have a dir and size does not matter here */
-            //d64->sectsize = SECTOR_SIZE;
+            d64->sectsize = SECTOR_SIZE;
         } else {
             debug_message("sector-chain finshed\n");
             return 0;
