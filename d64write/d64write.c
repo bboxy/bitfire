@@ -439,16 +439,8 @@ void d64_get_free(d64 *d64) {
 static int d64_allocate_next_block(d64* d64, unsigned char* track, unsigned char* sector, int interleave, int filetype) {
     int free;
     int revs = 0;
-//    int interleaves[] = {3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4};
-
 
     debug_message("allocating next block...\n");
-
-    /* choose interleave */
-    //if(*track == D64_DIR_TRACK) interleave = DIR_INTERLEAVE;
-
-    //*sector += interleave;
-    //if(*sector > sectors[*track]) *sector -= sectors[*track];
 
     /* let's change track until we have blocks free */
     while(!(free = d64_get_free_track_blocks(d64, *track))) {
@@ -471,7 +463,6 @@ static int d64_allocate_next_block(d64* d64, unsigned char* track, unsigned char
     }
     debug_message("still '%d' free blocks on track %d\n", free, *track);
 
-//    interleave = interleaves[(*track) - 1];
     if (filetype == FILETYPE_BITFIRE) {
         switch (*track) {
             case 1 ... 17:
@@ -563,8 +554,6 @@ static int d64_update_direntry(d64* d64, char* name, int start_track, int start_
         d64->sectbuf[desectpos + D64_DBLOCKS + 0] = blocks & 0xff;
     }
 
-//    debug_print_hex(&d64->sectbuf[desectpos], 32, "DIR:", 32);
-
     /* update size info if it is the last dir-sector */
     if(d64->sectbuf[0] == 0) d64->sectbuf[1] = SECTOR_SIZE - 1;
 
@@ -579,33 +568,34 @@ static int d64_update_direntry(d64* d64, char* name, int start_track, int start_
 
 static int d64_readdir(d64* d64, dirent64* d) {
     int a;
+    /* fetch first sector of dir */
+    if (!d64->sectsize) {
+        if(!d64_read_sector(d64, d64->track, d64->sector, d64->sectbuf)) return -1;
+        d64->sectpos  = 0;
+    }
     /* still data to process on current sector? */
     if(d64->sectpos >= d64->sectsize) {
         /* we have a next ts-link? */
-        if(d64->track_link) {
+        if(d64->sectbuf[0]) {
             /* follow ts-link */
-            d64->track  = d64->track_link;
-            d64->sector = d64->sector_link;
+            /* first, get ts-link from new sector */
+            d64->track  = d64->sectbuf[0];
+            d64->sector = d64->sectbuf[1];
             debug_message("trying to read new sector %d/%d\n",d64->track,d64->sector);
             /* get next sector */
             if(!d64_read_sector(d64, d64->track, d64->sector, d64->sectbuf)) return -1;
-            /* first, get ts-link from new sector */
-            d64->track_link  = d64->sectbuf[0];
-            d64->sector_link = d64->sectbuf[1];
 
-            /* ignore size set by read_sector() always walk through whole block, as we have a dir and size does not matter here */
-            d64->sectsize = SECTOR_SIZE;
             /* start at pos 0, to have 8 blocks with $20 bytes size, first two bytes (tslink on first entry) will be ignored anyway, but counting is easier */
             d64->sectpos  = 0;
-        }
-        else {
+            /* ignore size set by read_sector() always walk through whole block, as we have a dir and size does not matter here */
+            //d64->sectsize = SECTOR_SIZE;
+        } else {
             debug_message("sector-chain finshed\n");
             return 0;
         }
     }
 
     debug_message("sectpos='%d' sectsize='%d'\n", d64->sectpos, d64->sectsize);
-//    debug_print_hex(&d64->sectbuf[d64->sectpos], 32, "DIR:", 32);
 
     /* populate direntry with data */
     d->d_desectpos = d64->sectpos;
@@ -616,10 +606,8 @@ static int d64_readdir(d64* d64, dirent64* d) {
     d->d_sector    = d64->sectbuf[d64->sectpos + D64_DSECTOR];
     d->d_blocks    = d64->sectbuf[d64->sectpos + D64_DBLOCKS + 1] * 256 + d64->sectbuf[d64->sectpos + D64_DBLOCKS];
     d->d_size      = d->d_blocks * (SECTOR_SIZE - 2);
-    if( (d64->sectbuf[d64->sectpos + D64_DTYPE] & 0x80)) d->d_closed = 1;
-    else d->d_closed = 0;
-    if( (d64->sectbuf[d64->sectpos + D64_DTYPE] & 0x40)) d->d_locked = 1;
-    else d->d_locked = 0;
+    d->d_closed    = (d64->sectbuf[d64->sectpos + D64_DTYPE] & 0x80) != 0;
+    d->d_locked    = (d64->sectbuf[d64->sectpos + D64_DTYPE] & 0x40) != 0;
     /* copy filename */
     for(a = 0; a < MAX_C64_NAME; a++) {
         if(d64->sectbuf[d64->sectpos + D64_DNAME + a] == 0xa0) break;
@@ -636,14 +624,15 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
     int status;
     int line = 0;
 
+    unsigned char prev_track;
+    unsigned char prev_sector;
+
     /* set startpos */
-    d64->track       = D64_DIR_TRACK;
-    d64->track_link  = D64_DIR_TRACK;
-    d64->sector      = D64_DIR_SECTOR;
-    d64->sector_link = D64_DIR_SECTOR;
-    /* reset both will force the sector to be read */
-    d64->sectpos     = 0;
-    d64->sectsize    = 0;
+    d64->track  = D64_DIR_TRACK;
+    d64->sector = D64_DIR_SECTOR;
+
+    /* force fetch of first sector of dir */
+    d64->sectsize = 0;
 
     /* walk through dir to find reusable direntries, position for a found entry will be set appropriately */
     line = 1;
@@ -664,28 +653,25 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
     if(status == 0) {
         debug_message("last block of dir reached, need to extend dir from t/s='%d/%d' on\n", d64->track, d64->sector);
         /* extend dir with new block */
-        d64->track_link  = d64->track;
-        d64->sector_link = d64->sector;
-        d64_allocate_next_block(d64, &d64->track_link, &d64->sector_link, DIR_INTERLEAVE, filetype);
+        prev_track  = d64->track;
+        prev_sector = d64->sector;
+        d64_allocate_next_block(d64, &d64->track, &d64->sector, DIR_INTERLEAVE, filetype);
         /* update ts-link */
-        d64->sectbuf[0] = d64->track_link;
-        d64->sectbuf[1] = d64->sector_link;
+        d64->sectbuf[0] = d64->track;
+        d64->sectbuf[1] = d64->sector;
 
         /* write sector back to update ts-link */
-        d64_write_sector(d64, d64->track, d64->sector, d64->sectbuf);
+        d64_write_sector(d64, prev_track, prev_sector, d64->sectbuf);
 
         /* set position for new direntry */
         d.d_desectpos = 0;
-        d.d_detrack   = d64->track_link;
-        d.d_desector  = d64->sector_link;
+        d.d_detrack   = d64->track;
+        d.d_desector  = d64->sector;
     }
 
     debug_message("free dir-entry found at t/s='%d/%d' @$%02x\n", d.d_detrack, d.d_desector, d.d_desectpos);
 
     /* ...and create it on disc */
-    //if (!dirart_raw) {
-    //    ascii2petscii(name);
-    //}
     d64_update_direntry(d64, name, start_track, start_sector, d.d_detrack, d.d_desector, d.d_desectpos, filetype, blocks, locked, link_to_num >= 0);
     return 0;
 }
@@ -787,9 +773,6 @@ int d64_create_bitfire_direntry(d64* d64, int track, int sector, int loadaddr, i
                     dir[0x0] = track;
                     dir[0x1] = sectnum;
                     dir[0x2] = sectpos;
-                    if (verbose) {
-                        printf("init-values of dir-sector: track: $%02x, sector-count: $%02x, sector-pos: $%02x\n", track, sectnum, sectpos);
-                    }
                 }
                 d64_write_sector(d64, D64_DIR_TRACK, dirsect, dir);
                 return (dirsect < BITFIRE_DIRSECT) * 63 + dir_pos;
@@ -810,8 +793,8 @@ void d64_scramble_buffer(unsigned char* buf) {
 
 int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose, int link_to_num, int dirart_raw) {
     FILE* file;
-    int start_track;
-    int start_sector;
+    unsigned char prev_track;
+    unsigned char prev_sector;
     int size = 0;
     int data;
 
@@ -820,137 +803,97 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     int loadaddr = 0;
     int startpos = d64->sectpos;
 
-    //int s_dbg[32];
-    //int t_dbg = -1;
-    int filepos;
-    int blocksize = 0;
     int bitfire_filenum = -1;
-    //int i;
-
-    //for (i = 0; i < 32; i++) s_dbg[i] = 0;
 
     /* at which sector on track do we start? */
     int sectnum = 0;
     if (d64->track != 0) {
         sectnum = sectors[d64->track] - d64_get_free_track_blocks(d64, d64->track);
-        //printf("sectnum: % 2d  track: % 2d  free: % 4d  sectors: % 02d\n", sectnum, d64->track, sectors[d64->track], d64_get_free_track_blocks(d64, d64->track));
     }
 
     /* partly filled sectors do not count, subtract */
     if (d64->sectpos > 0) sectnum--;
 
-    //printf("track: $%02x used blocks: $%02x\n", d64->track, sectnum);
-
     if(file = fopen(path, "rb"), !file) {
         fatal_message("unable to open '%s'\n", path);
     }
 
-    d64->checksum = 0;
-    /* allocate first free block on disk, thus start with 0/0 */
-    if (type != FILETYPE_BITFIRE) {
-        if(type == FILETYPE_BOOT) {
-            d64->track_link  = D64_DIR_TRACK;
-            d64->sector_link = 0;
-        } else {
-            d64->track_link  = 0;
-            d64->sector_link = 0;
-        }
-        d64_allocate_next_block(d64, &d64->track_link, &d64->sector_link, interleave, type);
-        memset(d64->sectbuf, 0, 256);
-    }
-
-    if (type == FILETYPE_BITFIRE) {
-        if(d64->sectpos == 0) {
-            d64->track_link  = 0;
-            d64->sector_link = 0;
-            /* start with a new block as last is full or first block */
-            d64_allocate_next_block(d64, &d64->track_link, &d64->sector_link, interleave, type);
-            memset(d64->sectbuf, 0, 256);
-        } else {
-            /* reuse last sector and start from there on */
-            if(!d64_read_sector(d64, d64->track, d64->sector, d64->sectbuf)) return 0;
-	    d64->track_link = d64->track;
-	    d64->sector_link = d64->sector;
-        }
-    }
-
-    /* remember startpos */
-    start_track = d64->track_link;
-    start_sector = d64->sector_link;
-
     //fetch load address
     loadaddr = fgetc(file);
     loadaddr += fgetc(file) << 8;
-    filepos = loadaddr;
 
-    /* init buffer positions */
-    if (type == FILETYPE_BITFIRE) {
-        //d64->sectpos  = 0;
+    d64->checksum = 0;
+
+    if (type != FILETYPE_BITFIRE) {
+        /* always start with empty sector */
+        d64->sectpos = 0;
+        d64->track  = 0;
+        d64->sector = 0;
+    }
+    if(type == FILETYPE_BOOT) {
+        /* allocate in dir track */
+        d64->track  = D64_DIR_TRACK;
+    }
+
+    if(d64->sectpos == 0) {
+        /* start with a new block as last is full or first block (track_link and sector_link point to next free block) */
+        d64_allocate_next_block(d64, &d64->track, &d64->sector, interleave, type);
+        /* start with an empty block */
+        memset(d64->sectbuf, 0, 256);
+        /* count blocks up */
+        size++;
     } else {
+        /* reuse last sector and start from there on */
+        if(!d64_read_sector(d64, d64->track, d64->sector, d64->sectbuf)) return 0;
+        /* remember position */
+    }
+
+    if (type != FILETYPE_BITFIRE) {
+        /* init buffer positions */
         d64->sectpos  = 2;
         rewind(file);
     }
 
-    d64->sectsize = SECTOR_SIZE;
-    /* set startposition */
-    d64->track    = d64->track_link;
-    d64->sector   = d64->sector_link;
+    /* remember startpos */
+    d64->track_link   = d64->track;
+    d64->sector_link  = d64->sector;
 
-    //s_dbg[d64->sector_link] = filepos;
+    d64->sectsize = SECTOR_SIZE;
 
     while((data = fgetc(file)) != EOF) {
-        d64->checksum += (unsigned char)data;
-        length++;
-        blocksize++;
         /* no more space in buffer? */
         if(d64->sectpos == d64->sectsize) {
-            /* allocate a new block, therefore set up ts-link */
-            d64->track_link = d64->track;
-            d64->sector_link = d64->sector;
-            d64_allocate_next_block(d64, &d64->track_link, &d64->sector_link, interleave, type);
-            /* count blocks up */
-            size++;
-
-            //if (t_dbg != d64->track_link) {
-                //if (t_dbg >= 0) {
-                    //printf("t%02d:", t_dbg);
-                    //for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
-                    //printf("\n");
-                    //for (i = 0; i < 32; i++) s_dbg[i] = 0;
-                //}
-                //t_dbg = d64->track_link;
-            //}
-            //s_dbg[d64->sector] = filepos;
+            /* remember t/s position */
+            prev_track = d64->track;
+            prev_sector = d64->sector;
+            /* allocate a new block */
+            d64_allocate_next_block(d64, &d64->track, &d64->sector, interleave, type);
 
             if (type != FILETYPE_BITFIRE) {
-                /* set ts-link in finished block */
-                d64->sectbuf[0] = d64->track_link;
-                d64->sectbuf[1] = d64->sector_link;
+                /* update ts-link in finished block */
+                d64->sectbuf[0] = d64->track;
+                d64->sectbuf[1] = d64->sector;
             }
 
             /* write finished sector to disc */
             if(type == FILETYPE_BITFIRE) d64_scramble_buffer(d64->sectbuf);
-            if(!d64_write_sector(d64, d64->track, d64->sector, d64->sectbuf)) return 0;
+            if(!d64_write_sector(d64, prev_track, prev_sector, d64->sectbuf)) return 0;
 
             /* start with an empty block */
             memset(d64->sectbuf, 0, 256);
+            /* count blocks up */
+            size++;
 
-            /* set up new position */
-            d64->track    = d64->track_link;
-            d64->sector   = d64->sector_link;
             if (type == FILETYPE_BITFIRE) {
                 d64->sectpos  = 0;
             } else {
                 d64->sectpos  = 2;
             }
             d64->sectsize = SECTOR_SIZE;
-            //s_dbg[d64->sector_link] = filepos;
         }
-
-        d64->sectbuf[d64->sectpos] = data;
-        d64->sectpos++;
-        filepos += blocksize;
-        blocksize = 0;
+        d64->sectbuf[d64->sectpos++] = data;
+        length++;
+        d64->checksum += (unsigned char)data;
     }
 
 
@@ -969,15 +912,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
     /* write changed bam */
     d64_write_bam(d64);
 
-    d64->track_link = start_track;
-    d64->sector_link = start_sector;
-
-    //printf("t%02d:", t_dbg);
-    //for (i = 0; i < sectors[t_dbg]; i++) printf(" %04x", s_dbg[i]);
-    //printf("\n");
-    //for (i = 0; i < 32; i++) s_dbg[i] = 0;
-
-    /* create direntry */
+    /* now create direntry */
     if (type != FILETYPE_BITFIRE) {
 	if (add_dir) {
 
@@ -998,25 +933,25 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             if (!dirart_raw){
                 ascii2petscii(pname);
             }
-            d64_create_direntry(d64, pname, start_track, start_sector, FILETYPE_PRG, size, 0, link_to_num, dirart_raw);
+            d64_create_direntry(d64, pname, d64->track_link, d64->sector_link, FILETYPE_PRG, size, 0, link_to_num, dirart_raw);
         }
     } else {
-        if ((bitfire_filenum = d64_create_bitfire_direntry(d64, start_track, d64->sector_link, loadaddr, length, startpos, sectnum, verbose)) < 0) {
+        if ((bitfire_filenum = d64_create_bitfire_direntry(d64, d64->track_link, d64->sector_link, loadaddr, length, startpos, sectnum, verbose)) < 0) {
             fatal_message("Error adding dirent for '%s'. Dir full?\n", path);
         }
     }
     if (verbose) {
         switch (type) {
             case FILETYPE_BOOT:
-                printf("type: bootfile  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"\n", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, path);
+                printf("bootfile |       | $%04x-$%04x | %-4d   | $%04x | TS:%02d/%02d | $%02x      |           | \"%s\"\n", loadaddr, loadaddr + length, size, length, d64->track_link, d64->sector_link, d64->checksum, path);
             break;
             case FILETYPE_STANDARD:
-                printf("type: standard  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  path: \"%s\"", loadaddr, loadaddr + length, (length / 254) + 1, ((length / 254) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, path);
+                printf("standard |       | $%04x-$%04x | %-4d   | $%04x | TS:%02d/%02d | $%02x      |           | \"%s\"\n", loadaddr, loadaddr + length, size, length, d64->track_link, d64->sector_link, d64->checksum, path);
                 if (link_to_num >= 0) printf("  line-link: %d", link_to_num);
                 printf("\n");
             break;
             case FILETYPE_BITFIRE:
-                printf("type: bitfire file#: %03d  mem: $%04x-$%04x  size:% 4d block%s ($%04x) starting @ %02d/%02d  checksum: $%02x  last_sect_size: $%03x  path: \"%s\"\n", bitfire_filenum, loadaddr, loadaddr + length, (length / 256) + 1, ((length / 256) + 1) > 1 ? "s":" ", length, start_track, start_sector, d64->checksum, d64->sectpos, path);
+                printf("bitfire  | %-3d   | $%04x-$%04x | %-4d   | $%04x | TS:%02d/%02d | $%02x      | $%02x       | \"%s\"\n", bitfire_filenum, loadaddr, loadaddr + length, (length / 256) + 1, length, d64->track_link, d64->sector_link, d64->checksum, d64->sectpos, path);
             break;
         }
     }
@@ -1301,6 +1236,10 @@ int main(int argc, char *argv[]) {
 
     //all sane so far
 
+    if (verbose) {
+        printf("type     | file# | mem         | blocks | size  | startpos | checksum | last size | path\n");
+        printf("---------+-------+-------------+--------+-------+----------+----------+-----------+------------------\n");
+    }
     //parse out diskimage and open it now as we have possible params like header and id
     if (format) {
         if(d64.file = fopen(d64_path, "wb"), !d64.file) {
