@@ -26,7 +26,7 @@
 !cpu 6510
 
 LZ_BITS_LEFT		= 1
-INPLACE			= 0
+INPLACE			= 1
 CONFIG_ZP_ADDR		= $f0
 
 lz_bits			= CONFIG_ZP_ADDR + 0		;1 byte

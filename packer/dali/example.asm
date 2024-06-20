@@ -112,6 +112,7 @@ depack_
 !warn "depacker size: ", * - depack_
 
 		; * = $6b00
+		* = $6a62
 data_start
 !bin "testfile.lz",,2
 		!warn *
