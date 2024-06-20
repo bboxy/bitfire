@@ -154,3 +154,4 @@ v1.2
 - files can be skipped when using load_next mechanism with a skip_file macro
 - filenumbers are shown for bitfire files in the summary
 - avoid linking standard or bootfile to other filetypes than prg
+- fixed optimal load address on dali when using --no-inplace option
