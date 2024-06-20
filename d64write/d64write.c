@@ -623,7 +623,7 @@ static int d64_readdir(d64* d64, dirent64* d) {
 static int d64_create_direntry(d64* d64, char* name, int start_track, int start_sector, int filetype, int blocks, int locked, int link_to_num, int dirart_raw) {
     dirent64 d;
     int status;
-    int line = 0;
+    int line = 1;
 
     unsigned char prev_track;
     unsigned char prev_sector;
@@ -636,11 +636,10 @@ static int d64_create_direntry(d64* d64, char* name, int start_track, int start_
     d64->sectsize = 0;
 
     /* walk through dir to find reusable direntries, position for a found entry will be set appropriately */
-    line = 1;
-    while((status = d64_readdir(d64, &d))) {
+    while ((status = d64_readdir(d64, &d))) {
         debug_message("dir-entry found at t/s='%d/%d' @$%02x\n", d.d_detrack, d.d_desector, d.d_desectpos);
         if (line == link_to_num && link_to_num >= 0) break;
-        if(!d.d_type && !d.d_closed) break;
+        if (!d.d_type && !d.d_closed) break;
         line++;
     }
 
