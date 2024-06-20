@@ -407,13 +407,14 @@ void write_reencoded_stream(ctx* ctx) {
         }
 
         if (ctx->inplace) {
+            /* as we chose inplace, the whole packed stream lengths defines the load address */
             ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2;
         } else {
             if (ctx->cbm_relocate_packed_addr >= 0) {
                 ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
             } else {
                 //ctx->cbm_packed_addr = ctx->cbm_orig_addr;
-                //includes overlap
+                /* also include the overlap into the optimal load address */
                 ctx->cbm_packed_addr = ctx->cbm_range_to - 2 - (ctx->unpacked_index - (ctx->unpacked_size - ctx->packed_size));
             }
         }
