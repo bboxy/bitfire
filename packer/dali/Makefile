@@ -59,10 +59,10 @@ else
 	$(VR)$(STRIP) $@
 endif
 
-testfile.lz: ../../benchmark/files/b
+testfile.lz: ../../benchmark/files/b dali
 	./dali -o $@ $<
 
-example.prg: example.asm dali dzx0_dali.asm testfile.lz dali
+example.prg: example.asm dali dzx0_dali.asm testfile.lz 
 	$(VR)$(ACME) $(ACME_OPTS) -o $@ $<
 
 sfx_small.h: sfx.asm

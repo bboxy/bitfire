@@ -415,7 +415,8 @@ void write_reencoded_stream(ctx* ctx) {
                 ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
             } else {
                 //ctx->cbm_packed_addr = ctx->cbm_orig_addr;
-                ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2 - ctx->overwrite;
+                //includes overlap
+                ctx->cbm_packed_addr = ctx->cbm_range_to - 2 - (ctx->unpacked_index - (ctx->unpacked_size - ctx->packed_size));
             }
         }
 
