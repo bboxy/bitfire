@@ -48,6 +48,7 @@ typedef struct ctx {
     int cbm_relocate_origin_addr;
     int cbm_relocate_sfx_addr;
     int cbm_prefix_from;
+    int overwrite;
 
     int sfx;
     int sfx_addr;
@@ -284,6 +285,7 @@ void reencode_packed_stream(ctx* ctx) {
                     write_reencoded_bit(ctx, 1);
                     write_reencoded_interlaced_elias_gamma(ctx, last_offset, 0);
                 }
+                ctx->overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
                 return;
             }
             byte = read_byte(ctx);
@@ -412,10 +414,10 @@ void write_reencoded_stream(ctx* ctx) {
             if (ctx->cbm_relocate_packed_addr >= 0) {
                 ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
             } else {
-                ctx->cbm_packed_addr = ctx->cbm_orig_addr;
+                //ctx->cbm_packed_addr = ctx->cbm_orig_addr;
+                ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2 - ctx->overwrite;
             }
         }
-
 
         if (ctx->cbm) {
             printf("original: $%04x-$%04x ($%04x) 100%%\n", (int)ctx->cbm_orig_addr, (int)ctx->cbm_orig_addr + (int)ctx->unpacked_size, (int)ctx->unpacked_size);
