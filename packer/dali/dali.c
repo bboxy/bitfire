@@ -48,7 +48,6 @@ typedef struct ctx {
     int cbm_relocate_origin_addr;
     int cbm_relocate_sfx_addr;
     int cbm_prefix_from;
-    int overwrite;
 
     int sfx;
     int sfx_addr;
@@ -285,7 +284,6 @@ void reencode_packed_stream(ctx* ctx) {
                     write_reencoded_bit(ctx, 1);
                     write_reencoded_interlaced_elias_gamma(ctx, last_offset, 0);
                 }
-                ctx->overwrite = (ctx->unpacked_index) - (ctx->unpacked_size - ctx->packed_size + ctx->packed_index);
                 return;
             }
             byte = read_byte(ctx);
