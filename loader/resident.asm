@@ -61,6 +61,7 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR					;define that label here, as we only
 
 			* = CONFIG_RESIDENT_ADDR
 !if CONFIG_LOADER_ONLY = 0 {
+!if CONFIG_DEPACK_ONLY = 0 {
 ;.lz_gap1
 			;------------------
 			;MUSIC PLAY HOOK AND FRAME COUNTER
@@ -94,6 +95,7 @@ link_decomp_under_io
                         inc $01							;bank in again
                         rts
 	}
+}
 }
 
 !if CONFIG_CRT = 1 {
@@ -146,6 +148,7 @@ bitfire_loadraw_
 ;LOADER STUFF
 ;---------------------------------------------------------------------------------
 
+!if CONFIG_DEPACK_ONLY = 0 {
 			;/!\ we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 bitfire_send_byte_
 			sec
@@ -301,6 +304,7 @@ bitfire_ntsc1		ora $dd00						;%dddd111x, ora to preserve the 3 set bits
 .ld_en_exit
 			ldx #$60
 			bne .ld_set						;set rts to end loop at right position
+}
 
 !if CONFIG_LOADER_ONLY = 0 {
 ;---------------------------------------------------------------------------------
@@ -311,7 +315,11 @@ bitfire_ntsc1		ora $dd00						;%dddd111x, ora to preserve the 3 set bits
 			;ELIAS FETCH
 			;------------------
 .lz_inc_src_refill
+!if CONFIG_DEPACK_ONLY = 1 {
+			inc <lz_src + 1
+} else {
 			jsr lz_next_page
+}
 			bne .lz_inc_src_refill_
 .lz_refill_bits
 			tax							;save bits fetched so far
@@ -379,6 +387,7 @@ link_load_next_comp
 bitfire_decomp_
 link_decomp
 	!if CONFIG_CRT = 0 {
+!if CONFIG_DEPACK_ONLY = 0 {
 			lda #(.lz_start_over - .lz_skip_poll) - 2
 			ldx #$60
 			bne .loadcomp_entry
@@ -394,6 +403,7 @@ bitfire_loadcomp_
 			stx .lz_skip_fetch
 
 			jsr .lz_next_page_					;shuffle in data first until first block is present, returns with Y = 0, but on loadcomp only, so take care!
+}
 	}
 										;copy over end_pos and lz_dst from stream XXX would also work from x = 0 .. 2 -> lax #0 tay txa inx cpx #2 -> a = 1 + sec at end
 			ldy #$00						;needs to be set in any case, also plain decomp enters here
@@ -405,7 +415,11 @@ bitfire_loadcomp_
 			sta <lz_dst + 1, x
 			inc <lz_src + 0
 			bne +
+!if CONFIG_DEPACK_ONLY = 1 {
+			inc <lz_src + 1
+} else {
 			jsr lz_next_page
+}
 +
 			inx							;dex + sec set
 			beq -
@@ -426,6 +440,7 @@ bitfire_loadcomp_
 ;			}
 ;.lz_gap2
 
+!if CONFIG_DEPACK_ONLY = 0 {
 link_player
 			pha
 			tya
@@ -444,12 +459,17 @@ link_ack_interrupt
 			tay
 			pla
 			rti
+}
 
 			;------------------
 			;MATCH
 			;------------------
 .lz_inc_src_match
+!if CONFIG_DEPACK_ONLY = 1 {
+			inc <lz_src + 1
+} else {
 			jsr lz_next_page
+}
 			bne .lz_inc_src_match_
 -
 			asl <lz_bits						;fetch payload bit
@@ -496,12 +516,14 @@ link_ack_interrupt
 			;------------------
 			;SELDOM STUFF
 			;------------------
+!if CONFIG_DEPACK_ONLY = 0 {
 .lz_dst_inc
 			inc <lz_dst + 1
 			bcs .lz_dst_inc_
 .lz_clc
 			clc
 			bcc .lz_clc_back
+}
 .lz_cp_page
 			txa							;if we enter from a literal, we take care that x = 0 (given after loop run, after length fetch, we force it to zero by tax here), so that we can distinguish the code path later on. If we enter from a match x = $b0 (elias fetch) or >lz_dst_hi + 1, so never zero.
 .lz_cp_page_									;a is already 0 if entered here
@@ -514,6 +536,7 @@ link_ack_interrupt
 			tya							;if entered from a match, x is anything between $01 and $ff due to inx stx >lz_dst + 1, except if we would depack to zp on a wrap around?
 			beq .lz_m_page						;as Y = 0 and A = 0 now, we can skip the part that does Y = A xor $ff
 
+!if CONFIG_DEPACK_ONLY = 0 {
 			;------------------
 			;POLLING
 			;------------------
@@ -525,7 +548,17 @@ link_ack_interrupt
 .lz_poll
 			bit $dd00
 			bvc .lz_ld_blk
-
+} else {
+.lz_dst_inc
+			inc <lz_dst + 1
+			bcs .lz_dst_inc_
+.lz_clc
+			clc
+			bcc .lz_clc_back
+                        nop
+                        nop
+                        nop
+}
 			;------------------
 			;ENTRY POINT DEPACKER
 			;------------------
@@ -636,6 +669,7 @@ link_ack_interrupt
 			cpx <lz_src + 0
 			bne .lz_start_over
 
+!if CONFIG_DEPACK_ONLY = 0 {
 			lda #$fe						;force the barrier check to always hit in (eof will end this loop), will give $ff after upcoming inc
 			sta <lz_src + 1
 
@@ -662,13 +696,20 @@ lz_next_page
 			pla
 			tax
 			plp
+}
 			rts
 .lz_inc_src_lit
+!if CONFIG_DEPACK_ONLY = 1 {
+			inc <lz_src + 1
+} else {
 			jsr lz_next_page
+}
 			bcs .lz_inc_src_lit_
 
+!if CONFIG_DEPACK_ONLY = 0 {
 link_frame_count
 			!word 0
+}
 }
 
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR

@@ -43,16 +43,17 @@
 		lda #$7f
 		sta $dc0d
 		lda $dc0d
-
+!if CONFIG_DEPACK_ONLY = 0 {
 		lda #$37
 !if CONFIG_CRT = 0 {
 		sta <CONFIG_LAX_ADDR
 }
 !if CONFIG_LOADER_ONLY = 1 {
 		sta $01
+}
 		lda #$00
 		sta $d015
-}
+
 !if CONFIG_CRT = 0 {
 		lda $ba
 		sta .mydrive
@@ -128,6 +129,7 @@
 		lda #$37			;raise atn to signal end of transfer
 		sta $dd02
 }
+}
 
 ;!if (CONFIG_RESIDENT_AUTOINST != 0) {
 !if (bitfire_resident_size) < 256 {
@@ -157,9 +159,12 @@
 ;}
 
 !if CONFIG_LOADER_ONLY = 0 {
+!if CONFIG_DEPACK_ONLY = 0 {
 		!src "detect.asm"
 }
+}
 
+!if CONFIG_DEPACK_ONLY = 0 {
 !if CONFIG_CRT = 0 {
 ;!if CONFIG_LOADER = 1 {
 .l1		lda $d012
@@ -191,6 +196,7 @@
 		sta bitfire_ntsc3 + 2
 
 .nontsc
+}
 ;}
 		lda #$3f			;drop atn to signal end of transfer
 		sta $dd02
@@ -214,6 +220,7 @@
 }
 		rts
 
+!if CONFIG_DEPACK_ONLY = 0 {
 !if CONFIG_CRT = 0 {
 .open_w_15
 		lda $ba
@@ -392,6 +399,7 @@
 		jmp ($1800)
 }
 .atnhi_end
+}
 }
 ;!if (CONFIG_RESIDENT_AUTOINST != 0) {
 .res_start

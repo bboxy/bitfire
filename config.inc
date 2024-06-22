@@ -20,4 +20,6 @@ CONFIG_MOTOR_ALWAYS_ON		= 0		;If you want to be annoying, let the motor spin dur
 CONFIG_CRT			= 0
 
 CONFIG_DEBUG			= 0
+
+CONFIG_DEPACK_ONLY		= 0		;Only compile the bare depacker
 }

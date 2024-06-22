@@ -13,12 +13,6 @@ endif
 
 all: loader dali d64write crtwrite
 
-#zx0-play: FORCE
-#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
-
-#zx0: FORCE
-#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
-
 bitnax: FORCE
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
 
@@ -47,9 +41,6 @@ benchmark-dali: FORCE
 benchmark: FORCE dali d64write loader
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
-#link: FORCE zx0 bitnax d64write loader
-#	@$(MAKE) $(MAKE_OPTS) -C link/
-
 clean:
 	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
 	@$(MAKE) $(MAKE_OPTS) -C packer/dali/ clean
@@ -58,8 +49,6 @@ clean:
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
 	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
 	@$(MAKE) $(MAKE_OPTS) -C example/loadertest/ clean
-	#@$(MAKE) $(MAKE_OPTS) -C macros/ clean
-#	@$(MAKE) $(MAKE_OPTS) -C link/ clean
 
 FORCE:
 	@true
