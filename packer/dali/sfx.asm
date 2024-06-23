@@ -38,13 +38,23 @@ DALI_FAST_DATA_END 	= lz_data_end		- .smc_offsetd + 2
 DALI_FAST_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
 DALI_FAST_01		= lz_01			- .smc_offsetd + 2
 DALI_FAST_CLI		= lz_cli		- .smc_offsetd + 2
-} else {
+}
+!ifdef SFX_SMALL {
 DALI_SMALL_SFX_SRC	= sfx_src		- .dali_code_start + 2
 DALI_SMALL_SRC		= lz_src		- .smc_offsetd + 2
 DALI_SMALL_DST		= lz_dst		- .smc_offsetd + 2
 DALI_SMALL_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
 DALI_SMALL_DATA_END 	= lz_data_end		- .smc_offsetd + 2
 DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
+}
+!ifdef SFX_EFFECT {
+DALI_EFFECT_SFX_SRC	= sfx_src		- .dali_code_start + 2
+DALI_EFFECT_SRC		= lz_src		- .smc_offsetd + 2
+DALI_EFFECT_DST		= lz_dst		- .smc_offsetd + 2
+DALI_EFFECT_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
+DALI_EFFECT_DATA_END 	= lz_data_end		- .smc_offsetd + 2
+DALI_EFFECT_DATA_SIZE_HI= lz_data_size_hi	- .smc_offsetd + 2
+DALI_EFFECT_CODE	= lz_effect		- .smc_offsetd + 2
 }
 
 !macro get_lz_bit {
@@ -189,6 +199,12 @@ lz_src = * + 1
 		;DO MATCH
 		;------------------
 .lz_match
+!ifdef SFX_EFFECT {
+lz_effect
+		inc $01
+		dec $d020
+		dec $01
+}
 		jsr get_length
 !ifdef SFX_FAST {
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on

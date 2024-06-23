@@ -4,6 +4,7 @@
 #include <string.h>
 #include "sfx_small.h"
 #include "sfx_fast.h"
+#include "sfx_effect.h"
 
 #define BUFFER_SIZE 65536  /* must be > MAX_OFFSET */
 #define INITIAL_OFFSET 1
@@ -54,6 +55,7 @@ typedef struct ctx {
     int sfx_01;
     int sfx_cli;
     int sfx_small;
+    int sfx_effect;
     int sfx_size;
     char *sfx_code;
     int lz_bits;
@@ -343,6 +345,29 @@ void write_reencoded_stream(ctx* ctx) {
             ctx->sfx_code[DALI_SMALL_DATA_END + 1] = ((0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
 
             ctx->sfx_code[DALI_SMALL_DATA_SIZE_HI] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
+        } else if (ctx->sfx_effect) {
+            ctx->sfx_size = sizeof(decruncher_effect);
+            /* copy over to change values in code */
+            ctx->sfx_code = (char *)malloc(ctx->sfx_size);
+            memcpy (ctx->sfx_code, decruncher_effect, ctx->sfx_size);
+
+            /* setup jmp target after decompression */
+            ctx->sfx_code[DALI_EFFECT_SFX_ADDR + 0] = ctx->sfx_addr & 0xff;
+            ctx->sfx_code[DALI_EFFECT_SFX_ADDR + 1] = (ctx->sfx_addr >> 8) & 0xff;
+
+            /* setup decompression destination */
+            ctx->sfx_code[DALI_EFFECT_DST + 0] = ctx->cbm_orig_addr & 0xff;
+            ctx->sfx_code[DALI_EFFECT_DST + 1] = (ctx->cbm_orig_addr >> 8) & 0xff;
+
+            /* setup compressed data src */
+            ctx->sfx_code[DALI_EFFECT_SRC + 0] = (0x10000 - ctx->reencoded_index) & 0xff;
+            ctx->sfx_code[DALI_EFFECT_SRC + 1] = ((0x10000 - ctx->reencoded_index) >> 8) & 0xff;
+
+            /* setup compressed data end */
+            ctx->sfx_code[DALI_EFFECT_DATA_END + 0] = (0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
+            ctx->sfx_code[DALI_EFFECT_DATA_END + 1] = ((0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
+
+            ctx->sfx_code[DALI_EFFECT_DATA_SIZE_HI] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
         } else {
             ctx->sfx_size = sizeof(decruncher);
             /* copy over to change values in code */
@@ -380,6 +405,11 @@ void write_reencoded_stream(ctx* ctx) {
                 ctx->sfx_code[DALI_SMALL_SFX_SRC + 1] = (ctx->cbm_relocate_sfx_addr + 0xd) >> 8;
                 ctx->sfx_code[DALI_SMALL_DATA_END + 0] = (ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) & 0xff;
                 ctx->sfx_code[DALI_SMALL_DATA_END + 1] = ((ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) >> 8) & 0xff;
+            } else if (ctx->sfx_effect) {
+                ctx->sfx_code[DALI_EFFECT_SFX_SRC + 0] = (ctx->cbm_relocate_sfx_addr + 0xd) & 255;
+                ctx->sfx_code[DALI_EFFECT_SFX_SRC + 1] = (ctx->cbm_relocate_sfx_addr + 0xd) >> 8;
+                ctx->sfx_code[DALI_EFFECT_DATA_END + 0] = (ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) & 0xff;
+                ctx->sfx_code[DALI_EFFECT_DATA_END + 1] = ((ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) >> 8) & 0xff;
             } else {
                 ctx->sfx_code[DALI_FAST_SFX_SRC + 0] = (ctx->cbm_relocate_sfx_addr + 0x13) & 255;
                 ctx->sfx_code[DALI_FAST_SFX_SRC + 1] = (ctx->cbm_relocate_sfx_addr + 0x13) >> 8;
@@ -674,6 +704,7 @@ int main(int argc, char *argv[]) {
     ctx.sfx_01 = -1;
     ctx.sfx_cli = FALSE;
     ctx.sfx_small = FALSE;
+    ctx.sfx_effect = FALSE;
     ctx.sfx_code = NULL;
     ctx.exit_on_warn = FALSE;
 
@@ -693,6 +724,8 @@ int main(int argc, char *argv[]) {
                 ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "--small")) {
                 ctx.sfx_small = TRUE;
+            } else if (!strcmp(argv[i], "--effect")) {
+                ctx.sfx_effect = TRUE;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
                 ctx.cbm_relocate_packed_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
@@ -743,6 +776,7 @@ int main(int argc, char *argv[]) {
                         "  --01 [num]                  Set 01 to [num] after sfx.\n"
                         "  --cli [num]                 Do a CLI after sfx, default is SEI.\n"
                         "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!)\n"
+                        "  --effect                    Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!), a decrunch effect is applied\n"
                         "  --no-inplace                Disable inplace-decompression.\n"
                         "  --binfile                   Input file is a raw binary without load-address.\n"
                         "  --from [num]                Compress file from [num] on.\n"
