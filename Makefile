@@ -42,7 +42,7 @@ benchmark: FORCE dali d64write loader
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
 clean:
-	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
+#	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
 	@$(MAKE) $(MAKE_OPTS) -C packer/dali/ clean
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
 	@$(MAKE) $(MAKE_OPTS) -C crtwrite/ clean
