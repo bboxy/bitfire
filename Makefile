@@ -29,17 +29,17 @@ crtwrite: FORCE
 loader: FORCE
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C $@
 
-macros: FORCE
-	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C $@
-
-benchmark-lz: FORCE
-	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
-
-benchmark-dali: FORCE
-	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
-
-benchmark: FORCE dali d64write loader
-	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
+#macros: FORCE
+#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C $@
+#
+#benchmark-lz: FORCE
+#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
+#
+#benchmark-dali: FORCE
+#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
+#
+#benchmark: FORCE dali d64write loader
+#	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C benchmark/ $@
 
 clean:
 #	@$(MAKE) $(MAKE_OPTS) -C packer/zx0/ clean
@@ -47,8 +47,8 @@ clean:
 	@$(MAKE) $(MAKE_OPTS) -C d64write/ clean
 	@$(MAKE) $(MAKE_OPTS) -C crtwrite/ clean
 	@$(MAKE) $(MAKE_OPTS) -C loader/ clean
-	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
-	@$(MAKE) $(MAKE_OPTS) -C example/loadertest/ clean
+#	@$(MAKE) $(MAKE_OPTS) -C benchmark/ clean
+#	@$(MAKE) $(MAKE_OPTS) -C example/loadertest/ clean
 
 FORCE:
 	@true
