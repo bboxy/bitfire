@@ -1242,6 +1242,8 @@ int main(int argc, char *argv[]) {
     }
     //parse out diskimage and open it now as we have possible params like header and id
     if (format) {
+        //default to side 1 if not set when formatting, else bitfire will fail miserably
+        if (side < 1) side = 1;
         if(d64.file = fopen(d64_path, "wb"), !d64.file) {
             fatal_message("unable to open '%s'\n", d64_path);
         }
