@@ -96,7 +96,7 @@ sfx_fast.h: sfx.asm
 	$(VR)rm $(basename $@).lst $(basename $@)
 
 clean:
-	$(VR)-rm dali dali.exe *.o sfx_small.h sfx_fast.h sfx_effect.h example.prg testfile.lz
-	$(VR)-rm $(SALVADOR_PATH)/*.o
-	$(VR)-rm $(SALVADOR_LIB_PATH)/*.o
+	$(VR)-rm dali dali.exe sfx_small.h sfx_fast.h sfx_effect.h example.prg testfile.lz
+#	$(VR)-rm $(SALVADOR_PATH)/*.o
+#	$(VR)-rm $(SALVADOR_LIB_PATH)/*.o
 	$(VR)-make -C salvador clean
