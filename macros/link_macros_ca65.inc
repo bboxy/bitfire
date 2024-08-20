@@ -74,7 +74,7 @@
 		;request next disk side and reset filenum_counter
 		.macro request_disk arg
 		.local l
-			lda #arg + $f0
+			lda #arg + $ef
 			;simply do a bogus loadraw, this will call ld_pblock until eof is raised, nothing is loaded as block_ready never happens :-)
 			jsr bitfire_loadraw_
 			;jsr bitfire_send_byte_

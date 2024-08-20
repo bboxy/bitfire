@@ -232,9 +232,9 @@ jsr link_decomp
 Will load third file from disk and depack it afterwards.
 
 !src "link_macros_acme.inc"
-+request_disk 1
++request_disk 2
 
-Will wait until side 2 (counted from side 0 on) is inserted into floppy and directory is sucessfully read. If you want to wait for disk change in a different manner, just have a look into macro, there are just a few lines of code.
+Will wait until side 2 is inserted into floppy and directory is sucessfully read. If you want to wait for disk change in a different manner, just have a look into macro, there are just a few lines of code.
 
 lda #BITFIRE_RESET
 jsr bitfire_send_byte_
