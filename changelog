@@ -148,10 +148,11 @@ v1.2
 - sending data between halfsteps seemed to cause problems on my longboard 1541, moved it to the end of stepping when settle time for the stepper is due
 - fixed bug with uninitialized d64 in d64write
 - added .c (petscii editor by marq) and .png support for dirart (save without border!)
-- bootfile can be linked to a single line of dirart
+- bootfile can be linked to a single line of dirart (had bugs, fixed now)
 - variable interleave per speedzone
 - dirart can be loaded raw, use at your own risk
 - files can be skipped when using load_next mechanism with a skip_file macro
 - filenumbers are shown for bitfire files in the summary
 - avoid linking standard or bootfile to other filetypes than prg
 - fixed optimal load address on dali when using --no-inplace option
+
