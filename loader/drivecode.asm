@@ -1281,7 +1281,7 @@ b			= $48
 			sta <.chksum + 1 - $3e,x 		;init checksum, waste 1 cycle
 			lda <.ser2bin - $3e,x			;$7f, waste 2 cycles
 			;XXX TODO reduce to 32 cycles and try on alps
-			jmp .gcr_entry				;34 cycles until enter
+			jmp .gcr_entry				;34 cycles until enter, could also be 36?
 !if CONFIG_DEBUG != 0 {
 .next_header_trail_zero
 			inc <.num_error

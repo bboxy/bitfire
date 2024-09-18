@@ -227,7 +227,7 @@ bitfire_loadraw_
 			bne .rts						;block ready? if so, a = 0 (block ready + busy) if not -> rts
 
 			ldy #$05 - CONFIG_LOADER_ONLY + CONFIG_DEBUG		;fetch 5 bytes of preamble
-			;lda #$00						;is already zero due to anc #$c0, that is why we favour anc #$co over asl, as we save a byte
+			;lda #$00						;is already zero due to and #$c0, that is why we favour and #$c0 over asl, as we save a byte
 			ldx #<preamble						;target for received bytes
 			jsr .ld_set_block_tgt					;load 5 bytes preamble - returns with C = 1 always
 
@@ -240,8 +240,7 @@ bitfire_loadraw_
 }
 			ldx <block_addr_lo					;block_address lo
 			lda <block_addr_hi					;block_address hi
-			;beq .jam
-			ldy <block_status					;status -> first_block?
+			bit <block_status					;status -> first_block?
 			bmi +
 			stx bitfire_load_addr_lo				;yes, store load_address (also lz_src in case depacker is present)
 			sta bitfire_load_addr_hi
@@ -260,7 +259,6 @@ bitfire_ntsc3_op	ldx #$6d						;opcode for adc	-> repair any rts being set (also
 			lsr							;%0dddd111
 			lsr							;%00dddd11 1
 			ldx <CONFIG_LAX_ADDR					;waste one cycle
-			;nop
 bitfire_ntsc0		ora $dd00						;%dddddd11 1, ora again to preserve
 			stx $dd02
 
@@ -268,14 +266,12 @@ bitfire_ntsc0		ora $dd00						;%dddddd11 1, ora again to preserve
 			ror							;%11dddddd 1
 			ldx #$3f
 			sax .ld_nibble + 1
-			;nop
 bitfire_ntsc2		and $dd00						;%ddxxxxxx might loose some lower bits, but will be repaired later on ora
 			stx $dd02
 
 .ld_nibble		ora #$00						;%dddddddd -> merge in lower bits again and heal bits being dropped by previous and
 .ld_store		sta $b00b,y
 .ld_gentry		lax <CONFIG_LAX_ADDR
-			;nop
 .ld_gend
 bitfire_ntsc3		adc $dd00						;%dd1110xx will be like #$38 (A = $37 + carry) be added
 			stx $dd02						;carry is cleared now after last adc, we can exit here with carry cleared (else set if EOF) and do our rts with .ld_gend
@@ -288,16 +284,8 @@ bitfire_ntsc3		adc $dd00						;%dd1110xx will be like #$38 (A = $37 + carry) be 
 			;branch out at == 0? would then start with atn set, would be verycool, just preamble would end same way, what would suck? :-( would need to drop level before we enter loop at all? or between preamble and data?
 			cpy #$01						;check on 0 in carry, too bad we can't use that result with direct bail out, still some bits to transfer
 			ldx #$3f
-			;nop
 bitfire_ntsc1		ora $dd00						;%dddd111x, ora to preserve the 3 set bits
 			stx $dd02
-
-;XXX TODO
-;cpy #$ff
-;bcc loop
-;block enter: ldx #$3f -> $dd02
-;block exit: ldx #$37 -> $dd02
-;need to bail out on lsr?
 
 !if >* != >.ld_gloop { !error "getloop code crosses page!" }			;XXX TODO in fact the branch can also take 4 cycles if needed, ldx <CONFIG_LAX_ADDR wastes one cycle anyway
 			bcs .ld_gloop
@@ -555,7 +543,7 @@ link_ack_interrupt
 .lz_clc
 			clc
 			bcc .lz_clc_back
-                        nop
+                        nop							;this hurts, but needs to be aligned
                         nop
                         nop
 }
@@ -567,7 +555,7 @@ link_ack_interrupt
 			lda #$01						;restore initial length val
 		}
 			asl <lz_bits
-.lz_redirect2		bcs .lz_match						;either match with new offset or old offset
+			bcs .lz_match						;either match with new offset or old offset
 
 			;------------------
 			;LITERAL
@@ -611,7 +599,7 @@ link_ack_interrupt
 										;in case of type bit == 0 we can always receive length (not length - 1), can this used for an optimization? can we fetch length beforehand? and then fetch offset? would make length fetch simpler? place some other bit with offset?
 			lda #$01
 			asl <lz_bits
-.lz_redirect1		bcs .lz_match						;either match with new offset or old offset
+			bcs .lz_match						;either match with new offset or old offset
 
 			;------------------
 			;REPEAT LAST OFFSET
