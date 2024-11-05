@@ -1,5 +1,5 @@
 D64WRITE_CFLAGS = $(CFLAGS) -Ofast -Wall
-D64WRITE_LIBS = $(CLIBS) -lpng
+D64WRITE_LIBS = $(CLIBS) -lm
 ifdef win
 CC = x86_64-w64-mingw32-gcc
 STRIP = x86_64-w64-mingw32-strip

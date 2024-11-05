@@ -38,13 +38,15 @@
 #include "d64.h"
 #include "debug.h"
 #include "romchar.h"
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#include "stb_image.h"
 
 typedef struct ctx {
-    png_bytep * row_pointers;
-    png_byte color_type;
-    png_byte bit_depth;
+    unsigned char* row_pointers;
     int width;
     int height;
+    int bits;
     int y;
 } ctx;
 
@@ -76,61 +78,7 @@ static unsigned char s2p[] = {
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20
 };
 
-void load_png(ctx* ctx, FILE* fp, char* name) {
-    int y;
-
-    png_byte header[8];
-    png_infop info_ptr;
-    png_structp png_ptr;
-
-    if (fread(header, 1, 8, fp) != 8 || png_sig_cmp(header, 0, 8)) {
-        fatal_message("%s is not a .png file\n", name);
-    }
-    png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!png_ptr) {
-        fatal_message("png_create_read_struct failed\n");
-    }
-    info_ptr = png_create_info_struct(png_ptr);
-    if (!info_ptr) {
-        fatal_message("png_create_info_struct failed\n");
-    }
-    if (setjmp(png_jmpbuf(png_ptr))) {
-        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-        fatal_message("Error during init_io\n");
-    }
-
-    png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
-    png_set_expand(png_ptr);
-
-    png_init_io(png_ptr, fp);
-    png_set_sig_bytes(png_ptr, 8);
-    png_read_info(png_ptr, info_ptr);
-    ctx->width = png_get_image_width(png_ptr, info_ptr);
-    ctx->height = png_get_image_height(png_ptr, info_ptr);
-    ctx->color_type = png_get_color_type(png_ptr, info_ptr);
-    ctx->bit_depth = png_get_bit_depth(png_ptr, info_ptr);
-
-    ctx->bit_depth = png_get_bit_depth(png_ptr, info_ptr);
-    //printf("%d\n",ctx->bit_depth);
-
-    if (setjmp(png_jmpbuf(png_ptr))) {
-        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-        fatal_message("Error during read_image\n");
-    }
-
-    png_read_update_info(png_ptr, info_ptr);
-
-    ctx->row_pointers = (png_bytep*) malloc(sizeof(png_bytep) * ctx->height);
-    for (y = 0; y < ctx->height; y++) {
-        ctx->row_pointers[y] = (png_byte*) malloc(png_get_rowbytes(png_ptr,info_ptr));
-    }
-
-    png_read_image(png_ptr, ctx->row_pointers);
-
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-}
-
-int find_col( ctx* ctx, int x, int y) {
+int find_col(ctx* ctx, int x, int y) {
     unsigned char r1, g1, b1;
     unsigned char r2, g2, b2;
     int best_col;
@@ -156,9 +104,9 @@ int find_col( ctx* ctx, int x, int y) {
         {0x6C, 0x5E, 0xB5},
         {0x95, 0x95, 0x95},
     };
-    r1 = ctx->row_pointers[y][x * 4 + 0];
-    g1 = ctx->row_pointers[y][x * 4 + 1];
-    b1 = ctx->row_pointers[y][x * 4 + 2];
+    r1 = ctx->row_pointers[y * ctx->width * 4 + (x * 4 + 0)];
+    g1 = ctx->row_pointers[y * ctx->width * 4 + (x * 4 + 1)];
+    b1 = ctx->row_pointers[y * ctx->width * 4 + (x * 4 + 2)];
 
     best_dist = - 1;
     best_col = 0;
@@ -1045,13 +993,13 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
     if(file = fopen(art_path, "rb+"), !file) {
         fatal_message("unable to open '%s'\n", art_path);
     }
-    if (type == TYPE_PRG) {
+    if (type == TYPE_PNG) {
+        ctx.row_pointers = stbi_load_from_file(file, &ctx.width, &ctx.height, &ctx.bits, 4);
+        ctx.y = 0;
+    } else if (type == TYPE_PRG) {
         fseek(file, 2, SEEK_SET);
     } else if (type == TYPE_C) {
         get_line_c(file, art, 2, 0);
-    } else if (type == TYPE_PNG) {
-        load_png(&ctx, file, art_path);
-        ctx.y = 0;
     }
 
     head = 0;
@@ -1103,6 +1051,9 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
         if (link_boot < 0 || link_boot == n) {
             d64_update_link(d64, filename, boot_track, boot_sector, n);
         }
+    }
+    if (type == TYPE_PNG) {
+        free(ctx.row_pointers);
     }
     return;
 }
