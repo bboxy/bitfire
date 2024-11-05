@@ -28,34 +28,6 @@
 BITS_LEFT		= 1
 
 .depacker_dst		= $01
-.smc_offsetd 		= .depacker_dst - (.dali_code_end - .dali_code_start)
-!ifdef SFX_FAST {
-DALI_FAST_SFX_SRC	= sfx_src		- .dali_code_start + 2
-DALI_FAST_SRC		= lz_src 		- .smc_offsetd + 2
-DALI_FAST_DST		= lz_dst		- .smc_offsetd + 2
-DALI_FAST_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
-DALI_FAST_DATA_END 	= lz_data_end		- .smc_offsetd + 2
-DALI_FAST_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
-DALI_FAST_01		= lz_01			- .smc_offsetd + 2
-DALI_FAST_CLI		= lz_cli		- .smc_offsetd + 2
-}
-!ifdef SFX_SMALL {
-DALI_SMALL_SFX_SRC	= sfx_src		- .dali_code_start + 2
-DALI_SMALL_SRC		= lz_src		- .smc_offsetd + 2
-DALI_SMALL_DST		= lz_dst		- .smc_offsetd + 2
-DALI_SMALL_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
-DALI_SMALL_DATA_END 	= lz_data_end		- .smc_offsetd + 2
-DALI_SMALL_DATA_SIZE_HI	= lz_data_size_hi	- .smc_offsetd + 2
-}
-!ifdef SFX_EFFECT {
-DALI_EFFECT_SFX_SRC	= sfx_src		- .dali_code_start + 2
-DALI_EFFECT_SRC		= lz_src		- .smc_offsetd + 2
-DALI_EFFECT_DST		= lz_dst		- .smc_offsetd + 2
-DALI_EFFECT_SFX_ADDR	= lz_sfx_addr		- .smc_offsetd + 2
-DALI_EFFECT_DATA_END 	= lz_data_end		- .smc_offsetd + 2
-DALI_EFFECT_DATA_SIZE_HI= lz_data_size_hi	- .smc_offsetd + 2
-DALI_EFFECT_CODE	= lz_effect		- .smc_offsetd + 2
-}
 
 !macro get_lz_bit {
 	!if BITS_LEFT = 1 {
@@ -395,3 +367,37 @@ lz_sfx_addr = * + 1
 !warn "sfx size: ", * - .dali_code_start
 }
 .second_pass
+
+.smc_offsetd 		= .depacker_dst - (.dali_code_end - .dali_code_start)
+.vars_start
+!word sfx_src		- .dali_code_start + 2
+!word lz_src 		- .smc_offsetd + 2
+!word lz_dst		- .smc_offsetd + 2
+!word lz_sfx_addr	- .smc_offsetd + 2
+!word lz_data_end	- .smc_offsetd + 2
+!word lz_data_size_hi	- .smc_offsetd + 2
+!ifdef SFX_FAST {
+!word lz_01		- .smc_offsetd + 2
+!word lz_cli		- .smc_offsetd + 2
+} else {
+!word $0000
+!word $0000
+}
+!ifdef SFX_EFFECT {
+!word lz_effect		- .smc_offsetd + 2
+} else {
+!word $0000
+}
+.vars_end
+
+;DALI_VARS_SIZE = .vars_end - .vars_start
+;DALI_VARS = .vars_start - .dali_code_start
+;DALI_SFX_SRC = DALI_VARS + 0
+;DALI_SRC = DALI_VARS + 2
+;DALI_DST = DALI_VARS + 4
+;DALI_SFX_ADDR = DALI_VARS + 6
+;DALI_DATA_END = DALI_VARS + 8
+;DALI_DATA_SIZE_HI = DALI_VARS + 10
+;DALI_01 = DALI_VARS + 12
+;DALI_CLI = DALI_VARS + 14
+;DALI_EFFECT_CODE = DALI_VARS + 16
