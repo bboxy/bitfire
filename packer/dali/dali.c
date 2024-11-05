@@ -333,6 +333,8 @@ void write_reencoded_stream(ctx* ctx) {
     unsigned int var_dali_data_size_hi;
     unsigned int var_dali_01;
     unsigned int var_dali_cli;
+
+    unsigned int sfx_addr = 0x801;
     //unsigned int var_dali_effect_code;
 
     /* write reencoded output file */
@@ -407,8 +409,8 @@ void write_reencoded_stream(ctx* ctx) {
         ctx->sfx_code[dali_src + 1] = ((0x10000 - ctx->reencoded_index) >> 8) & 0xff;
 
         /* setup compressed data end */
-        ctx->sfx_code[dali_data_end + 0] = (0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
-        ctx->sfx_code[dali_data_end + 1] = ((0x801 + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
+        ctx->sfx_code[dali_data_end + 0] = (sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
+        ctx->sfx_code[dali_data_end + 1] = ((sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
 
         ctx->sfx_code[dali_data_size_hi] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
 
@@ -427,31 +429,31 @@ void write_reencoded_stream(ctx* ctx) {
 
         printf("original: $%04x-$%04x ($%04x) 100%%\n", (int)ctx->cbm_orig_addr, (int)ctx->cbm_orig_addr + (int)ctx->unpacked_size, (int)ctx->unpacked_size);
         if (ctx->cbm_relocate_sfx_addr >= 0) {
-            printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", ctx->cbm_relocate_sfx_addr, ctx->cbm_relocate_sfx_addr + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
+            sfx_addr = ctx->cbm_relocate_sfx_addr;
             if (ctx->sfx_small) {
                 ctx->sfx_code[dali_sfx_src + 0] = (ctx->cbm_relocate_sfx_addr + 0xd) & 255;
                 ctx->sfx_code[dali_sfx_src + 1] = (ctx->cbm_relocate_sfx_addr + 0xd) >> 8;
-                ctx->sfx_code[dali_data_end + 0] = (ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) & 0xff;
-                ctx->sfx_code[dali_data_end + 1] = ((ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) >> 8) & 0xff;
             } else {
                 ctx->sfx_code[dali_sfx_src + 0] = (ctx->cbm_relocate_sfx_addr + 0x13) & 255;
                 ctx->sfx_code[dali_sfx_src + 1] = (ctx->cbm_relocate_sfx_addr + 0x13) >> 8;
-                ctx->sfx_code[dali_data_end + 0] = (ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) & 0xff;
-                ctx->sfx_code[dali_data_end + 1] = ((ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) >> 8) & 0xff;
             }
+            ctx->sfx_code[dali_data_end + 0] = (ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) & 0xff;
+            ctx->sfx_code[dali_data_end + 1] = ((ctx->cbm_relocate_sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100 - 0x0c) >> 8) & 0xff;
+
             fputc(ctx->cbm_relocate_sfx_addr & 255, fp);
             fputc(ctx->cbm_relocate_sfx_addr >> 8, fp);
+
             if (fwrite(ctx->sfx_code + 0xe, sizeof(char), ctx->sfx_size - 0xe, fp) != ctx->sfx_size - 0xe) {
                 fprintf(stderr, "Error: Cannot write output file %s\n", ctx->output_name);
                 exit(1);
             }
         } else {
-            printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", 0x801, 0x801 + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
             if (fwrite(ctx->sfx_code, sizeof(char), ctx->sfx_size, fp) != ctx->sfx_size) {
                 fprintf(stderr, "Error: Cannot write output file %s\n", ctx->output_name);
                 exit(1);
             }
         }
+        printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", sfx_addr, sfx_addr + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
     /* or standard compressed */
     } else {
         if (ctx->cbm_relocate_origin_addr >= 0) {
@@ -799,7 +801,7 @@ int main(int argc, char *argv[]) {
                         "  --01 [num]                  Set 01 to [num] after sfx.\n"
                         "  --cli [num]                 Do a CLI after sfx, default is SEI.\n"
                         "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!)\n"
-                        "  --effect                    A decrunch effect is applied\n"
+                        "  --effect                    A very simple decrunch effect is applied\n"
                         "  --no-inplace                Disable inplace-decompression.\n"
                         "  --binfile                   Input file is a raw binary without load-address.\n"
                         "  --from [num]                Compress file from [num] on.\n"
