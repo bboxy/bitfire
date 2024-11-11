@@ -45,7 +45,7 @@ resident: resident.asm ../config.inc constants.inc Makefile
 	$(VR)rm resident_labels.txt
 
 installer: resident drivecode.asm installer.asm constants.inc ../config.inc detect.asm Makefile
-	@echo "Buidling installer..."
+	@echo "Building installer..."
 	@$(ACME) $(ACME_OPTS) -I ../../ -I ../ -o installer installer.asm
 
 bitfire: installer
