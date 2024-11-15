@@ -701,3 +701,11 @@ link_frame_count
 }
 
 bitfire_resident_size = * - CONFIG_RESIDENT_ADDR
+
+!ifdef .lz_set2 {
+	!if OPT_FULL_SET = 1 {						;transform beq .lz_cp_page to a lda #$01 and by that do not waste a single cycle on a page check if not needed
+	!if $100 + .lz_set1 - .lz_set2 != $c2 {
+		!error "distance between .lz_set1 and .lz_set1 != $40 OPT_FULL_SET will fail: ", $100 + .lz_set1 - .lz_set2
+	}
+	}
+}

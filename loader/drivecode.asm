@@ -1409,5 +1409,8 @@ b			= $48
 !ifdef .second_pass {
 	!warn "bootstrap size: ", .bootstrap_size
 }
+!if .filenum != $18 {
+	!error ".filenum is not at address $0018 - clc trick will fail."
+}
 
 .second_pass

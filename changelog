@@ -156,3 +156,6 @@ v1.2
 - avoid linking standard or bootfile to other filetypes than prg
 - fixed optimal load address on dali when using --no-inplace option
 
+v1.3
+shorter resident part
+move from libpng to stb_image.h for less dependecies like on cygwin
