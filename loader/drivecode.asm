@@ -1307,16 +1307,27 @@ b			= $48
 .bootstrap_start
 !pseudopc .bootstrap {
 .bootstrap_run
-			;this bootstrap will upload code from $0000-$06ff, and the bootstrap @ $0700 will be overwritten when dir-sector is read later on
-			lda #.DIR_TRACK
+			;stepperfix by dummy loading from track 17 first?
+			lda #.DIR_TRACK - 1
 			sta $0c
-!if .DIR_SECT != .DIR_TRACK {
-			lda #.DIR_SECT
-}
 			sta $0d
 
-			;fetch first dir sect and by that position head at track 18 to have a relyable start point for stepping
 			ldx #$80
+			stx $03
+-			bit $03
+			bmi -
+
+			;then load dir sector
+			inc $0c
+!if .DIR_SECT != .DIR_TRACK {
+			lda #.DIR_SECT
+			sta $0d
+} else {
+			inc $0d
+}
+
+			;fetch first dir sect
+;			ldx #$80
 			stx $03
 .poll_job		bit $03
 			bmi .poll_job
