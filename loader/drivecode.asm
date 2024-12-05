@@ -1308,30 +1308,26 @@ b			= $48
 !pseudopc .bootstrap {
 .bootstrap_run
 			;stepperfix by dummy loading from track 17 first?
-			lda #.DIR_TRACK - 1
-			sta $0c
+			ldy #.DIR_TRACK - 1
+			sty $0c
+			iny
+!if .DIR_SECT != .DIR_TRACK {
+			lda #.DIR_SECT
 			sta $0d
+} else {
+			sty $0d
+}
 
 			ldx #$80
+.job_step
 			stx $03
 -			bit $03
 			bmi -
 
 			;then load dir sector
 			inc $0c
-!if .DIR_SECT != .DIR_TRACK {
-			lda #.DIR_SECT
-			sta $0d
-} else {
-			inc $0d
-}
-
-			;fetch first dir sect
-;			ldx #$80
-			stx $03
-.poll_job		bit $03
-			bmi .poll_job
-			;ends up at $0600?
+			cpy $0c		;.DIR_TRACK
+			bpl .job_step
 
 			;motor and LED is on after that
 
@@ -1359,7 +1355,7 @@ b			= $48
 
 			sax $1c08				;clear counters
 			sax $1c04
-			sax .dir_diskside
+			;sax .dir_diskside
 
 			dex					;disable all interrupts
 			stx $180e
