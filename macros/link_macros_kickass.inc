@@ -68,12 +68,6 @@
 			lda #arg + $ef
 			//simply do a bogus loadraw, this will call ld_pblock until eof is raised, nothing is loaded as block_ready never happens :-]
 			jsr bitfire_loadraw_
-			//jsr bitfire_send_byte_
-			//pha
-			//pla
-			//pha
-			//pla
-			//+wait_floppy_idle
 		}
 
 		//wait for given frame counter value
@@ -238,23 +232,24 @@ l:
 		}
 
 		.macro crt_request_disk (arg) {
-			:setup_sync() arg
+			:setup_sync(arg)
 l:
 			lda #$7f			//space pressed?
 			sta $dc00
 			lda $dc01
 			and #$10
-			beq .e				//yes, exit
+			beq e				//yes, exit
 			lda link_frame_count + 1	//check counter
-			bpl +
-			sta .f + 1
-:()
+			bpl g
+			sta f + 1
+g:
 			lda #$fd			//shift lock pressed?
 			sta $dc00
 			lda $dc01
-.f			and #$00
+f:
+			and #$00
 			bpl l				//shift lock pressed or not expired
-.e
+e:
 		}
 
 		.macro skip_file () {

@@ -55,20 +55,21 @@ cat ./link_macros_acme.inc | \
 sed 's/\r//g' | \
 sed 's/(/[/g' | \
 sed 's/)/]/g' | \
-#replace .l \
-sed 's/^\.l/l:/g' | \
-sed 's/^;\.l/;l:/g' | \
-sed 's/\.l/l/g' | \
 #remove arg \
 sed 's/^\([[:space:]]*\)\(!macro\)[[:space:]]*\(.*\)[[:space:]]*\(\.arg\)[[:space:]]*{/\1.macro \3(arg) {/g' | \
 #!macro name { \
 sed 's/^\([[:space:]]*\)\(!macro\)[[:space:]]*\(.*\)[[:space:]]*{/\1.macro \3() {/g' | \
 #replace arg within block \
 sed 's/\.arg/arg/g' | \
+#replace local labels \
+sed 's/^\.\([[:graph:]]\)$/\1:/g' | \
+sed 's/^;\.\([[:graph:]]\)$/;\1:/g' | \
+sed 's/\.\([[:graph:]]\)\([[:space:]][[:space:]]*\)\(.*\)$/\1\2\3/g' | \
+sed 's/\.\([[:graph:]]\)$/\1/g' | \
 #comments \
 sed 's/;/\/\//g' | \
 #expand macros \
-sed 's/^\([[:space:]]*\)+\([[:graph:]]*\)/\1:\2()/' \
+sed 's/^\([[:space:]]*\)+\([[:graph:]]*\)[[:space:]]*\([[:graph:]]*\)/\1:\2(\3)/' \
 > ./link_macros_kickass.inc
 ################### DREAMASS ###################
 cat ./link_macros_acme.inc | \
