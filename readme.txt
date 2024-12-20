@@ -328,6 +328,9 @@ Building
 --------
 
 The .asm files need ACME 0.94 or newer, i didn't focus much on that, as i always use the current version from SVN. At this time 0.97. So if anyone tries to compile this with the medieval version 0.93, it will fail, sorry :-)
+You can get ACME from source at: https://sourceforge.net/projects/acme-crossass/
+To build bitfire/dali you also need a C-compiler like cc or gcc and (as for Ubuntu) build-essential as a package.
+If you want to build Windows-binaries on Linux you can do so with mingw installed and build with win=1 as make parameter.
 
 Dirart
 ------
