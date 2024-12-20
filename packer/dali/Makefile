@@ -69,7 +69,7 @@ sfx.h: sfx.asm
 	@echo "Creating sfx.h..."
 	$(VR)$(ACME) $(ACME_OPTS) -DSFX_EFFECT=1 -DSFX_SMALL=1 -o $(basename $@) $<
 
-	$(VR)echo 'static const char decruncher_small_effect[] = {' >> $@
+	$(VR)echo 'static const char decruncher_small_effect[] = {' > $@
 	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
 	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/+/g' -e 's/.\{50\}/&+/g' | tr -s '+' '\n' | sed 's/^/&    /g' >> $@
 	$(VR)echo '};' >> $@
