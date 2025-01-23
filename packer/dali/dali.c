@@ -705,6 +705,7 @@ void do_reencode(ctx* ctx) {
 
 int main(int argc, char *argv[]) {
     int i;
+    int show_version = FALSE;
 
     ctx ctx = { 0 };
 
@@ -743,6 +744,8 @@ int main(int argc, char *argv[]) {
             } else if (!strcmp(argv[i], "--prefix-file")) {
                 i++;
                 ctx.prefix_name = argv[i];
+            } else if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-V")) {
+                show_version = TRUE;
             } else if (!strcmp(argv[i], "--exit_on_warn")) {
                 ctx.exit_on_warn = TRUE;
             } else if (!strcmp(argv[i], "--no-inplace")) {
@@ -794,6 +797,7 @@ int main(int argc, char *argv[]) {
     printf("dali v0.3.5 - a zx0-reencoder for bitfire by Tobias Bindhammer\n");
     printf("underlying zx0-packer salvador by Emmanuel Marty\n");
 
+    if (argc == 2 && show_version) exit(0);
     if (argc == 1) {
         fprintf(stderr, "Usage: %s [options] input\n"
                         "  -o [filename]               Set output filename.\n"
@@ -812,6 +816,7 @@ int main(int argc, char *argv[]) {
                         "  --relocate-origin [num]     Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
                         "  --relocate-sfx [num]        Set load-address sfx-packed file to [num], basic header will then be omitted.\n"
                         "  --exit_on_warn              Exit on warnings like they happen when crossing the i/o-range.\n"
+                        "  -V, --version               Show version info and exit.\n"
                         ,argv[0]);
         exit(0);
     }
