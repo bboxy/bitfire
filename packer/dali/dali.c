@@ -813,7 +813,7 @@ int main(int argc, char *argv[]) {
                         "  --relocate-sfx [num]        Set load-address sfx-packed file to [num], basic header will then be omitted.\n"
                         "  --exit_on_warn              Exit on warnings like they happen when crossing the i/o-range.\n"
                         ,argv[0]);
-        exit(1);
+        exit(0);
     }
 
     if (!ctx.sfx && ctx.cbm_relocate_sfx_addr >= 0) {
