@@ -590,7 +590,7 @@ static int d64_update_link(d64* d64, char* name, int start_track, int start_sect
     }
 
     if (link_to_num >= 0 && d.d_type != FILETYPE_PRG) {
-          fatal_message("linkng against a non PRG direntry, file won't load / disk won't boot!\n");
+        return 1;
     }
 
     /* read in sector the direntry is on */
@@ -981,6 +981,7 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
     int type = TYPE_PRG;
     ctx ctx;
     int n;
+    int num_linked = 0;
 
     extension = strrchr(art_path, '.');
     if (extension != NULL && (!strcmp(extension, ".png") || !strcmp(extension, ".PNG"))) {
@@ -1004,6 +1005,8 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
 
     head = 0;
     n = lines;
+    //XXX TODO add extra check here, if we have a blank line, cease? or we have no " " and filetype?
+    //also, if already a single file is prg and we linked to it, we can forgo on del files
     while(get_line(&ctx, file, art, type, head) && n) {
         if (head == 0) {
             //for (i = 0; i < 39; i++) art[i] = art[i] & 0x7f;
@@ -1049,7 +1052,14 @@ void d64_apply_dirart(d64* d64, char* art_path, int boot_track, int boot_sector,
     fclose(file);
     for (n = 1; n < lines; n++) {
         if (link_boot < 0 || link_boot == n) {
-            d64_update_link(d64, filename, boot_track, boot_sector, n);
+            if(!d64_update_link(d64, filename, boot_track, boot_sector, n)) num_linked++;
+        }
+    }
+    if (!num_linked) {
+        if (link_boot > 0) {
+            fatal_message("linking against a non PRG direntry, file won't load / disk won't boot!\n");
+        } else {
+            fatal_message("only tried linking against non PRG direntries, file won't load / disk won't boot!\n");
         }
     }
     if (type == TYPE_PNG) {
