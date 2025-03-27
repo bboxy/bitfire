@@ -56,6 +56,10 @@
 
 !if CONFIG_CRT = 0 {
 		lda $ba
+		bne +
+		;assume drive 8 if unset, this should not happen, unless we underly emulation
+		lda #8
++
 		sta .mydrive
 
 		ldx #8
