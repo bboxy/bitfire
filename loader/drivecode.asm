@@ -64,9 +64,9 @@
 .reset_drive		= $fffc	;eaa0
 .zeropage		= $0000
 .drivecode		= $0200
-.directory		= $0600
-.cache			= $0700
-.bootstrap		= $0700
+.directory		= $0700
+.cache			= $0600
+.bootstrap		= $0600
 
 .dir_load_addr_lo	= .directory + 4 + (0 * $3f)
 .dir_load_addr_hi	= .directory + 4 + (1 * $3f)
@@ -840,10 +840,15 @@ b			= $48
 			bcc +					;underflow, filenum is < $3f
 			txa
 			dey					;select second dir sector
+			bne .load_file
 +
 			cpy <.dir_sector			;is this dir sector loaded?
 			bne .load_dir_sect
 			sta <.dir_entry_num			;and save
+			cpy #BITFIRE_EXEC_SECT
+			bne +
+			jmp .directory
++
 
 			;----------------------------------------------------------------------------------------------------
 			;
@@ -1309,24 +1314,26 @@ b			= $48
 .bootstrap_run
 			;stepperfix by dummy loading from track 17 first?
 			ldy #.DIR_TRACK - 1
-			sty $0c
+			sty $0e
 			iny
 !if .DIR_SECT != .DIR_TRACK {
 			lda #.DIR_SECT
-			sta $0d
+			sta $0f
 } else {
-			sty $0d
+			sty $0f
 }
 
-			ldx #$80
+			ldx #$b0
 .job_step
-			stx $03
--			bit $03
-			bmi -
+			stx $04
+-			lda $04
+			cmp #$01
+			bne -
+			ldx #$80
 
 			;then load dir sector
-			inc $0c
-			cpy $0c		;.DIR_TRACK
+			inc $0e
+			cpy $0e		;.DIR_TRACK
 			bpl .job_step
 
 			;motor and LED is on after that

@@ -1,5 +1,7 @@
 ;constants, better don't touch
 BITFIRE_RESET			= $ff
+BITFIRE_EXEC			= $ed
+BITFIRE_EXEC_SECT		= 15
 BITFIRE_LOAD_NEXT		= $ef
 BITFIRE_SKIP_FILE		= $ee
 BITFIRE_REQ_DISC		= $f0
