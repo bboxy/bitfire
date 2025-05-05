@@ -51,7 +51,7 @@ benchmark: checksum.asm Makefile ../loader/installer
 			-b files/b.lz \
 			-b files/e.lz
 
-	x64 side$(TIMESTAMP).d64
+	x64sc side$(TIMESTAMP).d64
 
 clean:
 	-rm side*.d64 insstaller*.prg benchmark benchmark.prg

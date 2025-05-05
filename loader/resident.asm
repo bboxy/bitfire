@@ -62,23 +62,20 @@ bitfire_install_	= CONFIG_INSTALLER_ADDR					;define that label here, as we only
 			* = CONFIG_RESIDENT_ADDR
 !if CONFIG_LOADER_ONLY = 0 {
 !if CONFIG_DEPACK_ONLY = 0 {
-;.lz_gap1
-			;------------------
-			;MUSIC PLAY HOOK AND FRAME COUNTER
-			;------------------
-link_music_play									;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
-			inc link_frame_count + 0				;and advances the frame counter if needed
-			bne +
-			inc link_frame_count + 1
-+
-link_music_addr = * + 1
-			jmp link_music_play_side1
-
 link_chip_types
 link_sid_type		;%00000001						;bit set = new, bit cleared = old
 link_cia1_type		;%00000010
 link_cia2_type		;%00000100
 			!byte $00
+			nop
+			nop
+			nop
+			nop
+			nop
+;.lz_gap1
+			;------------------
+			;MUSIC PLAY HOOK AND FRAME COUNTER
+			;------------------
 
 			;XXX Only there for Bob/Censor, basically that is also a macro and can be placed in stack as code for loading
 	!if CONFIG_NEXT_DOUBLE = 1 {
@@ -151,66 +148,50 @@ bitfire_loadraw_
 !if CONFIG_DEPACK_ONLY = 0 {
 			;/!\ we do not wait for the floppy to be idle, as we waste enough time with depacking or the fallthrough on load_raw to have an idle floppy
 bitfire_send_byte_
-			sec
-			ror
 			sta <filenum
-			lda #$3f
-			;sta $dd02						;unlock bus beforehand
+			ldx #$09						;transfers two bogus bits, but $dd02 is #$3f afterwards, needed for turn disk to happen
 .ld_loop
-			eor #$10
-			jsr .ld_set_dd02					;waste lots of cycles upon write, so bits do not arrive too fast @floppy
-			;nop							;XXX TODO might be omitted, need to check
+			txa
+			lsr
+			ror
+			;could swap both bits, would save one byte -> lsr filenum, ror ror lsr lsr
 			lsr <filenum
-			bne .ld_loop
-			;clc							;force final value to be $3f again (bcc will hit in later on)
-.ld_set_dd02									;moved loop code to here, so that enough cycles pass by until $dd02 is set back to $3f after whole byte is transferred, also saves a byte \o/
-			tax							;x = $1f/$3f / finally x is always $3f after 8 rounds (8 times eor #$20)
-			bcs +
-			sbx #$20						;x = $0f/$2f
-+
-			stx $dd02						;restore $dd02
+			ror
+			lsr
+			lsr
+			eor #$3f
+			sta $dd02
+			dex
+			bpl .ld_loop
+
+;			sec
+;			ror
+;			sta <filenum
+;			lda #$3f
+;			;sta $dd02						;unlock bus beforehand
+;.ld_loop
+;			eor #$10
+;			jsr .ld_set_dd02					;waste lots of cycles upon write, so bits do not arrive too fast @floppy
+;			;nop							;XXX TODO might be omitted, need to check
+;			lsr <filenum
+;			bne .ld_loop
+;			;clc							;force final value to be $3f again (bcc will hit in later on)
+;.ld_set_dd02									;moved loop code to here, so that enough cycles pass by until $dd02 is set back to $3f after whole byte is transferred, also saves a byte \o/
+;			tax							;x = $1f/$3f / finally x is always $3f after 8 rounds (8 times eor #$20)
+;			bcs +
+;			sbx #$20						;x = $0f/$2f
+;+
+;			stx $dd02						;restore $dd02
 .rts
 			rts							;filenum and thus barrier is $00 now, so whenever we enter load_next for a first time, it will load until first block is there
 
-;bitfire_send_byte_
-;			ldx #$07
-;			sta <filenum
-;			lda #$0f
-;.ld_loop
-;			and #$0f
-;			nop
-;			nop
-;			lsr <filenum
-;.doit
-;			bcc +
-;			ora #$20
-;+
-;			eor #$10
-;			dex
-;			bpl .ld_loop
-;			rts
-;bitfire_send_byte_
-;			ldx #$07
-;			sta <filenum
-;			;sta $dd02						;unlock bus beforehand
-;			txa
-;.ld_loop
-;			ora #$2f
-;			nop
-;			nop
-;			lsr <filenum
-;.doit
-;			bcs +
-;			eor #$20
-;+
-;			sta $dd02
-;			eor #$10
-;			dex
-;			bpl .ld_loop
-;			rts
-
-;.jam
-;			jam
+link_music_play									;this is the music play hook for all parts that they should call instead of for e.g. jsr $1003, it has a variable music location to be called
+			inc link_frame_count + 0				;and advances the frame counter if needed
+			bne +
+			inc link_frame_count + 1
++
+link_music_addr = * + 1
+			jmp link_music_play_side1
 link_load_next_raw
 			lda #BITFIRE_LOAD_NEXT
 link_load_raw
@@ -309,6 +290,7 @@ bitfire_ntsc1		ora $dd00						;%dddd111x, ora to preserve the 3 set bits
 			jsr lz_next_page
 }
 			bne .lz_inc_src_refill_
+
 .lz_refill_bits
 			tax							;save bits fetched so far
 			lda (lz_src),y						;fetch another lz_bits byte from stream
@@ -429,26 +411,11 @@ bitfire_loadcomp_
 ;.lz_gap2
 
 !if CONFIG_DEPACK_ONLY = 0 {
-link_player
-			pha
-			tya
-			pha
-			txa
-			pha
-			inc $01							;should be save with $01 == $34/$35, except when music is @ >= $e000
-link_ack_interrupt
-			lda $dd0d
-			jsr link_music_play
-			dec $01
+link_frame_count
+			!word 0
 
-			pla
-			tax
-			pla
-			tay
-			pla
-			rti
+			nop
 }
-
 			;------------------
 			;MATCH
 			;------------------
@@ -693,10 +660,25 @@ lz_next_page
 			jsr lz_next_page
 }
 			bcs .lz_inc_src_lit_
-
 !if CONFIG_DEPACK_ONLY = 0 {
-link_frame_count
-			!word 0
+link_player
+			pha
+			tya
+			pha
+			txa
+			pha
+			inc $01							;should be save with $01 == $34/$35, except when music is @ >= $e000
+link_ack_interrupt
+			lda $dd0d
+			jsr link_music_play
+			dec $01
+
+			pla
+			tax
+			pla
+			tay
+			pla
+			rti
 }
 }
 

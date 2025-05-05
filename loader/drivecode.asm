@@ -724,10 +724,8 @@ b			= $48
 			lda #$80
 			sta <.filename
 			lda #$04
-.bitloop
-.wait_bit1
-!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 .check_spindown
+!if CONFIG_MOTOR_ALWAYS_ON = 0 & .DELAY_SPIN_DOWN = 1 {
 			;have a free running counter so that we only check on 1c0d?
 			;check for underrun of timer here? bit $1c0d, but use 1c05 as timer?
 			bit $1c0d
@@ -740,30 +738,29 @@ b			= $48
 }
 			bit $1800				;check for clk toggle
 			bmi .lock
-			;bit $1800				;check for clk toggle
-			beq .wait_bit1
-.got_bit1
+			beq .check_spindown			;max 27 cycles taken here (vs. 28 on c64 side, all sane)
+.get_loop
 			ldy $1800				;now read again
 			cpy #5					;won't destroy A, but Y, so countdown for spindown is reduced to approx $8xx cycles, we hopefully are done with filename xfer until then
 			ror <.filename
-			;lda $1800				;now read again
-			;lsr
-			;ror <.filename
-			;asl
 .wait_bit2
 			bit $1800
 			bmi .lock
-			;bit $1800				;check for clk toggle
 			bne .wait_bit2				;do we have clk == 0?
 
 			lsr $1800				;XXX TODO can do lsr $1800 here
 			ror <.filename
-			bcc .bitloop				;more bits to fetch?
+.wait_bit1
+			bit $1800				;check for clk toggle
+			bmi .lock
+			beq .wait_bit1				;max 27 cycles taken here (vs. 28 on c64 side, all sane)
+			bcc .get_loop				;more bits to fetch?
++
+		;	lsr					;lda #.BUSY
+			lsr $1800				;set busy bit
 
-			lsr					;lda #.BUSY
-			sta $1800				;set busy bit
-
-			lda <.filename
+			lax <.filename
+			inx
 			bne .do_command				;if filename is $00, we reset, as we need to eor #$ff the filename anyway, we can check prior to eor $ff
 .reset			jmp (.reset_drive)
 
@@ -774,8 +771,6 @@ b			= $48
 			;
 			;----------------------------------------------------------------------------------------------------
 .do_command
-			eor #$ff				;invert bits, saves a byte in resident code, and makes reset detection easier
-								;XXX TODO could even be omitted if we store directory inverted?
 			cmp #BITFIRE_SKIP_FILE
 			beq .eof
 .drivecode_entry
