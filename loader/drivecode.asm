@@ -842,9 +842,11 @@ b			= $48
 			sta <.dir_entry_num			;and save
 			cpy #BITFIRE_EXEC_SECT
 			bne +
+			lda $1c00
+			and #.MOTOR_OFF & .LED_OFF
+			sta $1c00
 			jmp .directory
 +
-
 			;----------------------------------------------------------------------------------------------------
 			;
 			; FIND FILE IN DIRECTORY AND SUM UP FILESIZE TO FIND POSITION ON DISK AND FIRST AND LAST BLOCK SIZE

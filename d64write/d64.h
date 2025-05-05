@@ -58,6 +58,8 @@ static const char filetype[][4] = {
 #define D64_DIR_TRACK   18
 #define D64_DIR_SECTOR  1
 
+#define D64_DRIVE_CODE_SECT	15
+
 #define BAM_FREE        1
 #define BAM_USED        0
 

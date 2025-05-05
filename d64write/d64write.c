@@ -767,6 +767,31 @@ void d64_scramble_buffer(unsigned char* buf) {
     }
 }
 
+int d64_write_drive_code(d64* d64, char* path) {
+    FILE* file;
+    int data;
+
+    if(file = fopen(path, "rb"), !file) {
+        fatal_message("unable to open '%s'\n", path);
+    }
+
+    /* allocate in dir track */
+    d64->sectpos = 0;
+    d64->sector = D64_DRIVE_CODE_SECT;
+    d64->track  = D64_DIR_TRACK;
+    while((data = fgetc(file)) != EOF && d64->sectpos < 256) {
+        d64->sectbuf[d64->sectpos++] = data;
+    }
+    if(!d64_write_sector(d64, d64->track, d64->sector, d64->sectbuf)) return 0;
+    d64_set_bam_entry(d64, d64->track, d64->sector, BAM_USED);
+
+    /* blank buffer */
+    memset(d64->sectbuf, 0, 256);
+    /* write changed bam */
+    d64_write_bam(d64);
+    fclose(file);
+    return 0;
+}
 int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose, int link_to_num, int dirart_raw) {
     FILE* file;
     unsigned char prev_track;
@@ -935,6 +960,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             break;
         }
     }
+    fclose(file);
     return 0;
 }
 
@@ -1078,6 +1104,7 @@ int main(int argc, char *argv[]) {
     char* d64_path = NULL;
     char* art_path = NULL;
     char* boot_file = NULL;
+    char* drive_code = NULL;
 
     char d64_default_header[] = "none";
     char d64_default_id[] = "00";
@@ -1109,6 +1136,7 @@ int main(int argc, char *argv[]) {
         printf("-h, --header <name>			Sets the header of the diskimage to <name>.\n");
         printf("-i, --id <name>				Sets the disk-id of the diskimage to <name>.\n");
         printf("-b, --bitfire <file>			Writes a file in bitfire format without a visible dir entry.\n");
+        printf("-D, --drivecode <file>			Writes drivecode to be executed on command onto disk (track 18, sector 15).\n");
         printf("-s, --standard <file> [line]		Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
         printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
         printf("-B, --boot <file> [line]		Writes a standard file into the dirtrack. All PRG entries from dirart are linked to that file. Optionally it is linked to given line number only.\n");
@@ -1199,6 +1227,13 @@ int main(int argc, char *argv[]) {
       	            if (argv[c + 1][0] != '-' && !errno) c++;
                     else link_to_num = -1;
                 }
+            } else {
+                fatal_message("missing path for option '%s'\n", argv[c]);
+            }
+        }
+        else if(!strcmp(argv[c], "--drivecode") || !strcmp(argv[c], "-D")) {
+            if (argc -c > 1) {
+                drive_code = argv[++c];
             } else {
                 fatal_message("missing path for option '%s'\n", argv[c]);
             }
@@ -1297,6 +1332,10 @@ int main(int argc, char *argv[]) {
             }
             d64_write_file(&d64, filename, FILETYPE_STANDARD, 1, interleave, verbose, link_to_num, dirart_raw);
         }
+    }
+
+    if(drive_code) {
+        d64_write_drive_code(&d64, drive_code);
     }
 
     if (verbose) d64_display_bam(&d64);
