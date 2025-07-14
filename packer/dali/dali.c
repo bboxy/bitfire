@@ -336,6 +336,8 @@ void write_reencoded_stream(ctx* ctx) {
     unsigned int var_dali_cli;
 
     unsigned int sfx_addr = 0x801;
+    int before_reloc = -1;
+
     //unsigned int var_dali_effect_code;
 
     /* write reencoded output file */
@@ -462,12 +464,17 @@ void write_reencoded_stream(ctx* ctx) {
             ctx->cbm = TRUE;
         }
 
-        if (ctx->inplace) {
-            /* as we chose inplace, the whole packed stream lengths defines the load address */
-            ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2;
+        if (ctx->cbm_relocate_packed_addr >= 0) {
+            if (ctx->inplace) {
+                before_reloc = ctx->cbm_range_to - ctx->packed_index - 2;
+            } else {
+                before_reloc = ctx->cbm_range_to - 2 - (ctx->unpacked_index - (ctx->unpacked_size - ctx->packed_size));
+            }
+            ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
         } else {
-            if (ctx->cbm_relocate_packed_addr >= 0) {
-                ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
+            if (ctx->inplace) {
+                /* as we chose inplace, the whole packed stream lengths defines the load address */
+                ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2;
             } else {
                 //ctx->cbm_packed_addr = ctx->cbm_orig_addr;
                 /* also include the overlap into the optimal load address */
@@ -477,7 +484,12 @@ void write_reencoded_stream(ctx* ctx) {
 
         if (ctx->cbm) {
             printf("original: $%04x-$%04x ($%04x) 100%%\n", (int)ctx->cbm_orig_addr, (int)ctx->cbm_orig_addr + (int)ctx->unpacked_size, (int)ctx->unpacked_size);
-            printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", (int)ctx->cbm_packed_addr, (int)ctx->cbm_packed_addr + (int)ctx->packed_index + 2, (int)ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
+            if (before_reloc >= 0 && ctx->inplace) {
+                printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", (int)before_reloc, (int)before_reloc + (int)ctx->packed_index + 2, (int)ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
+                printf("reloc:    $%04x-$%04x ($%04x) %3.2f%%\n", (int)ctx->cbm_packed_addr, (int)ctx->cbm_packed_addr + (int)ctx->packed_index + 2, (int)ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
+            } else {
+                printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", (int)ctx->cbm_packed_addr, (int)ctx->cbm_packed_addr + (int)ctx->packed_index + 2, (int)ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
+            }
             if ((ctx->cbm_packed_addr >= 0xd000 && ctx->cbm_packed_addr < 0xe000) || (ctx->cbm_packed_addr < 0xd000 && ctx->cbm_packed_addr + ctx->packed_index + 2 > 0xd000)) {
                 fprintf(stderr, "Warning: Packed file lies in I/O-range from $d000-$dfff\n");
                 if (ctx->exit_on_warn) exit(1);
