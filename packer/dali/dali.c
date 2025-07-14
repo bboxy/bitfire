@@ -33,6 +33,7 @@ typedef struct ctx {
     size_t unpacked_index;
     size_t unpacked_size;
     int inplace;
+    int force_inplace;
 
     char *output_name;
     char *input_name;
@@ -612,10 +613,6 @@ void do_reencode(ctx* ctx) {
 
     printf("Compressing from $%04x to $%04x = $%04x bytes\n", (int)ctx->cbm_range_from, (int)ctx->cbm_range_to, (int)ctx->unpacked_size);
 
-    if (ctx->cbm_relocate_packed_addr >= 0 || ctx->sfx) {
-        ctx->inplace = FALSE;
-    }
-
     /* write clamped raw data */
     ctx->clamped_name = (char*)malloc(sizeof(src_name));
     strcpy(ctx->clamped_name, src_name);
@@ -714,7 +711,7 @@ int main(int argc, char *argv[]) {
     ctx.input_name = NULL;
     ctx.prefix_name = NULL;
 
-    ctx.inplace = TRUE;
+    ctx.inplace = -1;
 
     ctx.cbm = TRUE;
     ctx.cbm_orig_addr = 0;
@@ -725,6 +722,7 @@ int main(int argc, char *argv[]) {
     ctx.cbm_relocate_origin_addr = -1;
     ctx.cbm_relocate_sfx_addr = -1;
     ctx.cbm_prefix_from = -1;
+    ctx.force_inplace = FALSE;
 
     ctx.sfx = FALSE;
     ctx.sfx_addr = -1;
@@ -757,6 +755,8 @@ int main(int argc, char *argv[]) {
                 ctx.sfx_small = TRUE;
             } else if (!strcmp(argv[i], "--effect")) {
                 ctx.sfx_effect = TRUE;
+            } else if (!strcmp(argv[i], "--inplace")) {
+                ctx.inplace = TRUE;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
                 ctx.cbm_relocate_packed_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
@@ -781,7 +781,6 @@ int main(int argc, char *argv[]) {
                 ctx.sfx_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
                 ctx.sfx = TRUE;
-                ctx.inplace = FALSE;
             } else if (!strcmp(argv[i], "-o")) {
                 i++;
                 ctx.output_name = argv[i];
@@ -809,7 +808,8 @@ int main(int argc, char *argv[]) {
                         "  --cli [num]                 Do a CLI after sfx, default is SEI.\n"
                         "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!)\n"
                         "  --effect                    A very simple decrunch effect is applied\n"
-                        "  --no-inplace                Disable inplace-decompression.\n"
+                        "  --inplace                   Explicitely enable inplace-decompression (overwrites default).\n"
+                        "  --no-inplace                Explicitely disable inplace-decompression (overwrites default).\n"
                         "  --binfile                   Input file is a raw binary without load-address.\n"
                         "  --from [num]                Compress file from [num] on.\n"
                         "  --to [num]                  Compress file until position [num].\n"
@@ -841,6 +841,17 @@ int main(int argc, char *argv[]) {
     if (ctx.input_name == NULL) {
         fprintf(stderr, "Error: No input-filename given\n");
         exit(1);
+    }
+
+    if (ctx.sfx) {
+        ctx.inplace = FALSE;
+    }
+    if (ctx.inplace < 0) {
+        if (ctx.cbm_relocate_packed_addr >= 0) {
+            ctx.inplace = FALSE;
+        } else {
+            ctx.inplace = TRUE;
+        }
     }
 
     do_reencode(&ctx);
