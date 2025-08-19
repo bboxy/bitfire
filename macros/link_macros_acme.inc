@@ -70,14 +70,6 @@
 			jsr bitfire_loadraw_
 		}
 
-		;wait for given frame counter value
-		!macro link_wait_syncpoint .arg {
-.l
-			lda link_syncpoint
-			cmp #.arg
-			bcc .l
-		}
-
 		!macro setup_sync .arg {
 			lda #$00
 			sta link_frame_count + 0	;avoid that the counter wraps worstcase, as we can't write atomic

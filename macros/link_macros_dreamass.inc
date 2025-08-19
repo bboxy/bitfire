@@ -93,16 +93,6 @@
 ).
 		}
 
-		;wait for given frame counter value
-				#macro link_wait_syncpoint (arg) {
-.(
-l:
-			lda link_syncpoint
-			cmp #arg
-			bcc l
-).
-		}
-
 				#macro setup_sync (arg) {
 .(
 			lda #$00

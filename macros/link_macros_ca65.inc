@@ -79,15 +79,6 @@
 			jsr bitfire_loadraw_
 		.endmacro
 
-		;wait for given frame counter value
-		.macro link_wait_syncpoint arg
-		.local l
-l
-			lda link_syncpoint
-			cmp #arg
-			bcc l
-		.endmacro
-
 		.macro setup_sync arg
 		.local l
 			lda #$00

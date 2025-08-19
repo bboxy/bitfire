@@ -70,14 +70,6 @@
 			jsr bitfire_loadraw_
 		endm
 
-		;wait for given frame counter value
-		mac link_wait_syncpoint
-.l
-			lda link_syncpoint
-			cmp #{1}
-			bcc .l
-		endm
-
 		mac setup_sync
 			lda #$00
 			sta link_frame_count + 0	;avoid that the counter wraps worstcase, as we can't write atomic
