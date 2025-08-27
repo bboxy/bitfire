@@ -29,7 +29,6 @@
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
-#include <png.h>
 
 #ifdef _MSC_VER
 #else

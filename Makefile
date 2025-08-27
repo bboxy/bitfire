@@ -11,7 +11,7 @@ else
 VR:=@
 endif
 
-all: loader dali d64write crtwrite
+all: loader dali d64write
 
 bitnax: FORCE
 	@$(MAKE) $(MAKE_OPTS) ACME=$(ACME) -C packer/$@
