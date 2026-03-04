@@ -22,4 +22,6 @@ CONFIG_CRT			= 0
 CONFIG_DEBUG			= 0
 
 CONFIG_DEPACK_ONLY		= 0		;Only compile the bare depacker
+
+CONFIG_GAPS			= 0
 }

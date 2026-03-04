@@ -67,11 +67,32 @@ link_sid_type		;%00000001						;bit set = new, bit cleared = old
 link_cia1_type		;%00000010
 link_cia2_type		;%00000100
 			!byte $00
+!if CONFIG_GAPS = 0 {
+link_player
+			pha
+			tya
+			pha
+			txa
+			pha
+			inc $01							;should be save with $01 == $34/$35, except when music is @ >= $e000
+link_ack_interrupt
+			lda $dd0d
+			jsr link_music_play
+			dec $01
+
+			pla
+			tax
+			pla
+			tay
+			pla
+			rti
+} else {
 			nop
 			nop
 			nop
 			nop
 			nop
+}
 ;.lz_gap1
 			;------------------
 			;MUSIC PLAY HOOK AND FRAME COUNTER
@@ -357,7 +378,7 @@ link_load_next_comp
 bitfire_decomp_
 link_decomp
 	!if CONFIG_CRT = 0 {
-!if CONFIG_DEPACK_ONLY = 0 {
+		!if CONFIG_DEPACK_ONLY = 0 {
 			lda #(.lz_start_over - .lz_skip_poll) - 2
 			ldx #$60
 			bne .loadcomp_entry
@@ -373,7 +394,7 @@ bitfire_loadcomp_
 			stx .lz_skip_fetch
 
 			jsr .lz_next_page_					;shuffle in data first until first block is present, returns with Y = 0, but on loadcomp only, so take care!
-}
+		}
 	}
 										;copy over end_pos and lz_dst from stream XXX would also work from x = 0 .. 2 -> lax #0 tay txa inx cpx #2 -> a = 1 + sec at end
 			ldy #$00						;needs to be set in any case, also plain decomp enters here
@@ -414,7 +435,9 @@ bitfire_loadcomp_
 link_frame_count
 			!word 0
 
+!if CONFIG_GAPS {
 			nop
+}
 }
 			;------------------
 			;MATCH
@@ -660,7 +683,8 @@ lz_next_page
 			jsr lz_next_page
 }
 			bcs .lz_inc_src_lit_
-!if CONFIG_DEPACK_ONLY = 0 {
+!if CONFIG_GAPS = 1 {
+	!if CONFIG_DEPACK_ONLY = 0 {
 link_player
 			pha
 			tya
@@ -679,6 +703,7 @@ link_ack_interrupt
 			tay
 			pla
 			rti
+	}
 }
 }
 
