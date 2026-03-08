@@ -47,7 +47,7 @@ Same as above, but by handing over a file that contains the preceeding dictionar
 Relocate packed data to desired address [$num]. The resulting file can't de decompressed inplace anymore after that, as it requires and will be equipped with an end-marker then. The --no-inplace option is not needed and set automatically.
 
 --relocate-origin [$num]
-Set load-address of source file to [$num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.
+Set load-address of source file to [$num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output. If used with a range (--from --to) the selected range is relocated to the given address.
 
 A standalone depacker-example can be found in packer/dali/dzx0.asm
 

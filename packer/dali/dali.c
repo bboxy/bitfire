@@ -459,11 +459,10 @@ void write_reencoded_stream(ctx* ctx) {
         printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", sfx_addr, sfx_addr + (int)ctx->sfx_size + (int)ctx->packed_index, (int)ctx->sfx_size + (int)ctx->packed_index, ((float)(ctx->packed_index + (int)ctx->sfx_size) / (float)(ctx->unpacked_size) * 100.0));
     /* or standard compressed */
     } else {
-        if (ctx->cbm_relocate_origin_addr >= 0) {
+        if (ctx->cbm_relocate_origin_addr >= 0 && !ctx->cbm) {
             ctx->cbm_orig_addr = ctx->cbm_relocate_origin_addr;
             ctx->cbm = TRUE;
         }
-
         if (ctx->cbm_relocate_packed_addr >= 0) {
             if (ctx->inplace) {
                 before_reloc = ctx->cbm_range_to - ctx->packed_index - 2;
@@ -473,8 +472,12 @@ void write_reencoded_stream(ctx* ctx) {
             ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
         } else {
             if (ctx->inplace) {
-                /* as we chose inplace, the whole packed stream lengths defines the load address */
-                ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2;
+                if (ctx->cbm_relocate_origin_addr >= 0) {
+                    ctx->cbm_packed_addr = ctx->cbm_relocate_origin_addr + (ctx->cbm_range_to - ctx->cbm_range_from) - ctx->packed_index - 2;
+                } else {
+                    /* as we chose inplace, the whole packed stream lengths defines the load address */
+                    ctx->cbm_packed_addr = ctx->cbm_range_to - ctx->packed_index - 2;
+                }
             } else {
                 //ctx->cbm_packed_addr = ctx->cbm_orig_addr;
                 /* also include the overlap into the optimal load address */
@@ -484,6 +487,10 @@ void write_reencoded_stream(ctx* ctx) {
 
         if (ctx->cbm) {
             printf("original: $%04x-$%04x ($%04x) 100%%\n", (int)ctx->cbm_orig_addr, (int)ctx->cbm_orig_addr + (int)ctx->unpacked_size, (int)ctx->unpacked_size);
+            //now relocate result to new address
+            if (ctx->cbm_relocate_origin_addr >= 0 && ctx->cbm) {
+                ctx->cbm_orig_addr = ctx->cbm_relocate_origin_addr;
+            }
             if (before_reloc >= 0 && ctx->inplace) {
                 printf("packed:   $%04x-$%04x ($%04x) %3.2f%%\n", (int)before_reloc, (int)before_reloc + (int)ctx->packed_index + 2, (int)ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
                 printf("reloc:    $%04x-$%04x ($%04x) %3.2f%%\n", (int)ctx->cbm_packed_addr, (int)ctx->cbm_packed_addr + (int)ctx->packed_index + 2, (int)ctx->packed_index + 2, ((float)(ctx->packed_index) / (float)(ctx->unpacked_size) * 100.0));
@@ -557,8 +564,10 @@ void do_reencode(ctx* ctx) {
     fclose(ufp);
 
     /* cbm address handling */
-    if (ctx->cbm_relocate_origin_addr >= 0) {
+    if (ctx->cbm_relocate_origin_addr >= 0 && !ctx->cbm) {
         ctx->cbm_orig_addr = ctx->cbm_relocate_origin_addr;
+    } else if (!ctx->cbm) {
+        ctx->cbm_orig_addr = 0;
     } else {
         ctx->cbm_orig_addr = ctx->unpacked_data[0] + (ctx->unpacked_data[1] << 8);
     }
@@ -828,7 +837,7 @@ int main(int argc, char *argv[]) {
                         "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from).\n"
                         "  --prefix-file [file]        Use preceeding data from [file] as dictionary.\n"
                         "  --relocate-packed [num]     Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
-                        "  --relocate-origin [num]     Set load-address of source file to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
+                        "  --relocate-origin [num]     Set load-address of source file/selected chunk to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
                         "  --relocate-sfx [num]        Set load-address sfx-packed file to [num], basic header will then be omitted.\n"
                         "  --exit_on_warn              Exit on warnings like they happen when crossing the i/o-range.\n"
                         "  -h, --help                  Show this help page.\n"
