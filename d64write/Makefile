@@ -21,6 +21,8 @@ endif
 SOURCE:= d64write.c
 HEADER:= *.h
 
+.PHONY: all
+
 all: d64write
 
 d64write: $(SOURCE) $(HEADER)
