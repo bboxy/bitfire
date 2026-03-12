@@ -13,7 +13,7 @@ endif
 
 .PHONY: all
 
-all: installer
+all: installer gcr_tables frag
 
 frag: frag.c
 	@echo "Building frag tool..."
@@ -31,14 +31,14 @@ loader_acme.inc: resident resident_labels.txt
 	@#fetch all config labels
 	$(VR)grep "BITFIRE_*" resident_labels.txt | sed "s/[[:space:]]*;[[:space:]]*.*//g" | tr -d "\t" | sed -e 's/\$$\([0-9a-f]\{3\}$$\)/\$$0\1/' -e "s/\= / \= /" >> loader_acme.inc
 
-loader_c6510.inc: resident resident_labels.txt
+loader_c6510.inc: resident loader_acme.inc
 	@echo "Creating loader_c6510.inc..."
 	@#convert to c6510 format (add const, wipe out underscores and add prefix with .)
 	$(VR)echo "if def BITFIRE.ISINCLUDED == 0" > loader_c6510.inc
 	$(VR)cat loader_acme.inc | sed "s/\(.*\)/const \\1/" >> loader_c6510.inc
 	$(VR)echo "endif" >> loader_c6510.inc
 
-loader_kickass.inc: resident resident_labels.txt
+loader_kickass.inc: resident loader_acme.inc
 	@echo "Creating loader_kickass.inc..."
 	$(VR)echo ".importonce" > loader_kickass.inc
 	@#cat loader_acme.inc | grep "bitfire" | sed "s/bitfire/\.var bitfire/" >> loader_kickass.inc
