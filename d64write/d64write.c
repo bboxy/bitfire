@@ -490,8 +490,9 @@ static int d64_update_direntry(d64* d64, char* name, int start_track, int start_
     if (locked) d64->sectbuf[desectpos + D64_DTYPE] = d64->sectbuf[desectpos + D64_DTYPE] | 0x40;
     /* add filename */
     if (name_len > 16) {
-        fatal_message("name '%s' too long\n", name);
-        return 0;
+	name_len = 16;
+        warn_message("name '%s' too long, shortening to 16 chars\n", name);
+        //return 0;
     }
     memcpy(&d64->sectbuf[desectpos + D64_DNAME], name, name_len);
     /* pad filename */
@@ -930,6 +931,7 @@ int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, 
             pname = strdup(path);
             pname = basename(pname);
 #endif
+
             if (!dirart_raw){
                 ascii2petscii(pname);
             }
