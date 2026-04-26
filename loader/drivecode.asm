@@ -77,7 +77,10 @@
 .dir_first_file_index	= .directory + 1			;how many blocks are used on this track up to the file
 .dir_first_block_pos	= .directory + 2			;startposition within block
 .dir_diskside		= .directory + 3
-.drivecode_start
+
+
+			* = .zeropage
+bitfire_drivecode_start
 !pseudopc .zeropage {
 .zp_start
 
@@ -773,6 +776,7 @@ b			= $48
 .do_command
 			cmp #BITFIRE_SKIP_FILE
 			beq .eof
+bitfire_drivecode_entry
 .drivecode_entry
 			cmp #BITFIRE_LOAD_NEXT			;carry clear = load normal file, carry set = request disk
 			beq .clc				;clear carry and skip sta <.filenum by that, filenum = $18 == clc
@@ -847,6 +851,7 @@ b			= $48
 			sta $1c00
 			jmp .directory
 +
+
 			;----------------------------------------------------------------------------------------------------
 			;
 			; FIND FILE IN DIRECTORY AND SUM UP FILESIZE TO FIND POSITION ON DISK AND FIRST AND LAST BLOCK SIZE
@@ -1295,9 +1300,8 @@ b			= $48
 }
 
 }
-
 .drivecode_end
-.drivecode_size = .drivecode_end - .drivecode_start
+bitfire_drivecode_size = .drivecode_end - bitfire_drivecode_start
 
 ;XXX TODO merge high and lownibbles in one table and separate by and #$0f, possible if we save data due to that and also cycles
 
@@ -1306,9 +1310,9 @@ b			= $48
 ;XXX TODO
 ;XXX TODO change interleave depending on track (via set max_sectors?)
 
-.bootstrap_start
+bitfire_bootstrap_start
 !pseudopc .bootstrap {
-.bootstrap_run
+bitfire_bootstrap_run
 			;stepperfix by dummy loading from track 17 first?
 			ldy #.DIR_TRACK - 1
 			sty $0e
@@ -1415,10 +1419,10 @@ b			= $48
 }
 
 .bootstrap_end
-.bootstrap_size = .bootstrap_end - .bootstrap_start
+bitfire_bootstrap_size = .bootstrap_end - bitfire_bootstrap_start
 
 !ifdef .second_pass {
-	!warn "bootstrap size: ", .bootstrap_size
+	!warn "bootstrap size: ", bitfire_bootstrap_size
 }
 !if .filenum != $18 {
 	!error ".filenum is not at address $0018 - clc trick will fail."

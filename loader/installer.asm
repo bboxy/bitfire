@@ -125,9 +125,9 @@
 		inx
 		inc .dc_data + 2
 +
-		cpy #<(.drivecode_size)
+		cpy #<(bitfire_drivecode_size)
 		bne .dc_loop
-		cpx #>(.drivecode_size)
+		cpx #>(bitfire_drivecode_size)
 		bne .dc_loop
 
 		lda #$37			;raise atn to signal end of transfer
@@ -140,7 +140,7 @@
 		;better force to 8 bit, label might be defined as 16 bit
 		ldx #<(bitfire_resident_size)
 -
-		lda .res_start,x
+		lda .resident_start,x
 		sta CONFIG_RESIDENT_ADDR,x
 		dex
 	!if bitfire_resident_size >= $80 {
@@ -153,9 +153,9 @@
 		;copy resident part
 		ldx #$00
 -
-		lda .res_start,x
+		lda .resident_start,x
 		sta CONFIG_RESIDENT_ADDR,x
-		lda .res_start + ((bitfire_resident_size) - $100),x
+		lda .resident_start + ((bitfire_resident_size) - $100),x
 		sta CONFIG_RESIDENT_ADDR + ((bitfire_resident_size) - $100),x
 		dex
 		bne -
@@ -257,7 +257,7 @@
 		cpy #$06
 		bne -
 -
-		lda .bootstrap_start,x
+		lda .drivecode_start + (bitfire_bootstrap_start - bitfire_drivecode_start),x
 		jsr .iecout
 		inx
 		txa
@@ -266,7 +266,7 @@
 
 		jsr .unlisten
 
-		cpx #.bootstrap_size
+		cpx #bitfire_bootstrap_size
 		bcc .bs_loop
 
 		;now execute bootstrap
@@ -325,11 +325,11 @@
 
 .mw_code
 		!text "m-w"
-		!word .bootstrap_run
+		!word bitfire_bootstrap_run
 		!byte $20
 .me_code
 		!text "m-e"
-		!word .bootstrap_run
+		!word bitfire_bootstrap_run
 
 .responder
 		!text "m-e"
@@ -406,10 +406,11 @@
 }
 }
 ;!if (CONFIG_RESIDENT_AUTOINST != 0) {
-.res_start
-!bin "resident",,2
+.resident_start
+!bin "resident"
 ;}
 
+.drivecode_start
 !if CONFIG_CRT = 0 {
-!src "drivecode.asm"
+!bin "drivecode"
 }
