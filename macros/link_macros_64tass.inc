@@ -176,8 +176,13 @@ l
 			sta $dd05
 			lda #$81
 			sta $dd0d
-
-			lda #$ff
+.e
+			lda $d011
+			bmi .e
+.f
+			lda $d011
+			bpl .f
+			lda #$0f
 l
 			cmp $d012
 			bne l
