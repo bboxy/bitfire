@@ -65,7 +65,7 @@
 
 		;request next disk side and reset filenum_counter
 		mac request_disk
-			lda #{1} + $ef
+			lda #{1} - 1 + BITFIRE_REQ_DISC
 			;simply do a bogus loadraw, this will call ld_pblock until eof is raised, nothing is loaded as block_ready never happens :-)
 			jsr bitfire_loadraw_
 		endm
