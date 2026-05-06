@@ -46,6 +46,7 @@ typedef struct ctx {
     int cbm_range_from;
     int cbm_range_to;
     int cbm_relocate_packed_addr;
+    int cbm_relocate_end_addr;
     int cbm_relocate_origin_addr;
     int cbm_relocate_sfx_addr;
     int cbm_prefix_from;
@@ -463,13 +464,17 @@ void write_reencoded_stream(ctx* ctx) {
             ctx->cbm_orig_addr = ctx->cbm_relocate_origin_addr;
             ctx->cbm = TRUE;
         }
-        if (ctx->cbm_relocate_packed_addr >= 0) {
+        if (ctx->cbm_relocate_packed_addr >= 0 || ctx->cbm_relocate_end_addr >= 0) {
             if (ctx->inplace) {
                 before_reloc = ctx->cbm_range_to - ctx->packed_index - 2;
             } else {
                 before_reloc = ctx->cbm_range_to - 2 - (ctx->unpacked_index - (ctx->unpacked_size - ctx->packed_size));
             }
-            ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
+            if (ctx->cbm_relocate_end_addr >= 0) {
+                ctx->cbm_packed_addr = ctx->cbm_relocate_end_addr - ctx->packed_index - 2;
+            } else {
+                ctx->cbm_packed_addr = ctx->cbm_relocate_packed_addr;
+            }
         } else {
             if (ctx->inplace) {
                 if (ctx->cbm_relocate_origin_addr >= 0) {
@@ -740,6 +745,7 @@ int main(int argc, char *argv[]) {
     ctx.cbm_range_from = -1;
     ctx.cbm_range_to = -1;
     ctx.cbm_relocate_packed_addr = -1;
+    ctx.cbm_relocate_end_addr = - 1;
     ctx.cbm_relocate_origin_addr = -1;
     ctx.cbm_relocate_sfx_addr = -1;
     ctx.cbm_prefix_from = -1;
@@ -778,6 +784,9 @@ int main(int argc, char *argv[]) {
                 ctx.sfx_effect = TRUE;
             } else if (!strcmp(argv[i], "--inplace")) {
                 ctx.inplace = TRUE;
+            } else if (!strcmp(argv[i], "--relocate-end")) {
+                ctx.cbm_relocate_end_addr = read_number(argv[i + 1], argv[i], 65536);
+                i++;
             } else if (!strcmp(argv[i], "--relocate-packed")) {
                 ctx.cbm_relocate_packed_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
@@ -837,6 +846,7 @@ int main(int argc, char *argv[]) {
                         "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from).\n"
                         "  --prefix-file [file]        Use preceeding data from [file] as dictionary.\n"
                         "  --relocate-packed [num]     Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
+                        "  --relocate-end [num]       Relocate packed data so it ends at desired address [num] (resulting file can't de decompressed inplace!)\n"
                         "  --relocate-origin [num]     Set load-address of source file/selected chunk to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
                         "  --relocate-sfx [num]        Set load-address sfx-packed file to [num], basic header will then be omitted.\n"
                         "  --exit_on_warn              Exit on warnings like they happen when crossing the i/o-range.\n"
@@ -846,6 +856,10 @@ int main(int argc, char *argv[]) {
         if (argc <= (2 + show_version)) exit(exit_help);
     }
 
+    if (ctx.cbm_relocate_packed_addr >= 0 && ctx.cbm_relocate_end_addr >= 0) {
+        fprintf(stderr, "Error: --relocate-packed and --relocate-end is set, choose either one\n");
+        exit(1);
+    }
     if (!ctx.sfx && ctx.cbm_relocate_sfx_addr >= 0) {
         fprintf(stderr, "Info: No sfx, ignoring --relocate-sfx option\n");
     }
@@ -868,7 +882,7 @@ int main(int argc, char *argv[]) {
         ctx.inplace = FALSE;
     }
     if (ctx.inplace < 0) {
-        if (ctx.cbm_relocate_packed_addr >= 0) {
+        if (ctx.cbm_relocate_packed_addr >= 0 || ctx.cbm_relocate_end_addr >= 0) {
             ctx.inplace = FALSE;
         } else {
             ctx.inplace = TRUE;
