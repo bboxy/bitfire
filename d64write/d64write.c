@@ -1215,7 +1215,7 @@ int main(int argc, char *argv[]) {
             c++;
             if (argc -c > 1) {
                 strtoul(argv[c + 1], NULL, 10);
-		if (!errno) c++;
+      	        if (argv[c + 1][0] != '-' && !errno) c++;
             }
         }
         else if(!strcmp(argv[c], "-b") || !strcmp(argv[c], "--bitfire")) {
