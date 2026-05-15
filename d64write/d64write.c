@@ -68,10 +68,10 @@ static unsigned char s2p[] = {
     0x20,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xab,0xac,0xad,0xae,0xaf,
     0xb0,0xb1,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xbb,0xbc,0xbd,0xbe,0xbf,
     0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
-    0x10,0x11,0x12,0x20,0x20,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
+    0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
-    0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x20,0x8e,0x8f,
+    0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,
     0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
     0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20
@@ -790,6 +790,7 @@ int d64_write_drive_code(d64* d64, char* path) {
     /* write changed bam */
     d64_write_bam(d64);
     fclose(file);
+    printf("code     |       |             |        |       | TS:%02d/%02d |          |           | \"%s\"\n", d64->track, d64->sector, path);
     return 0;
 }
 int d64_write_file(d64* d64, char* path, int type, int add_dir, int interleave, int verbose, int link_to_num, int dirart_raw) {
@@ -1141,7 +1142,7 @@ int main(int argc, char *argv[]) {
         printf("-s, --standard <file> [line]		Writes a file in standard format. Optionally it will linked to the line of dir-art if given.\n");
         printf("-S, --side <num>			Determines which side this disk image will be when it comes about turning the disc.\n");
         printf("-B, --boot <file> [line]		Writes a standard file into the dirtrack. All PRG entries from dirart are linked to that file. Optionally it is linked to given line number only.\n");
-        printf("-a, --art <num> <dirart.prg/.png>	A dirart can be provided, it extracts <num> lines of a petscii or .png screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
+        printf("-a, --art <dirart.prg/.png> [num]	A dirart can be provided, it extracts <num> lines of a petscii or .png screen plus a first line that is interpreted as header + id. Any header and id given through -h and -i will be ignored then.\n");
         printf("-r, --raw				Do not pre-process dirart.\n");
         //printf("-I, --interleave <num>			Write files with given interleave (change that value also in config.inc). Default: %d\n", interleave);
         printf("-F, --40				Enable 40 track support.\n");
@@ -1213,7 +1214,7 @@ int main(int argc, char *argv[]) {
         else if(!strcmp(argv[c], "-s") || !strcmp(argv[c], "--standard")) {
             c++;
             if (argc -c > 1) {
-                strtoul(argv[++c], NULL, 10);
+                strtoul(argv[c + 1], NULL, 10);
 		if (!errno) c++;
             }
         }
@@ -1249,13 +1250,13 @@ int main(int argc, char *argv[]) {
             dirart_raw = 1;
         }
         else if(!strcmp(argv[c], "-a") || !strcmp(argv[c], "--art")) {
-            if (argc -c > 1) lines = strtoul(argv[++c], NULL, 10);
-            else {
-                fatal_message("missing value for option '%s'\n", argv[c]);
-            }
             if (argc -c > 1) art_path = argv[++c];
             else {
-                fatal_message("missing path for option '%s'\n", argv[c-1]);
+                fatal_message("missing path for option '%s'\n", argv[c]);
+            }
+            if (argc -c > 1) lines = strtoul(argv[++c], NULL, 10);
+            else {
+                fatal_message("missing value for option '%s'\n", argv[c-1]);
             }
             dir_art = 1;
         }
@@ -1313,6 +1314,10 @@ int main(int argc, char *argv[]) {
         d64_write_file(&d64, boot_file, FILETYPE_BOOT, dir_art ^ 1, DIR_INTERLEAVE, verbose, -1, 0);
     }
 
+    if(drive_code) {
+        d64_write_drive_code(&d64, drive_code);
+    }
+
     //and a dir art linked to that now as we have track/sector info for the bootfile
     if(dir_art) d64_apply_dirart(&d64, art_path, d64.track_link, d64.sector_link, lines, link_to_num, dirart_raw);
 
@@ -1333,10 +1338,6 @@ int main(int argc, char *argv[]) {
             }
             d64_write_file(&d64, filename, FILETYPE_STANDARD, 1, interleave, verbose, link_to_num, dirart_raw);
         }
-    }
-
-    if(drive_code) {
-        d64_write_drive_code(&d64, drive_code);
     }
 
     if (verbose) d64_display_bam(&d64);
