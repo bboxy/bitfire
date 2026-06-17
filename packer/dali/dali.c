@@ -774,7 +774,7 @@ int main(int argc, char *argv[]) {
                 show_version = TRUE;
             } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
                 exit_help = 0;
-            } else if (!strcmp(argv[i], "--exit_on_warn")) {
+            } else if (!strcmp(argv[i], "--exit-on-warn")) {
                 ctx.exit_on_warn = TRUE;
             } else if (!strcmp(argv[i], "--no-inplace")) {
                 ctx.inplace = FALSE;
@@ -846,10 +846,10 @@ int main(int argc, char *argv[]) {
                         "  --prefix-from [num]         Use preceeding data from [num] on as dictionary (in combination with --from).\n"
                         "  --prefix-file [file]        Use preceeding data from [file] as dictionary.\n"
                         "  --relocate-packed [num]     Relocate packed data to desired address [num] (resulting file can't de decompressed inplace!)\n"
-                        "  --relocate-end [num]       Relocate packed data so it ends at desired address [num] (resulting file can't de decompressed inplace!)\n"
+                        "  --relocate-end [num]        Relocate packed data so it ends at desired address [num] (resulting file can't de decompressed inplace!)\n"
                         "  --relocate-origin [num]     Set load-address of source file/selected chunk to [num] prior to compression. If used on bin-files, load-address and depack-target is prepended on output.\n"
                         "  --relocate-sfx [num]        Set load-address sfx-packed file to [num], basic header will then be omitted.\n"
-                        "  --exit_on_warn              Exit on warnings like they happen when crossing the i/o-range.\n"
+                        "  --exit-on-warn              Exit on warnings like they happen when crossing the i/o-range.\n"
                         "  -h, --help                  Show this help page.\n"
                         "  -V, --version               Show version info and exit.\n"
                         ,argv[0]);
