@@ -27,7 +27,7 @@
 
 BITS_LEFT		= 1
 
-.depacker_dst		= $01
+.depacker_dst		= $02
 
 !macro get_lz_bit {
 	!if BITS_LEFT = 1 {
@@ -45,18 +45,18 @@ BITS_LEFT		= 1
 	}
 }
 
-		* = $0801
+		* = $1001
 .dali_code_start
-                !byte $0b,$08
+                !byte $0b,$10
 		;could place opcodes in linenumber and do sys 2051? 2049? -> anc $08 would not hurt, but $9e hurts
-		!word 1602
+		!word 4109
 		!byte $9e
-		!text "2061"
+		!text "4109"
 		!byte $00,$00,$00
 
 		;/!\ ATTENTION, the depacker just fits into ZP this way, if it gets larger, the copy routine will overwrite $00, as it is a 8-bit address sta
 		sei
-
+		sta $ff3f
 !ifdef SFX_FAST {
 		;full zp code will be copied, but later less bytes will be copied back
 		ldx #<($100 + (.depacker_end - .restore_end))
@@ -83,7 +83,6 @@ sfx_src = * + 1
 .depacker_code
 !pseudopc .depacker_dst {
 .depacker_start
-		!byte $34
 lz_bits
 !if BITS_LEFT = 1 {
 		!byte $40
@@ -92,17 +91,12 @@ lz_bits
 }
 
 .depack
-!ifdef SFX_FAST {
-lz_01 = * + 1
-		lda #$37			;replace value for $01 in saved ZP on stack
-		pha
-}
 -						;copy data to end of ram ($ffff)
                 dey
 lz_data_end = * + 1
 .src		lda $beef,y
 lz_dst_end = * + 1
-.dst		sta $ff00,y
+.dst		sta $fb00,y
                 tya				;annoying, but need to copy from $ff ... $00
                 bne -
 
@@ -172,12 +166,6 @@ lz_src = * + 1
 		;DO MATCH
 		;------------------
 .lz_match
-!ifdef SFX_EFFECT {
-lz_effect
-		inc $01
-		dec $d020
-		dec $01
-}
 		jsr get_length
 !ifdef SFX_FAST {
 		sbc #$01			;saves the sec and iny later on, if it results in a = $ff, no problem, we branch with the beq later on
@@ -352,8 +340,6 @@ lz_eof
 		sta <(.depacker_dst - ($100 - (.restore_end - .depacker_start))),x
 		bne -
 		pha				;end up with SP = $ff, let's be nice :-)
-lz_cli
-		sei
 }
 lz_sfx_addr = * + 1
 		jmp $0000
@@ -378,18 +364,9 @@ lz_sfx_addr = * + 1
 !word lz_data_end	- .smc_offsetd + 2
 !word lz_dst_end	- .smc_offsetd + 2
 !word lz_data_size_hi	- .smc_offsetd + 2
-!ifdef SFX_FAST {
-!word lz_01		- .smc_offsetd + 2
-!word lz_cli		- .smc_offsetd + 2
-} else {
-!word $ffff
-!word $ffff
-}
-!ifdef SFX_EFFECT {
-!word lz_effect		- .smc_offsetd + 2
-} else {
-!word $ffff
-}
+!word $ffff					;01 val -> not used here
+!word $ffff					;cli
+!word $ffff					;depack effect
 .vars_end
 
 ;DALI_VARS_SIZE = .vars_end - .vars_start

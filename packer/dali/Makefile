@@ -65,10 +65,9 @@ testfile.lz: ../../benchmark/files/b dali
 example.prg: example.asm dali dzx0_dali.asm testfile.lz
 	$(VR)$(ACME) $(ACME_OPTS) -o $@ $<
 
-sfx.h: sfx.asm
+sfx.h: sfx.asm sfx_plus4.asm
 	@echo "Creating sfx.h..."
 	$(VR)$(ACME) $(ACME_OPTS) -DSFX_EFFECT=1 -DSFX_SMALL=1 -o $(basename $@) $<
-
 	$(VR)echo 'static const char decruncher_small_effect[] = {' > $@
 	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
 	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/+/g' -e 's/.\{50\}/&+/g' | tr -s '+' '\n' | sed 's/^/&    /g' >> $@
@@ -88,6 +87,18 @@ sfx.h: sfx.asm
 
 	$(VR)$(ACME) $(ACME_OPTS) -DSFX_FAST=1 -o $(basename $@) $<
 	$(VR)echo 'static const char decruncher[] = {' >> $@
+	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
+	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/+/g' -e 's/.\{50\}/&+/g' | tr -s '+' '\n' | sed 's/^/&    /g' >> $@
+	$(VR)echo '};' >> $@
+
+	$(VR)$(ACME) $(ACME_OPTS) -DSFX_SMALL=1 -o $(basename $@) sfx_plus4.asm
+	$(VR)echo 'static const char decruncher_plus4_small[] = {' >> $@
+	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
+	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/+/g' -e 's/.\{50\}/&+/g' | tr -s '+' '\n' | sed 's/^/&    /g' >> $@
+	$(VR)echo '};' >> $@
+
+	$(VR)$(ACME) $(ACME_OPTS) -DSFX_FAST=1 -o $(basename $@) sfx_plus4.asm
+	$(VR)echo 'static const char decruncher_plus4[] = {' >> $@
 	@#create a hexdump, add a marker (+) where lines are truncated (each 50 chars = 8 bytes per line), substitute marker (+) with newline (use tr here, as bsd-sed fails on \n), add identation to each line
 	$(VR)hexdump -ve '1/1 "0x%.2x,"' $(basename $@) | sed -e 's/,$$/+/g' -e 's/.\{50\}/&+/g' | tr -s '+' '\n' | sed 's/^/&    /g' >> $@
 	$(VR)echo '};' >> $@

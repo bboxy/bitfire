@@ -11,7 +11,20 @@
 #define TRUE 1
 #define DALI_BITS_LEFT 1
 #define DALI_ELIAS_LE 1
-#define DALI_VARS_SIZE 18
+#define DALI_VARS_SIZE 20
+
+#define POS_DALI_SFX_SRC 	0
+#define POS_DALI_SRC 		2
+#define POS_DALI_DST 		4
+#define POS_DALI_SFX_ADDR 	6
+#define POS_DALI_DATA_END 	8
+#define POS_DALI_DST_END 	10
+#define POS_DALI_DATA_SIZE_HI 	12
+#define POS_DALI_01 		14
+#define POS_DALI_CLI 		16
+
+#define SFX_C64			1
+#define SFX_PLUS4		2
 
 //include salvador and rename main
 #define main salvador_main
@@ -322,21 +335,13 @@ void write_reencoded_stream(ctx* ctx) {
     unsigned int dali_dst;
     unsigned int dali_sfx_addr;
     unsigned int dali_data_end;
+    unsigned int dali_dst_end;
     unsigned int dali_data_size_hi;
     unsigned int dali_01;
     unsigned int dali_cli;
     //int dali_effect_code;
 
-    unsigned int var_dali_sfx_src;
-    unsigned int var_dali_src;
-    unsigned int var_dali_dst;
-    unsigned int var_dali_sfx_addr;
-    unsigned int var_dali_data_end;
-    unsigned int var_dali_data_size_hi;
-    unsigned int var_dali_01;
-    unsigned int var_dali_cli;
-
-    unsigned int sfx_addr = 0x801;
+    unsigned int sfx_addr;
     int before_reloc = -1;
 
     //unsigned int var_dali_effect_code;
@@ -351,53 +356,58 @@ void write_reencoded_stream(ctx* ctx) {
     /* as sfx */
     if (ctx->sfx) {
         printf("Creating sfx with start-address $%04x\n", ctx->sfx_addr);
-        if (ctx->sfx_small) {
-            if (ctx->sfx_effect) {
-                ctx->sfx_size = sizeof(decruncher_small_effect);
-                /* copy over to change values in code */
-                ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
-                memcpy (ctx->sfx_code, decruncher_small_effect, ctx->sfx_size);
+        if (ctx->sfx == SFX_C64) {
+            if (ctx->sfx_small) {
+                if (ctx->sfx_effect) {
+                    ctx->sfx_size = sizeof(decruncher_small_effect);
+                    /* copy over to change values in code */
+                    ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
+                    memcpy (ctx->sfx_code, decruncher_small_effect, ctx->sfx_size);
+                } else {
+                    ctx->sfx_size = sizeof(decruncher_small);
+                    /* copy over to change values in code */
+                    ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
+                    memcpy (ctx->sfx_code, decruncher_small, ctx->sfx_size);
+                }
             } else {
-                ctx->sfx_size = sizeof(decruncher_small);
-                /* copy over to change values in code */
-                ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
-                memcpy (ctx->sfx_code, decruncher_small, ctx->sfx_size);
+                if (ctx->sfx_effect) {
+                    ctx->sfx_size = sizeof(decruncher_effect);
+                    /* copy over to change values in code */
+                    ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
+                    memcpy (ctx->sfx_code, decruncher_effect, ctx->sfx_size);
+                } else {
+                    ctx->sfx_size = sizeof(decruncher);
+                    /* copy over to change values in code */
+                    ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
+                    memcpy (ctx->sfx_code, decruncher, ctx->sfx_size);
+                }
             }
-        } else {
-            if (ctx->sfx_effect) {
-                ctx->sfx_size = sizeof(decruncher_effect);
+        } else if (ctx->sfx == SFX_PLUS4) {
+            if (ctx->sfx_small) {
+                ctx->sfx_size = sizeof(decruncher_plus4_small);
                 /* copy over to change values in code */
                 ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
-                memcpy (ctx->sfx_code, decruncher_effect, ctx->sfx_size);
+                memcpy (ctx->sfx_code, decruncher_plus4_small, ctx->sfx_size);
             } else {
-                ctx->sfx_size = sizeof(decruncher);
+                ctx->sfx_size = sizeof(decruncher_plus4);
                 /* copy over to change values in code */
                 ctx->sfx_code = (unsigned char *)malloc(ctx->sfx_size);
-                memcpy (ctx->sfx_code, decruncher, ctx->sfx_size);
+                memcpy (ctx->sfx_code, decruncher_plus4, ctx->sfx_size);
             }
         }
         ctx->sfx_size -= DALI_VARS_SIZE;
 
         /* fetch vars from binary */
-
-        var_dali_sfx_src = ctx->sfx_size + 0;
-        var_dali_src = ctx->sfx_size + 2;
-        var_dali_dst = ctx->sfx_size + 4;
-        var_dali_sfx_addr = ctx->sfx_size + 6;
-        var_dali_data_end = ctx->sfx_size + 8;
-        var_dali_data_size_hi = ctx->sfx_size + 10;
-        var_dali_01 = ctx->sfx_size + 12;
-        var_dali_cli = ctx->sfx_size + 14;
-        //var_dali_effect_code = ctx->sfx_size + 16;
-
-        dali_sfx_src = get_var(ctx, var_dali_sfx_src);
-        dali_src = get_var(ctx, var_dali_src);
-        dali_dst = get_var(ctx, var_dali_dst);
-        dali_sfx_addr = get_var(ctx, var_dali_sfx_addr);
-        dali_data_end = get_var(ctx, var_dali_data_end);
-        dali_data_size_hi = get_var(ctx, var_dali_data_size_hi);
-        dali_01 = get_var(ctx, var_dali_01);
-        dali_cli = get_var(ctx, var_dali_cli);
+        sfx_addr = get_var(ctx, 0);
+        dali_sfx_src = get_var(ctx, ctx->sfx_size + POS_DALI_SFX_SRC);
+        dali_src = get_var(ctx, ctx->sfx_size + POS_DALI_SRC);
+        dali_dst = get_var(ctx, ctx->sfx_size + POS_DALI_DST);
+        dali_sfx_addr = get_var(ctx, ctx->sfx_size + POS_DALI_SFX_ADDR);
+        dali_data_end = get_var(ctx, ctx->sfx_size + POS_DALI_DATA_END);
+        dali_dst_end = get_var(ctx, ctx->sfx_size + POS_DALI_DST_END);
+        dali_data_size_hi = get_var(ctx, ctx->sfx_size + POS_DALI_DATA_SIZE_HI);
+        dali_01 = get_var(ctx, ctx->sfx_size + POS_DALI_01);
+        dali_cli = get_var(ctx, ctx->sfx_size + POS_DALI_CLI);
         //dali_effect_code = get_var(ctx, var_dali_effect_code);
 
         /* setup jmp target after decompression */
@@ -409,14 +419,14 @@ void write_reencoded_stream(ctx* ctx) {
         ctx->sfx_code[dali_dst + 1] = (ctx->cbm_orig_addr >> 8) & 0xff;
 
         /* setup compressed data src */
-        ctx->sfx_code[dali_src + 0] = (0x10000 - ctx->reencoded_index) & 0xff;
-        ctx->sfx_code[dali_src + 1] = ((0x10000 - ctx->reencoded_index) >> 8) & 0xff;
+        ctx->sfx_code[dali_src + 0] = ((ctx->sfx_code[dali_dst_end + 1] * 0x100) + 0x100 - ctx->reencoded_index) & 0xff;
+        ctx->sfx_code[dali_src + 1] = (((ctx->sfx_code[dali_dst_end + 1] * 0x100) + 0x100 - ctx->reencoded_index) >> 8) & 0xff;
 
         /* setup compressed data end */
         ctx->sfx_code[dali_data_end + 0] = (sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) & 0xff;
         ctx->sfx_code[dali_data_end + 1] = ((sfx_addr + ctx->sfx_size - 2 + ctx->reencoded_index - 0x100) >> 8) & 0xff;
 
-        ctx->sfx_code[dali_data_size_hi] = 0xff - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
+        ctx->sfx_code[dali_data_size_hi] = ctx->sfx_code[dali_dst_end + 1] - (((ctx->reencoded_index + 0x100) >> 8) & 0xff);
 
         if (ctx->sfx_small) {
             if (ctx->sfx_effect) {
@@ -751,7 +761,7 @@ int main(int argc, char *argv[]) {
     ctx.cbm_prefix_from = -1;
     ctx.force_inplace = FALSE;
 
-    ctx.sfx = FALSE;
+    ctx.sfx = 0;
     ctx.sfx_addr = -1;
     ctx.sfx_01 = -1;
     ctx.sfx_cli = FALSE;
@@ -810,7 +820,11 @@ int main(int argc, char *argv[]) {
             } else if (!strcmp(argv[i], "--sfx")) {
                 ctx.sfx_addr = read_number(argv[i + 1], argv[i], 65536);
                 i++;
-                ctx.sfx = TRUE;
+                ctx.sfx = SFX_C64;
+            } else if (!strcmp(argv[i], "--sfx_plus4")) {
+                ctx.sfx_addr = read_number(argv[i + 1], argv[i], 65536);
+                i++;
+                ctx.sfx = SFX_PLUS4;
             } else if (!strcmp(argv[i], "-o")) {
                 i++;
                 ctx.output_name = argv[i];
@@ -834,6 +848,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Usage: %s [options] input\n"
                         "  -o [filename]               Set output filename.\n"
                         "  --sfx [num]                 Create a c64 compatible sfx-executable.\n"
+                        "  --sfx_plus4 [num]           Create a plus4 compatible sfx-executable.\n"
                         "  --01 [num]                  Set 01 to [num] after sfx.\n"
                         "  --cli [num]                 Do a CLI after sfx, default is SEI.\n"
                         "  --small                     Use a very small depacker that fits into zeropage, but --01 and --cli are ignored and it trashes zeropage (!)\n"
