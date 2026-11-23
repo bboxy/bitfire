@@ -77,7 +77,6 @@ sfx_src = * + 1
 		stx <.depacker_dst - 1,y
 		dey
 		bne -
-		jam
                 jmp .depack
 
 		;------------------
