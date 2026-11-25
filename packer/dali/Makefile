@@ -65,7 +65,7 @@ testfile.lz: ../../benchmark/files/b dali
 example.prg: example.asm dali dzx0_dali.asm testfile.lz
 	$(VR)$(ACME) $(ACME_OPTS) -o $@ $<
 
-sfx.h: sfx.asm sfx_plus4.asm Makefile
+sfx.h: sfx.asm sfx_vc20.asm sfx_plus4.asm Makefile
 	@echo "Creating sfx.h..."
 	$(VR)$(ACME) $(ACME_OPTS) -DSFX_EFFECT=1 -DSFX_SMALL=1 -o $(basename $@) $<
 	$(VR)echo 'static const char decruncher_small_effect[] = {' > $@

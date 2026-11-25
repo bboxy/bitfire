@@ -60,6 +60,18 @@ BITS_LEFT		= 1
 
 		;/!\ ATTENTION, the depacker just fits into ZP this way, if it gets larger, the copy routine will overwrite $00, as it is a 8-bit address sta
 		sei
+		lda lz_data_end + 4 + .depacker_code - .depacker_dst
+		eor #$80
+		clc
+		adc $0284
+		sta lz_data_end + 4 + .depacker_code - .depacker_dst
+
+		lda lz_dst + 1 + .depacker_code - .depacker_dst
+		eor #$80
+		clc
+		adc $0284
+		sta lz_dst + 1 + .depacker_code - .depacker_dst
+
 !ifdef SFX_FAST {
 		;full zp code will be copied, but later less bytes will be copied back
 		ldx #<(.depacker_end - .restore_end)
