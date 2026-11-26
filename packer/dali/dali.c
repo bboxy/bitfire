@@ -455,24 +455,22 @@ void write_reencoded_stream(ctx* ctx) {
             sfx_code_size -= dali_stub_size;
         }
 
-        if (ctx->sfx == SFX_VC20) {
+        if (ctx->sfx == SFX_VC20 || ctx->sfx == SFX_PLUS4) {
             //printf("optimal load addr: %04x\n", ctx->cbm_range_to - (ctx->unpacked_index - ctx->unpacked_size));
             switch (ctx->cbm_range_to - (ctx->unpacked_index - ctx->unpacked_size)) {
             //switch (ctx->cbm_orig_addr + (int)ctx->unpacked_size) {
                 case 0x0000 ... 0x3fff:
                     dali_max_mem = 0x3fff;
-                    printf("choosing mem config: 0x3fff\n");
                 break;
                 case 0x4000 ... 0x5fff:
-                    dali_max_mem = 0x5fff;
-                    printf("choosing mem config: 0x5fff\n");
+                    if (ctx->sfx == SFX_VC20) dali_max_mem = 0x5fff;
                 break;
                 case 0x6000 ... 0x7fff:
-                    dali_max_mem = 0x7fff;
-                    printf("choosing mem config: 0x7fff\n");
+                    if (ctx->sfx == SFX_VC20) dali_max_mem = 0x7fff;
                 break;
                 default:
             }
+            printf("choosing mem config: $%04x\n", dali_max_mem);
             sfx_code[dali_data_end + 4] = dali_max_mem >> 8;
         }
 
