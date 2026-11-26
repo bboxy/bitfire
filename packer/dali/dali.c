@@ -456,7 +456,9 @@ void write_reencoded_stream(ctx* ctx) {
         }
 
         if (ctx->sfx == SFX_VC20) {
-            switch (ctx->cbm_orig_addr + (int)ctx->unpacked_size) {
+            //printf("optimal load addr: %04x\n", ctx->cbm_range_to - (ctx->unpacked_index - ctx->unpacked_size));
+            switch (ctx->cbm_range_to - (ctx->unpacked_index - ctx->unpacked_size)) {
+            //switch (ctx->cbm_orig_addr + (int)ctx->unpacked_size) {
                 case 0x0000 ... 0x3fff:
                     dali_max_mem = 0x3fff;
                     printf("choosing mem config: 0x3fff\n");
